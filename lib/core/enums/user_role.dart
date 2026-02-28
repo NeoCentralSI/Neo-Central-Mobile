@@ -1,8 +1,17 @@
-/// User role enum
-/// 
-/// Defines the available roles in the application.
+/// User role enum for the NeoCentral app
 enum UserRole {
-  lecturer,
   student,
-  staff,
+  lecturer,
+  staff;
+
+  String get displayName {
+    switch (this) {
+      case UserRole.student:
+        return 'Mahasiswa';
+      case UserRole.lecturer:
+        return 'Dosen';
+      case UserRole.staff:
+        return 'Staff';
+    }
+  }
 }

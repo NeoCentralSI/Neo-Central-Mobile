@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../approval/presentation/approval_list_screen.dart';
 import '../../../profile/presentation/profile_screen.dart';
-import '../../../notification/presentation/notification_screen.dart';
+import '../../../notifications/presentation/notification_screen.dart';
 import '../../../settings/presentation/settings_screen.dart';
 
 class LecturerHomeView extends StatelessWidget {

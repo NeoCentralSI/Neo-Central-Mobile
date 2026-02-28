@@ -11,6 +11,9 @@ dependencies:
   flutter:
     sdk: flutter
   cupertino_icons: ^1.0.8
+  aad_oauth: ^1.0.0              # Azure AD OAuth — purpose-built untuk Microsoft
+  flutter_secure_storage: ^9.2.4
+  http: ^1.2.2
 
 dev_dependencies:
   flutter_test:

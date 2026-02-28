@@ -2,12 +2,12 @@ import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_assets.dart';
 import '../../../core/constants/app_colors.dart';
-import '../../home/presentation/home_screen.dart';
+import '../../../core/constants/app_spacing.dart';
+import '../../../core/constants/app_text_styles.dart';
+import '../../../core/services/auth_service.dart';
+import '../../shell/main_shell.dart';
 
-/// Login screen widget
-///
-/// Displays NeoCentral branding with Microsoft SSO login button.
-/// Features enhanced visuals with glow effects and animations.
+/// Login screen – Microsoft SSO only. Role is determined by the backend.
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -21,34 +21,31 @@ class _LoginScreenState extends State<LoginScreen>
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
 
+  bool _isLoading = false;
+  String? _errorMessage;
+
+  final _authService = AuthService();
+
   @override
   void initState() {
     super.initState();
-    _setupAnimations();
-  }
-
-  void _setupAnimations() {
     _animationController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1200),
     );
-
-    _fadeAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _animationController,
-      curve: const Interval(0.0, 0.6, curve: Curves.easeOut),
-    ));
-
-    _slideAnimation = Tween<Offset>(
-      begin: const Offset(0, 0.3),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(
-      parent: _animationController,
-      curve: const Interval(0.3, 1.0, curve: Curves.easeOutCubic),
-    ));
-
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _animationController,
+        curve: const Interval(0.0, 0.6, curve: Curves.easeOut),
+      ),
+    );
+    _slideAnimation =
+        Tween<Offset>(begin: const Offset(0, 0.3), end: Offset.zero).animate(
+          CurvedAnimation(
+            parent: _animationController,
+            curve: const Interval(0.3, 1.0, curve: Curves.easeOutCubic),
+          ),
+        );
     _animationController.forward();
   }
 
@@ -58,129 +55,207 @@ class _LoginScreenState extends State<LoginScreen>
     super.dispose();
   }
 
-  void _handleMicrosoftLogin() {
-    // TODO: Implement Microsoft OAuth login
-    // For now, navigate to home screen
-    Navigator.of(context).pushReplacement(
-      PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) =>
-            const HomeScreen(),
-        transitionsBuilder: (context, animation, secondaryAnimation, child) {
-          return FadeTransition(
-            opacity: animation,
-            child: child,
-          );
-        },
-        transitionDuration: const Duration(milliseconds: 400),
-      ),
-    );
+  Future<void> _handleMicrosoftLogin() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final result = await _authService.login();
+      if (!mounted) return;
+
+      // Navigate to the correct shell based on role returned from backend
+      Navigator.of(context).pushReplacement(
+        PageRouteBuilder(
+          pageBuilder: (_, __, ___) =>
+              MainShell(userRole: result.user.appRole, user: result.user),
+          transitionsBuilder: (_, animation, __, child) =>
+              FadeTransition(opacity: animation, child: child),
+          transitionDuration: const Duration(milliseconds: 400),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _errorMessage = _friendlyError(e.toString());
+      });
+    }
+  }
+
+  String _friendlyError(String raw) {
+    if (raw.contains('cancelled') || raw.contains('cancel')) {
+      return 'Login dibatalkan.';
+    }
+    if (raw.contains('not found') || raw.contains('belum terdaftar')) {
+      return 'Akun tidak ditemukan. Silakan hubungi admin.';
+    }
+    if (raw.contains('403') || raw.contains('belum diaktivasi')) {
+      return 'Akun belum diaktivasi. Hubungi admin.';
+    }
+    return 'Login gagal. Coba lagi nanti.';
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: AppColors.surface,
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
           child: Column(
             children: [
-              const Spacer(flex: 2),
-              // Logo section with glow effect
-              _buildLogoSection(),
-              const Spacer(flex: 2),
-              // Login button section
-              _buildLoginSection(),
-              const Spacer(flex: 1),
+              const SizedBox(height: 60),
+
+              // ── Logo ──────────────────────────────────────────
+              FadeTransition(
+                opacity: _fadeAnimation,
+                child: Column(
+                  children: [
+                    Container(
+                      decoration: BoxDecoration(
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppColors.primary.withValues(alpha: 0.3),
+                            blurRadius: 60,
+                            spreadRadius: 20,
+                          ),
+                        ],
+                      ),
+                      child: Image.asset(
+                        AppAssets.logo,
+                        width: 130,
+                        height: 130,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.lg),
+                    Text(
+                      'NEOCENTRAL',
+                      style: AppTextStyles.h2.copyWith(
+                        color: AppColors.primary,
+                        letterSpacing: 5,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Sistem Informasi Tugas Akhir',
+                      style: AppTextStyles.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 56),
+
+              // ── Login Card ────────────────────────────────────
+              SlideTransition(
+                position: _slideAnimation,
+                child: FadeTransition(
+                  opacity: _fadeAnimation,
+                  child: Column(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(AppSpacing.xl),
+                        decoration: BoxDecoration(
+                          color: AppColors.surface,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: AppColors.border),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.05),
+                              blurRadius: 24,
+                              offset: const Offset(0, 8),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Masuk ke Akun Anda', style: AppTextStyles.h4),
+                            const SizedBox(height: 6),
+                            Text(
+                              'Gunakan akun Microsoft Universitas Andalas Anda',
+                              style: AppTextStyles.bodySmall,
+                            ),
+                            const SizedBox(height: AppSpacing.xl),
+                            _MicrosoftLoginButton(
+                              onPressed: _handleMicrosoftLogin,
+                              isLoading: _isLoading,
+                            ),
+                            if (_errorMessage != null) ...[
+                              const SizedBox(height: AppSpacing.md),
+                              Container(
+                                padding: const EdgeInsets.all(AppSpacing.md),
+                                decoration: BoxDecoration(
+                                  color: AppColors.destructiveLight,
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(
+                                    color: AppColors.destructive.withValues(
+                                      alpha: 0.3,
+                                    ),
+                                  ),
+                                ),
+                                child: Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.error_outline,
+                                      color: AppColors.destructive,
+                                      size: 18,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        _errorMessage!,
+                                        style: AppTextStyles.bodySmall.copyWith(
+                                          color: AppColors.destructive,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.base),
+                      Text(
+                        'Hanya dapat diakses oleh civitas akademika\nUniversitas Andalas',
+                        style: AppTextStyles.caption,
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: AppSpacing.xl),
+
+              FadeTransition(
+                opacity: _fadeAnimation,
+                child: Text(
+                  'v1.0.0 · Universitas Andalas',
+                  style: AppTextStyles.caption,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.xl),
             ],
           ),
         ),
       ),
     );
   }
-
-  Widget _buildLogoSection() {
-    return FadeTransition(
-      opacity: _fadeAnimation,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Logo with glow shadow
-          Container(
-            decoration: BoxDecoration(
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.primary.withValues(alpha: 0.3),
-                  blurRadius: 60,
-                  spreadRadius: 20,
-                ),
-              ],
-            ),
-            child: Image.asset(
-              AppAssets.logo,
-              width: 160,
-              height: 160,
-              fit: BoxFit.contain,
-            ),
-          ),
-          const SizedBox(height: 24),
-          // Brand text
-          Text(
-            'NEOCENTRAL',
-            style: TextStyle(
-              fontSize: 26,
-              fontWeight: FontWeight.w700,
-              color: AppColors.primary,
-              letterSpacing: 6,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildLoginSection() {
-    return SlideTransition(
-      position: _slideAnimation,
-      child: FadeTransition(
-        opacity: _fadeAnimation,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Microsoft login button
-            _MicrosoftLoginButton(
-              onPressed: _handleMicrosoftLogin,
-            ),
-            const SizedBox(height: 20),
-            // Helper text
-            Text(
-              'Gunakan account dengan',
-              style: TextStyle(
-                fontSize: 14,
-                color: AppColors.textSecondary,
-                height: 1.5,
-              ),
-            ),
-            Text(
-              'domain unand.ac.id',
-              style: TextStyle(
-                fontSize: 14,
-                color: AppColors.textSecondary,
-                height: 1.5,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 }
 
-/// Microsoft login button with animated border
+// ─── Microsoft Login Button ───────────────────────────────────
 class _MicrosoftLoginButton extends StatefulWidget {
   final VoidCallback onPressed;
-
-  const _MicrosoftLoginButton({required this.onPressed});
+  final bool isLoading;
+  const _MicrosoftLoginButton({
+    required this.onPressed,
+    required this.isLoading,
+  });
 
   @override
   State<_MicrosoftLoginButton> createState() => _MicrosoftLoginButtonState();
@@ -193,57 +268,59 @@ class _MicrosoftLoginButtonState extends State<_MicrosoftLoginButton> {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTapDown: (_) => setState(() => _isPressed = true),
-      onTapUp: (_) => setState(() => _isPressed = false),
+      onTapUp: (_) {
+        setState(() => _isPressed = false);
+        if (!widget.isLoading) widget.onPressed();
+      },
       onTapCancel: () => setState(() => _isPressed = false),
-      onTap: widget.onPressed,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
-        curve: Curves.easeInOut,
         transform: Matrix4.diagonal3Values(
-          _isPressed ? 0.98 : 1.0,
-          _isPressed ? 0.98 : 1.0,
+          _isPressed ? 0.97 : 1.0,
+          _isPressed ? 0.97 : 1.0,
           1.0,
         ),
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          decoration: BoxDecoration(
-            color: AppColors.white,
-            borderRadius: BorderRadius.circular(30),
-            border: Border.all(
-              color: AppColors.primary.withValues(alpha: 0.6),
-              width: 1.5,
+        height: 54,
+        decoration: BoxDecoration(
+          color: AppColors.white,
+          borderRadius: BorderRadius.circular(AppSpacing.buttonRadius),
+          border: Border.all(
+            color: AppColors.primary.withValues(alpha: 0.6),
+            width: 1.5,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.primary.withValues(alpha: 0.12),
+              blurRadius: 20,
+              offset: const Offset(0, 8),
             ),
-            boxShadow: [
-              BoxShadow(
-                color: AppColors.primary.withValues(alpha: 0.1),
-                blurRadius: 20,
-                offset: const Offset(0, 8),
-              ),
-            ],
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              // Microsoft logo
-              Image.asset(
-                AppAssets.microsoftLogo,
-                width: 24,
-                height: 24,
-              ),
-              const SizedBox(width: 12),
-              // Button text
-              Text(
-                'Continue with Microsoft',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w500,
-                  color: AppColors.primary,
-                  letterSpacing: 0.5,
+          ],
+        ),
+        child: Center(
+          child: widget.isLoading
+              ? const SizedBox(
+                  height: 22,
+                  width: 22,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      AppColors.primary,
+                    ),
+                  ),
+                )
+              : Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Image.asset(AppAssets.microsoftLogo, width: 22, height: 22),
+                    const SizedBox(width: 12),
+                    Text(
+                      'Continue with Microsoft',
+                      style: AppTextStyles.label.copyWith(
+                        color: AppColors.primary,
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-            ],
-          ),
         ),
       ),
     );

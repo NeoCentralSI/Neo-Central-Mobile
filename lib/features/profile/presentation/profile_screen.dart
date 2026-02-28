@@ -1,42 +1,78 @@
 import 'package:flutter/material.dart';
+import '../../../core/constants/app_colors.dart';
+import '../../../core/constants/app_spacing.dart';
+import '../../../core/constants/app_text_styles.dart';
+import '../../../core/enums/user_role.dart';
+import '../../../core/models/auth_models.dart';
+import '../../../core/services/auth_service.dart';
+import '../../../shared/widgets/shared_widgets.dart';
+import '../../auth/presentation/login_screen.dart';
 
-import '../../../../core/constants/app_colors.dart';
-
+/// Profile screen - role-aware display for both lecturer and student
 class ProfileScreen extends StatelessWidget {
-  const ProfileScreen({super.key});
+  final UserModel? user;
+  const ProfileScreen({super.key, this.user});
 
   @override
   Widget build(BuildContext context) {
+    final role = user?.appRole ?? UserRole.lecturer;
+    final isLecturer = role == UserRole.lecturer;
+
+    final name = user?.fullName ?? (isLecturer ? 'Dosen' : 'Mahasiswa');
+    final email = user?.email ?? '-';
+    final identityNumber = user?.identityNumber ?? '-';
+
     return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: AppColors.textPrimary),
-          onPressed: () => Navigator.pop(context),
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.more_vert, color: AppColors.textPrimary),
-            onPressed: () {},
+      backgroundColor: AppColors.background,
+      body: CustomScrollView(
+        slivers: [
+          _buildSliverAppBar(isLecturer, name),
+          SliverPadding(
+            padding: const EdgeInsets.all(AppSpacing.pagePadding),
+            sliver: SliverList(
+              delegate: SliverChildListDelegate([
+                _buildInfoCard(isLecturer, identityNumber, email),
+                const SizedBox(height: AppSpacing.base),
+                _buildMenuCard(context, isLecturer),
+                const SizedBox(height: AppSpacing.base),
+                _buildLogoutButton(context),
+                const SizedBox(height: AppSpacing.xxl),
+              ]),
+            ),
           ),
         ],
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          children: [
-            const SizedBox(height: 24),
-            // Avatar
-            Center(
-              child: Stack(
+    );
+  }
+
+  Widget _buildSliverAppBar(bool isLecturer, String name) {
+    return SliverAppBar(
+      expandedHeight: 240,
+      pinned: true,
+      backgroundColor: AppColors.primary,
+      flexibleSpace: FlexibleSpaceBar(
+        background: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [AppColors.primary, AppColors.primaryDark],
+            ),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const SizedBox(height: 50),
+              Stack(
                 children: [
-                  const CircleAvatar(
-                    radius: 70,
-                    backgroundColor: AppColors.primary,
-                    child: Icon(Icons.person, size: 70, color: Colors.white),
-                    // backgroundImage: NetworkImage('...'),
+                  CircleAvatar(
+                    radius: 50,
+                    backgroundColor: Colors.white.withValues(alpha: 0.2),
+                    child: const Icon(
+                      Icons.person,
+                      color: Colors.white,
+                      size: 50,
+                    ),
                   ),
                   Positioned(
                     bottom: 0,
@@ -48,141 +84,179 @@ class ProfileScreen extends StatelessWidget {
                         shape: BoxShape.circle,
                       ),
                       child: Container(
-                        padding: const EdgeInsets.all(8),
+                        padding: const EdgeInsets.all(5),
                         decoration: const BoxDecoration(
-                          color: AppColors.secondary,
+                          color: AppColors.success,
                           shape: BoxShape.circle,
                         ),
                         child: const Icon(
                           Icons.verified,
                           color: Colors.white,
-                          size: 20,
+                          size: 14,
                         ),
                       ),
                     ),
                   ),
                 ],
               ),
-            ),
-            const SizedBox(height: 24),
-
-            // Name & Role
-            const Text(
-              'Dr. Ricky',
-              style: TextStyle(
-                fontSize: 32,
-                fontWeight: FontWeight.w900,
-                color: AppColors.textPrimary,
-                height: 1.0,
-              ),
-            ),
-            const Text(
-              'Akbar',
-              style: TextStyle(
-                fontSize: 32,
-                fontWeight: FontWeight.w900,
-                color: AppColors.secondary,
-                height: 1.0,
-              ),
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'Dosen Departemen\nSistem Informasi',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 18,
-                color: AppColors.textSecondary,
-                height: 1.3,
-              ),
-            ),
-            const SizedBox(height: 48),
-
-            // Attributes
-            _buildAttributeItem(
-              icon: Icons.badge_outlined,
-              label: 'JABATAN',
-              value: 'Ketua Departemen',
-            ),
-            const SizedBox(height: 24),
-            _buildAttributeItem(
-              icon: Icons.email_outlined,
-              label: 'EMAIL',
-              value: 'kadep_si@fti.unand.ac.id',
-            ),
-
-            const Spacer(),
-
-            // Logout Button
-            SizedBox(
-              width: double.infinity,
-              height: 56,
-              child: ElevatedButton(
-                onPressed: () {},
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.secondary,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(28),
-                  ),
-                  elevation: 0,
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: const [
-                    Text(
-                      'Keluar',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    SizedBox(width: 8),
-                    Icon(Icons.logout_outlined, size: 20),
-                  ],
+              const SizedBox(height: 14),
+              Text(name, style: AppTextStyles.h3.copyWith(color: Colors.white)),
+              const SizedBox(height: 4),
+              Text(
+                isLecturer ? 'Dosen Pembimbing' : 'Mahasiswa',
+                style: AppTextStyles.body.copyWith(
+                  color: Colors.white.withValues(alpha: 0.8),
                 ),
               ),
-            ),
-            const SizedBox(height: 24),
-          ],
+            ],
+          ),
         ),
+        collapseMode: CollapseMode.parallax,
       ),
     );
   }
 
-  Widget _buildAttributeItem({
-    required IconData icon,
-    required String label,
-    required String value,
-  }) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(icon, color: AppColors.secondary, size: 24),
-        const SizedBox(width: 16),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              label,
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-                color: AppColors.textSecondary,
-                letterSpacing: 1.2,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              value,
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: AppColors.textPrimary,
-              ),
+  Widget _buildInfoCard(bool isLecturer, String identityNumber, String email) {
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Informasi Akun', style: AppTextStyles.h4),
+          const AppDivider(),
+          InfoRow(
+            icon: Icons.badge_outlined,
+            label: isLecturer ? 'NIP' : 'NIM',
+            value: identityNumber,
+          ),
+          const SizedBox(height: AppSpacing.md),
+          InfoRow(icon: Icons.email_outlined, label: 'Email', value: email),
+          const SizedBox(height: AppSpacing.md),
+          InfoRow(
+            icon: Icons.school_outlined,
+            label: 'Departemen',
+            value: 'Sistem Informasi – FTI Unand',
+          ),
+          if (!isLecturer && user?.student?.enrollmentYear != null) ...[
+            const SizedBox(height: AppSpacing.md),
+            InfoRow(
+              icon: Icons.calendar_today_outlined,
+              label: 'Angkatan',
+              value: user!.student!.enrollmentYear.toString(),
             ),
           ],
-        ),
-      ],
+        ],
+      ),
     );
   }
+
+  Widget _buildMenuCard(BuildContext context, bool isLecturer) {
+    final items = [
+      _MenuItem(
+        icon: Icons.notifications_outlined,
+        label: 'Notifikasi',
+        onTap: () {},
+      ),
+      _MenuItem(icon: Icons.help_outline, label: 'Bantuan', onTap: () {}),
+      _MenuItem(
+        icon: Icons.info_outline,
+        label: 'Tentang Aplikasi',
+        onTap: () {},
+      ),
+    ];
+
+    return AppCard(
+      child: Column(
+        children: items.asMap().entries.map((entry) {
+          final isLast = entry.key == items.length - 1;
+          return Column(
+            children: [
+              InkWell(
+                onTap: entry.value.onTap,
+                borderRadius: BorderRadius.circular(8),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(7),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(
+                          entry.value.icon,
+                          size: 18,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Text(
+                          entry.value.label,
+                          style: AppTextStyles.label,
+                        ),
+                      ),
+                      const Icon(
+                        Icons.chevron_right,
+                        size: 18,
+                        color: AppColors.textTertiary,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              if (!isLast) Divider(height: 1, color: AppColors.divider),
+            ],
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _buildLogoutButton(BuildContext context) {
+    return AppButton(
+      label: 'Keluar',
+      icon: Icons.logout_outlined,
+      isOutline: true,
+      color: AppColors.destructive,
+      onPressed: () {
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Konfirmasi Keluar'),
+            content: const Text('Anda yakin ingin keluar dari akun ini?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Batal'),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  Navigator.pop(ctx);
+                  await AuthService().logout();
+                  if (context.mounted) {
+                    Navigator.of(context).pushAndRemoveUntil(
+                      MaterialPageRoute(builder: (_) => const LoginScreen()),
+                      (route) => false,
+                    );
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.destructive,
+                ),
+                child: const Text('Keluar'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _MenuItem {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  _MenuItem({required this.icon, required this.label, required this.onTap});
 }

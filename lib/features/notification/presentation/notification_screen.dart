@@ -1,145 +1,111 @@
 import 'package:flutter/material.dart';
+import '../../../core/constants/app_colors.dart';
+import '../../../core/constants/app_text_styles.dart';
 
-import '../../../../core/constants/app_colors.dart';
-
+/// Notification screen placeholder
 class NotificationScreen extends StatelessWidget {
   const NotificationScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: AppColors.textPrimary),
-          onPressed: () => Navigator.pop(context),
-        ),
+    final notifications = [
+      _NotifItem(
+        icon: Icons.calendar_today_outlined,
+        color: AppColors.info,
+        title: 'Bimbingan Dijadwalkan',
+        body: 'Sarah Amelia mengajukan bimbingan pada 27 Feb 2025',
+        time: '2j lalu',
       ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-        children: const [
-          Text(
-            'Notifikasi',
-            style: TextStyle(
-              fontSize: 28,
-              fontWeight: FontWeight.bold,
-              color: AppColors.textPrimary,
-            ),
-          ),
-          SizedBox(height: 8),
-          Text(
-            '4 belum dibaca',
-            style: TextStyle(
-              fontSize: 16,
-              color: AppColors.textSecondary,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          SizedBox(height: 32),
+      _NotifItem(
+        icon: Icons.description_outlined,
+        color: AppColors.warning,
+        title: 'Catatan Menunggu Approval',
+        body: 'Michael Chen mengirim catatan bimbingan sesi 18 Feb',
+        time: '4j lalu',
+      ),
+      _NotifItem(
+        icon: Icons.school_outlined,
+        color: AppColors.success,
+        title: 'Kesiapan Seminar Diajukan',
+        body: 'Jessica Wong mengajukan kesiapan seminar',
+        time: '1h lalu',
+      ),
+    ];
 
-          _NotificationItem(
-            title: 'Pengingat Jadwal',
-            description:
-                'Bimbingan dengan Sarah Jenkins akan dimulai dalam 30 menit.',
-            timeAgo: '30 menit yang lalu',
-            isUnread: true,
-          ),
-          _NotificationItem(
-            title: 'Request Baru',
-            description: 'Michael Chen mengajukan judul tugas akhir baru.',
-            timeAgo: '2 jam yang lalu',
-            isUnread: true,
-          ),
-          _NotificationItem(
-            title: 'Jadwal Rapat',
-            description: 'Rapat Jurusan dijadwalkan ulang ke pukul 14:00.',
-            timeAgo: '1 hari yang lalu',
-            isUnread: false,
-          ),
-          _NotificationItem(
-            title: 'Sistem Maintenance',
-            description:
-                'Sistem akan mengalami maintenance pada hari Sabtu pukul 22:00.',
-            timeAgo: '2 hari yang lalu',
-            isUnread: false,
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      appBar: AppBar(
+        title: Text('Notifikasi', style: AppTextStyles.h4),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new, size: 20),
+          onPressed: () => Navigator.maybePop(context),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {},
+            child: Text(
+              'Tandai Semua',
+              style: AppTextStyles.bodySmall.copyWith(color: AppColors.primary),
+            ),
           ),
         ],
+      ),
+      body: ListView.separated(
+        padding: const EdgeInsets.all(16),
+        itemCount: notifications.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 8),
+        itemBuilder: (context, index) {
+          final n = notifications[index];
+          return Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.border.withValues(alpha: 0.5)),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: n.color.withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(n.icon, color: n.color, size: 18),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(n.title, style: AppTextStyles.label),
+                      const SizedBox(height: 3),
+                      Text(n.body, style: AppTextStyles.bodySmall),
+                    ],
+                  ),
+                ),
+                Text(n.time, style: AppTextStyles.caption),
+              ],
+            ),
+          );
+        },
       ),
     );
   }
 }
 
-class _NotificationItem extends StatelessWidget {
+class _NotifItem {
+  final IconData icon;
+  final Color color;
   final String title;
-  final String description;
-  final String timeAgo;
-  final bool isUnread;
-
-  const _NotificationItem({
+  final String body;
+  final String time;
+  _NotifItem({
+    required this.icon,
+    required this.color,
     required this.title,
-    required this.description,
-    required this.timeAgo,
-    required this.isUnread,
+    required this.body,
+    required this.time,
   });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 16),
-      decoration: BoxDecoration(
-        border: Border(
-          bottom: BorderSide(color: AppColors.background, width: 1),
-        ),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            margin: const EdgeInsets.only(top: 6),
-            width: 8,
-            height: 8,
-            decoration: BoxDecoration(
-              color: isUnread ? AppColors.primary : Colors.transparent,
-              shape: BoxShape.circle,
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: isUnread ? FontWeight.bold : FontWeight.w600,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  description,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    color: AppColors.textPrimary,
-                    height: 1.4,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  timeAgo,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }
