@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "739558148061",
-    "project_id": "neocentral-65f0c",
-    "storage_bucket": "neocentral-65f0c.firebasestorage.app"
+    "project_number": "YOUR_PROJECT_NUMBER",
+    "project_id": "YOUR_PROJECT_ID",
+    "storage_bucket": "YOUR_PROJECT_ID.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:739558148061:android:9a028e6265b6ede6289834",
+        "mobilesdk_app_id": "YOUR_MOBILESDK_APP_ID",
         "android_client_info": {
           "package_name": "com.neocentral.app"
         }
@@ -15,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyBaqMyBKGASsJUssPUx-wq9Z74qyuwwmmY"
+          "current_key": "YOUR_API_KEY"
         }
       ],
       "services": {
