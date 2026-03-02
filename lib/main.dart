@@ -1,13 +1,27 @@
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 
+import 'firebase_options.dart';
 import 'core/theme/app_theme.dart';
 import 'core/services/auth_service.dart';
+import 'core/services/fcm_service.dart';
 
 import 'features/splash/presentation/splash_screen.dart';
 import 'features/auth/presentation/login_screen.dart';
 import 'features/shell/main_shell.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize Firebase
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+
+  // Register background message handler
+  FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+
   runApp(const NeoCentralApp());
 }
 
@@ -41,6 +55,7 @@ class _AuthGate extends StatefulWidget {
 
 class _AuthGateState extends State<_AuthGate> {
   final _authService = AuthService();
+  final _fcmService = FcmService();
 
   @override
   void initState() {
@@ -53,23 +68,40 @@ class _AuthGateState extends State<_AuthGate> {
     await Future.delayed(const Duration(seconds: 2));
     if (!mounted) return;
 
-    final result = await _authService.tryAutoLogin();
+    try {
+      final result = await _authService.tryAutoLogin();
 
-    if (!mounted) return;
+      if (!mounted) return;
 
-    if (result != null) {
-      // Already logged in – go straight to the correct shell
+      if (result != null) {
+        // Initialize FCM — non-blocking; don't let FCM failure block login
+        try {
+          await _fcmService.init();
+          await _fcmService.registerAfterLogin();
+        } catch (e) {
+          debugPrint('[AuthGate] FCM init error (non-fatal): $e');
+        }
+
+        // Already logged in – go straight to the correct shell
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (_) =>
+                MainShell(userRole: result.user.appRole, user: result.user),
+          ),
+        );
+      } else {
+        // Not logged in – show login screen
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => const LoginScreen()),
+        );
+      }
+    } catch (e) {
+      debugPrint('[AuthGate] Auth check error: $e');
+      if (!mounted) return;
+      // Fallback to login screen on any error
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(
-          builder: (_) =>
-              MainShell(userRole: result.user.appRole, user: result.user),
-        ),
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
       );
-    } else {
-      // Not logged in – show login screen
-      Navigator.of(
-        context,
-      ).pushReplacement(MaterialPageRoute(builder: (_) => const LoginScreen()));
     }
   }
 

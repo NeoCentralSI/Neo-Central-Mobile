@@ -59,90 +59,135 @@ class _StudentListScreenState extends State<StudentListScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: Text('Mahasiswa Bimbingan', style: AppTextStyles.h4),
-        automaticallyImplyLeading: !widget.isTab,
-        leading: widget.isTab
-            ? null
-            : IconButton(
-                icon: const Icon(Icons.arrow_back_ios_new, size: 20),
-                onPressed: () => Navigator.pop(context),
-              ),
-      ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-          ? Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(
-                    Icons.error_outline,
-                    size: 48,
-                    color: AppColors.textTertiary,
-                  ),
-                  const SizedBox(height: 12),
-                  Text('Gagal memuat data', style: AppTextStyles.h4),
-                  const SizedBox(height: 16),
-                  AppButton(
-                    label: 'Coba Lagi',
-                    icon: Icons.refresh,
-                    onPressed: _loadData,
-                  ),
+      backgroundColor: AppColors.surfaceSecondary,
+      body: Column(
+        children: [
+          Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  AppColors.primaryLight,
+                  AppColors.primary,
                 ],
               ),
-            )
-          : RefreshIndicator(
-              onRefresh: _loadData,
-              child: Column(
-                children: [
-                  // Search bar
-                  Container(
-                    color: AppColors.surface,
-                    padding: const EdgeInsets.fromLTRB(
-                      AppSpacing.pagePadding,
-                      0,
-                      AppSpacing.pagePadding,
-                      AppSpacing.md,
-                    ),
-                    child: TextField(
-                      onChanged: (v) => setState(() => _searchQuery = v),
-                      decoration: InputDecoration(
-                        hintText: 'Cari mahasiswa...',
-                        prefixIcon: const Icon(
-                          Icons.search,
-                          color: AppColors.textTertiary,
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(
-                          vertical: 10,
-                        ),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: AppColors.border),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: AppColors.border),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(
-                            color: AppColors.primary,
+              borderRadius: BorderRadius.only(
+                bottomLeft: Radius.circular(28),
+                bottomRight: Radius.circular(28),
+              ),
+            ),
+            child: SafeArea(
+              bottom: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.pagePadding,
+                  AppSpacing.sm,
+                  AppSpacing.pagePadding,
+                  AppSpacing.xl,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        if (!widget.isTab)
+                          IconButton(
+                            icon: const Icon(Icons.arrow_back_ios_new,
+                                size: 20, color: AppColors.white),
+                            onPressed: () => Navigator.pop(context),
+                          ),
+                        Text(
+                          'Mahasiswa Bimbingan',
+                          style: AppTextStyles.h2.copyWith(
+                            color: AppColors.white,
                           ),
                         ),
-                        filled: true,
-                        fillColor: AppColors.surfaceSecondary,
-                      ),
+                      ],
                     ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          // Search bar
+          Container(
+            color: AppColors.surfaceSecondary,
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.pagePadding,
+              AppSpacing.md,
+              AppSpacing.pagePadding,
+              AppSpacing.md,
+            ),
+            child: TextField(
+              onChanged: (v) => setState(() => _searchQuery = v),
+              decoration: InputDecoration(
+                hintText: 'Cari mahasiswa...',
+                prefixIcon: const Icon(
+                  Icons.search,
+                  color: AppColors.textTertiary,
+                ),
+                contentPadding: const EdgeInsets.symmetric(
+                  vertical: 10,
+                ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: AppColors.border),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: AppColors.border),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(
+                    color: AppColors.primary,
                   ),
-                  Expanded(
+                ),
+                filled: true,
+                fillColor: AppColors.surfaceSecondary,
+              ),
+            ),
+          ),
+          Expanded(
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _error != null
+                ? Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.error_outline,
+                          size: 48,
+                          color: AppColors.textTertiary,
+                        ),
+                        const SizedBox(height: 12),
+                        Text('Gagal memuat data', style: AppTextStyles.h4),
+                        const SizedBox(height: 16),
+                        AppButton(
+                          label: 'Coba Lagi',
+                          icon: Icons.refresh,
+                          onPressed: _loadData,
+                        ),
+                      ],
+                    ),
+                  )
+                : RefreshIndicator(
+                    onRefresh: _loadData,
                     child: _filtered.isEmpty
-                        ? Center(
-                            child: Text(
-                              'Tidak ada mahasiswa ditemukan',
-                              style: AppTextStyles.body,
-                            ),
+                        ? ListView(
+                            children: [
+                              SizedBox(
+                                height: MediaQuery.of(context).size.height * 0.3,
+                                child: Center(
+                                  child: Text(
+                                    'Tidak ada mahasiswa ditemukan',
+                                    style: AppTextStyles.body,
+                                  ),
+                                ),
+                              ),
+                            ],
                           )
                         : ListView.separated(
                             padding: const EdgeInsets.all(
@@ -166,9 +211,9 @@ class _StudentListScreenState extends State<StudentListScreen> {
                             },
                           ),
                   ),
-                ],
-              ),
-            ),
+          ),
+        ],
+      ),
     );
   }
 }

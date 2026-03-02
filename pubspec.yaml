@@ -13,12 +13,20 @@ dependencies:
   cupertino_icons: ^1.0.8
   aad_oauth: ^1.0.0              # Azure AD OAuth — purpose-built untuk Microsoft
   flutter_secure_storage: ^9.2.4
+  shared_preferences: ^2.3.3
   http: ^1.2.2
+  google_fonts: ^8.0.2
+  firebase_core: ^4.4.0
+  firebase_messaging: ^16.1.1
+  file_picker: ^10.3.10
+  flutter_local_notifications: 18.0.0
+  url_launcher: ^6.3.1
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^5.0.0
+  mocktail: ^1.0.4
 
 flutter:
   uses-material-design: true
@@ -26,3 +34,4 @@ flutter:
   assets:
     - assets/images/neocentral_logo.png
     - assets/images/microsoft_logo.png
+    - assets/images/neocentral_white.png

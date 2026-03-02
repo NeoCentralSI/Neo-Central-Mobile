@@ -1,13 +1,33 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/constants/app_colors.dart';
-import '../../../approval/presentation/approval_list_screen.dart';
+import '../../../../core/services/notification_api_service.dart';
+import '../../../guidance/presentation/lecturer/guidance_requests_screen.dart';
 import '../../../profile/presentation/profile_screen.dart';
-import '../../../notifications/presentation/notification_screen.dart';
+import '../../../notifications/presentation/notification_screen.dart' show NotificationScreen;
 import '../../../settings/presentation/settings_screen.dart';
 
-class LecturerHomeView extends StatelessWidget {
+class LecturerHomeView extends StatefulWidget {
   const LecturerHomeView({super.key});
+
+  @override
+  State<LecturerHomeView> createState() => _LecturerHomeViewState();
+}
+
+class _LecturerHomeViewState extends State<LecturerHomeView> {
+  final _notifApi = NotificationApiService();
+  int _unreadCount = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshUnreadCount();
+  }
+
+  Future<void> _refreshUnreadCount() async {
+    final count = await _notifApi.getUnreadCount();
+    if (mounted) setState(() => _unreadCount = count);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -49,8 +69,6 @@ class LecturerHomeView extends StatelessWidget {
             radius: 28,
             backgroundColor: AppColors.primary,
             child: Icon(Icons.person, color: Colors.white, size: 28),
-            // TODO: Replace with network image when API is ready
-            // backgroundImage: NetworkImage('...'),
           ),
         ),
         const SizedBox(width: 16),
@@ -74,19 +92,51 @@ class LecturerHomeView extends StatelessWidget {
             ],
           ),
         ),
-        IconButton(
-          onPressed: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const NotificationScreen(),
+        Stack(
+          children: [
+            IconButton(
+              onPressed: () async {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const NotificationScreen(),
+                  ),
+                );
+                _refreshUnreadCount();
+              },
+              icon: const Icon(
+                Icons.notifications_outlined,
+                color: AppColors.textPrimary,
               ),
-            );
-          },
-          icon: const Icon(
-            Icons.notifications_outlined,
-            color: AppColors.textPrimary,
-          ),
+            ),
+            if (_unreadCount > 0)
+              Positioned(
+                right: 8,
+                top: 8,
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: const BoxDecoration(
+                    color: Colors.red,
+                    shape: BoxShape.circle,
+                  ),
+                  constraints: const BoxConstraints(
+                    minWidth: 14,
+                    minHeight: 14,
+                  ),
+                  child: _unreadCount <= 9
+                      ? Text(
+                          '$_unreadCount',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 8,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          textAlign: TextAlign.center,
+                        )
+                      : const SizedBox.shrink(),
+                ),
+              ),
+          ],
         ),
         IconButton(
           onPressed: () {
@@ -193,7 +243,7 @@ class LecturerHomeView extends StatelessWidget {
         onPressed: () {
           Navigator.push(
             context,
-            MaterialPageRoute(builder: (context) => const ApprovalListScreen()),
+            MaterialPageRoute(builder: (context) => const GuidanceRequestsScreen()),
           );
         },
         style: ElevatedButton.styleFrom(

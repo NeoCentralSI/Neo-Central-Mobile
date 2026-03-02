@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_spacing.dart';
 import '../../../../core/constants/app_text_styles.dart';
@@ -51,101 +52,241 @@ class _GuidanceHistoryScreenState extends State<GuidanceHistoryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: Text('Riwayat Bimbingan', style: AppTextStyles.h4),
-        automaticallyImplyLeading: !widget.isTab,
-        actions: [
-          TextButton.icon(
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const GuidanceScheduleScreen()),
-            ),
-            icon: const Icon(Icons.add, size: 18),
-            label: const Text('Baru'),
-            style: TextButton.styleFrom(foregroundColor: AppColors.primary),
-          ),
-        ],
-      ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-          ? Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(
-                    Icons.error_outline,
-                    size: 48,
-                    color: AppColors.textTertiary,
-                  ),
-                  const SizedBox(height: 12),
-                  Text('Gagal memuat data', style: AppTextStyles.h4),
-                  const SizedBox(height: 8),
-                  AppButton(
-                    label: 'Coba Lagi',
-                    icon: Icons.refresh,
-                    onPressed: _loadData,
-                  ),
-                ],
+    final completedCount = _countByStatus('completed');
+
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.light,
+      child: Scaffold(
+        backgroundColor: AppColors.surfaceSecondary,
+        body: Column(
+          children: [
+            // ── Gradient Header ──────────────────────────────
+            Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [AppColors.primaryLight, AppColors.primary],
+                ),
+                borderRadius: BorderRadius.only(
+                  bottomLeft: Radius.circular(28),
+                  bottomRight: Radius.circular(28),
+                ),
               ),
-            )
-          : RefreshIndicator(
-              onRefresh: _loadData,
-              child: Column(
-                children: [
-                  // Summary bar
-                  Container(
-                    color: AppColors.surface,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: AppSpacing.pagePadding,
-                      vertical: AppSpacing.md,
-                    ),
-                    child: Row(
-                      children: [
-                        _StatChip(
-                          label: '${_countByStatus("completed")} Selesai',
-                          icon: Icons.check_circle,
-                          color: AppColors.success,
-                        ),
-                        const SizedBox(width: AppSpacing.sm),
-                        _StatChip(
-                          label: '${_countByStatus("accepted")} Dijadwalkan',
-                          icon: Icons.event,
-                          color: AppColors.info,
-                        ),
-                        const SizedBox(width: AppSpacing.sm),
-                        _StatChip(
-                          label: '${_countByStatus("requested")} Menunggu',
-                          icon: Icons.hourglass_empty,
-                          color: AppColors.warning,
-                        ),
-                      ],
-                    ),
+              child: SafeArea(
+                bottom: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.pagePadding,
+                    AppSpacing.sm,
+                    AppSpacing.pagePadding,
+                    AppSpacing.xl,
                   ),
-                  Expanded(
-                    child: _sessions.isEmpty
-                        ? Center(
-                            child: Text(
-                              'Belum ada riwayat bimbingan',
-                              style: AppTextStyles.body,
-                            ),
-                          )
-                        : ListView.separated(
-                            padding: const EdgeInsets.all(
-                              AppSpacing.pagePadding,
-                            ),
-                            itemCount: _sessions.length,
-                            separatorBuilder: (_, __) =>
-                                const SizedBox(height: AppSpacing.sm),
-                            itemBuilder: (context, index) =>
-                                _GuidanceSessionItem(session: _sessions[index]),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (!widget.isTab)
+                        Padding(
+                          padding: const EdgeInsets.only(
+                            bottom: AppSpacing.sm,
                           ),
+                          child: GestureDetector(
+                            onTap: () => Navigator.pop(context),
+                            child: const Icon(
+                              Icons.arrow_back_ios_new,
+                              color: AppColors.white,
+                              size: 20,
+                            ),
+                          ),
+                        ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Riwayat Bimbingan',
+                                  style: AppTextStyles.h2.copyWith(
+                                    color: AppColors.white,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Total $completedCount Sesi Selesai',
+                                  style: AppTextStyles.bodySmall.copyWith(
+                                    color: AppColors.white.withValues(
+                                      alpha: 0.85,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          OutlinedButton.icon(
+                            onPressed: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    const GuidanceScheduleScreen(),
+                              ),
+                            ),
+                            icon: const Icon(Icons.add, size: 18),
+                            label: const Text('Baru'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: AppColors.white,
+                              side: const BorderSide(color: AppColors.white),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(
+                                  AppSpacing.buttonRadius,
+                                ),
+                              ),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 10,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
+
+            // ── Content ──────────────────────────────────────
+            Expanded(
+              child: _isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : _error != null
+                      ? Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.error_outline,
+                                size: 48,
+                                color: AppColors.textTertiary,
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                'Gagal memuat data',
+                                style: AppTextStyles.h4,
+                              ),
+                              const SizedBox(height: 8),
+                              AppButton(
+                                label: 'Coba Lagi',
+                                icon: Icons.refresh,
+                                onPressed: _loadData,
+                              ),
+                            ],
+                          ),
+                        )
+                      : RefreshIndicator(
+                          onRefresh: _loadData,
+                          child: _sessions.isEmpty
+                              ? ListView(
+                                  children: [
+                                    SizedBox(
+                                      height:
+                                          MediaQuery.of(context).size.height *
+                                          0.4,
+                                      child: Center(
+                                        child: Text(
+                                          'Belum ada riwayat bimbingan',
+                                          style: AppTextStyles.body,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                )
+                              : Column(
+                                  children: [
+                                    // Session list with chips inside card
+                                    Expanded(
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: AppSpacing.pagePadding,
+                                          vertical: AppSpacing.md,
+                                        ),
+                                        child: AppCard(
+                                          padding: EdgeInsets.zero,
+                                          radius: 20,
+                                          child: Column(
+                                            children: [
+                                              // Filter chips inside card
+                                              Padding(
+                                                padding: const EdgeInsets.fromLTRB(
+                                                  AppSpacing.cardPadding,
+                                                  AppSpacing.cardPadding,
+                                                  AppSpacing.cardPadding,
+                                                  AppSpacing.sm,
+                                                ),
+                                                child: SingleChildScrollView(
+                                                  scrollDirection: Axis.horizontal,
+                                                  child: Row(
+                                                    children: [
+                                                      _StatChip(
+                                                        label:
+                                                            '${_countByStatus("completed")} Selesai',
+                                                        icon: Icons.check_circle,
+                                                        color: AppColors.success,
+                                                      ),
+                                                      const SizedBox(
+                                                        width: AppSpacing.sm,
+                                                      ),
+                                                      _StatChip(
+                                                        label:
+                                                            '${_countByStatus("accepted")} Dijadwalkan',
+                                                        icon: Icons.event,
+                                                        color: AppColors.info,
+                                                      ),
+                                                      const SizedBox(
+                                                        width: AppSpacing.sm,
+                                                      ),
+                                                      _StatChip(
+                                                        label:
+                                                            '${_countByStatus("requested")} Menunggu',
+                                                        icon: Icons.hourglass_empty,
+                                                        color: AppColors.warning,
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ),
+                                              const Divider(
+                                                height: 1,
+                                                color: AppColors.divider,
+                                              ),
+                                              // Session list
+                                              Expanded(
+                                                child: ListView.separated(
+                                                  padding: EdgeInsets.zero,
+                                                  itemCount: _sessions.length,
+                                                  separatorBuilder: (_, __) =>
+                                                      const Divider(
+                                                        height: 1,
+                                                        color: AppColors.divider,
+                                                      ),
+                                                  itemBuilder: (context, index) =>
+                                                      _GuidanceSessionItem(
+                                                        session: _sessions[index],
+                                                      ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                        ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -233,7 +374,11 @@ class _GuidanceSessionItem extends StatelessWidget {
     final topic = (session['studentNotes'] ?? session['topic'] ?? 'Bimbingan')
         .toString();
 
-    return AppCard(
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.cardPadding,
+        vertical: AppSpacing.md,
+      ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -273,11 +418,21 @@ class _GuidanceSessionItem extends StatelessWidget {
                 Text(
                   supervisorName,
                   style: AppTextStyles.bodySmall.copyWith(
-                    color: AppColors.primary,
+                    color: AppColors.textPrimary,
                   ),
                 ),
-                const SizedBox(height: 2),
-                Text(dateStr.toString(), style: AppTextStyles.caption),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.access_time,
+                      size: 13,
+                      color: AppColors.textTertiary,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(dateStr.toString(), style: AppTextStyles.caption),
+                  ],
+                ),
               ],
             ),
           ),

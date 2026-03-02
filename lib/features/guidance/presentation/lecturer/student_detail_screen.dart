@@ -2,63 +2,188 @@ import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_spacing.dart';
 import '../../../../core/constants/app_text_styles.dart';
+import '../../../../core/services/lecturer_api_service.dart';
 import '../../../../shared/widgets/shared_widgets.dart';
 
 /// Per-student detail screen for lecturers
-class StudentDetailScreen extends StatelessWidget {
+class StudentDetailScreen extends StatefulWidget {
   final Map<String, dynamic> student;
   const StudentDetailScreen({super.key, required this.student});
 
   @override
+  State<StudentDetailScreen> createState() => _StudentDetailScreenState();
+}
+
+class _StudentDetailScreenState extends State<StudentDetailScreen> {
+  final _api = LecturerApiService();
+
+  bool _isLoadingMilestones = true;
+  bool _isLoadingHistory = true;
+  List<dynamic> _milestoneComponents = [];
+  List<dynamic> _guidanceHistory = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+  }
+
+  Future<void> _loadData() async {
+    final thesisId = (widget.student['thesisId'] ?? '').toString();
+    if (thesisId.isEmpty) return;
+
+    // Fetch detail (milestones + guidanceHistory) via single call to my-students/:thesisId
+    try {
+      final detailData = await _api.getStudentDetail(thesisId);
+      if (!mounted) return;
+      setState(() {
+        if (detailData.containsKey('milestones')) {
+          _milestoneComponents = detailData['milestones'] as List<dynamic>;
+        }
+        // Extract guidance history from the same response
+        if (detailData.containsKey('guidanceHistory')) {
+          final gh = detailData['guidanceHistory'];
+          if (gh is Map && gh.containsKey('items') && gh['items'] is List) {
+            _guidanceHistory = gh['items'] as List<dynamic>;
+          } else if (gh is List) {
+            _guidanceHistory = gh;
+          }
+        }
+              _isLoadingMilestones = false;
+        _isLoadingHistory = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _isLoadingMilestones = false;
+        _isLoadingHistory = false;
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final milestoneRaw =
-        student['milestoneProgress'] ?? student['milestone'] ?? 0;
+        widget.student['milestoneProgress'] ?? widget.student['milestone'] ?? 0;
     final double milestone = milestoneRaw is int
         ? milestoneRaw / 100
         : (milestoneRaw is double ? milestoneRaw : 0.0);
     final int guidance =
-        (student['completedGuidanceCount'] ?? student['guidance'] ?? 0) is int
-        ? (student['completedGuidanceCount'] ?? student['guidance'] ?? 0) as int
+        (widget.student['completedGuidanceCount'] ?? widget.student['guidance'] ?? 0) is int
+        ? (widget.student['completedGuidanceCount'] ?? widget.student['guidance'] ?? 0) as int
         : 0;
 
     return Scaffold(
-      backgroundColor: AppColors.background,
-      body: CustomScrollView(
-        slivers: [
-          _buildAppBar(context),
-          SliverPadding(
-            padding: const EdgeInsets.all(AppSpacing.pagePadding),
-            sliver: SliverList(
-              delegate: SliverChildListDelegate([
-                _SummaryCard(
-                  student: student,
-                  milestone: milestone,
-                  guidance: guidance,
+      backgroundColor: AppColors.surfaceSecondary,
+      body: Column(
+        children: [
+          // ── Orange gradient header ──────────────────────
+          Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  AppColors.primaryLight,
+                  AppColors.primary,
+                ],
+              ),
+              borderRadius: BorderRadius.only(
+                bottomLeft: Radius.circular(28),
+                bottomRight: Radius.circular(28),
+              ),
+            ),
+            child: SafeArea(
+              bottom: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.pagePadding,
+                  AppSpacing.sm,
+                  AppSpacing.pagePadding,
+                  AppSpacing.xl,
                 ),
-                const SizedBox(height: AppSpacing.base),
-                _SeminarReadinessCard(milestone: milestone, guidance: guidance),
-                const SizedBox(height: AppSpacing.base),
-                _MilestoneSection(milestone: milestone),
-                const SizedBox(height: AppSpacing.base),
-                _GuidanceHistorySection(),
-                const SizedBox(height: AppSpacing.xxl),
-              ]),
+                child: Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.arrow_back_ios_new,
+                          size: 20, color: AppColors.white),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                    Text(
+                      'Detail Mahasiswa',
+                      style: AppTextStyles.h2.copyWith(
+                        color: AppColors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          // ── Content ────────────────────────────────────
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(AppSpacing.pagePadding),
+              child: Column(
+                children: [
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(24),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.05),
+                          blurRadius: 24,
+                          offset: const Offset(0, 8),
+                        ),
+                      ],
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _SummaryCard(
+                          student: widget.student,
+                          milestone: milestone,
+                          guidance: guidance,
+                        ),
+                        const Divider(
+                          color: AppColors.surfaceSecondary,
+                          thickness: 8,
+                          height: 8,
+                        ),
+                        _SeminarReadinessCard(
+                          milestone: milestone,
+                          guidance: guidance,
+                        ),
+                        const Divider(
+                          color: AppColors.surfaceSecondary,
+                          thickness: 8,
+                          height: 8,
+                        ),
+                        _MilestoneSection(
+                          isLoading: _isLoadingMilestones,
+                          components: _milestoneComponents,
+                        ),
+                        const Divider(
+                          color: AppColors.surfaceSecondary,
+                          thickness: 8,
+                          height: 8,
+                        ),
+                        _GuidanceHistorySection(
+                          isLoading: _isLoadingHistory,
+                          sessions: _guidanceHistory,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.xxl),
+                ],
+              ),
             ),
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildAppBar(BuildContext context) {
-    return SliverAppBar(
-      pinned: true,
-      backgroundColor: AppColors.surface,
-      leading: IconButton(
-        icon: const Icon(Icons.arrow_back_ios_new, size: 20),
-        onPressed: () => Navigator.pop(context),
-      ),
-      title: Text('Detail Mahasiswa', style: AppTextStyles.h4),
     );
   }
 }
@@ -77,7 +202,8 @@ class _SummaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AppCard(
+    return Padding(
+      padding: const EdgeInsets.all(24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -180,9 +306,7 @@ class _SeminarReadinessCard extends StatelessWidget {
 
     final Color backColor = isReady
         ? AppColors.successLight
-        : (isMilestoneOnly
-              ? AppColors.warningLight
-              : AppColors.surfaceSecondary);
+        : (isMilestoneOnly ? AppColors.warningLight : Colors.white);
     final Color iconColor = isReady
         ? AppColors.success
         : (isMilestoneOnly ? AppColors.warning : AppColors.textSecondary);
@@ -192,8 +316,9 @@ class _SeminarReadinessCard extends StatelessWidget {
         ? 'Milestone selesai, namun bimbingan belum cukup ($guidance/8)'
         : 'Belum memenuhi syarat kesiapan seminar';
 
-    return AppCard(
-      backgroundColor: backColor,
+    return Container(
+      color: backColor,
+      padding: const EdgeInsets.all(24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -301,28 +426,59 @@ class _ReadinessCheckRow extends StatelessWidget {
 
 // ─── Milestone Section ────────────────────────────────────────
 class _MilestoneSection extends StatelessWidget {
-  final double milestone;
-  const _MilestoneSection({required this.milestone});
-
-  final List<Map<String, dynamic>> _milestones = const [
-    {'title': 'BAB 1 – Pendahuluan', 'status': 'completed'},
-    {'title': 'BAB 2 – Tinjauan Pustaka', 'status': 'completed'},
-    {'title': 'BAB 3 – Metodologi', 'status': 'in_progress'},
-    {'title': 'BAB 4 – Implementasi', 'status': 'not_started'},
-    {'title': 'BAB 5 – Penutup', 'status': 'not_started'},
-  ];
+  final bool isLoading;
+  final List<dynamic> components;
+  const _MilestoneSection({required this.isLoading, required this.components});
 
   @override
   Widget build(BuildContext context) {
-    return AppCard(
+    return Padding(
+      padding: const EdgeInsets.all(24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SectionHeader(title: 'Milestone'),
           const SizedBox(height: AppSpacing.sm),
-          ..._milestones.map(
-            (m) => _MilestoneTile(title: m['title'], status: m['status']),
-          ),
+          if (isLoading)
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.all(16),
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            )
+          else if (components.isEmpty)
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text(
+                'Belum ada data milestone',
+                style: AppTextStyles.body.copyWith(
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            )
+          else
+            ...components.map((c) {
+              final name = (c['name'] ?? c['title'] ?? '-').toString();
+              final rawStatus = (c['status'] ?? '').toString().toLowerCase();
+              final completedAt = c['completedAt'];
+              final validated = c['validatedBySupervisor'] == true;
+              final String status;
+              // Handle both response formats:
+              // - my-students/:thesisId returns {title, status: 'COMPLETED'/'IN_PROGRESS'/'NOT_STARTED'}
+              // - progress/:studentId returns {name, completedAt, validatedBySupervisor}
+              if (rawStatus == 'completed' || validated) {
+                status = 'completed';
+              } else if (rawStatus == 'in_progress' || completedAt != null) {
+                status = 'in_progress';
+              } else {
+                status = 'not_started';
+              }
+              return _MilestoneTile(
+                title: name,
+                status: status,
+                componentId: (c['componentId'] ?? c['id'] ?? '').toString(),
+              );
+            }),
         ],
       ),
     );
@@ -332,7 +488,12 @@ class _MilestoneSection extends StatelessWidget {
 class _MilestoneTile extends StatelessWidget {
   final String title;
   final String status;
-  const _MilestoneTile({required this.title, required this.status});
+  final String componentId;
+  const _MilestoneTile({
+    required this.title,
+    required this.status,
+    this.componentId = '',
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -388,71 +549,103 @@ class _MilestoneTile extends StatelessWidget {
 
 // ─── Guidance History ─────────────────────────────────────────
 class _GuidanceHistorySection extends StatelessWidget {
-  const _GuidanceHistorySection();
+  final bool isLoading;
+  final List<dynamic> sessions;
+  const _GuidanceHistorySection({
+    required this.isLoading,
+    required this.sessions,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final sessions = [
-      {'date': '20 Feb 2025', 'topic': 'Review BAB 3', 'status': 'completed'},
-      {
-        'date': '12 Feb 2025',
-        'topic': 'Diskusi Kerangka BAB 2',
-        'status': 'summary_pending',
-      },
-      {
-        'date': '05 Feb 2025',
-        'topic': 'Perbaikan BAB 1',
-        'status': 'completed',
-      },
-    ];
-
-    return AppCard(
+    return Padding(
+      padding: const EdgeInsets.all(24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SectionHeader(
             title: 'Riwayat Bimbingan',
-            actionLabel: 'Lihat Semua',
-            onAction: () {},
           ),
           const SizedBox(height: AppSpacing.sm),
-          ...sessions.map((s) {
-            final isPending = s['status'] == 'summary_pending';
-            return Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              child: Row(
-                children: [
-                  Container(
-                    width: 8,
-                    height: 8,
-                    decoration: BoxDecoration(
-                      color: isPending ? AppColors.warning : AppColors.success,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(s['topic']!, style: AppTextStyles.label),
-                        Text(s['date']!, style: AppTextStyles.caption),
-                      ],
-                    ),
-                  ),
-                  if (isPending)
-                    AppBadge(
-                      label: 'Approve Catatan',
-                      variant: BadgeVariant.warning,
-                    ),
-                  if (!isPending)
-                    AppBadge(label: 'Selesai', variant: BadgeVariant.success),
-                ],
+          if (isLoading)
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.all(16),
+                child: CircularProgressIndicator(strokeWidth: 2),
               ),
-            );
-          }),
+            )
+          else if (sessions.isEmpty)
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text(
+                'Belum ada riwayat bimbingan',
+                style: AppTextStyles.body.copyWith(
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            )
+          else
+            ...sessions.map((s) {
+              final status = (s['status'] ?? '').toString();
+              final isPending = status == 'summary_pending' ||
+                  status == 'requested';
+              final isCompleted = status == 'completed';
+              final topic = (s['studentNotes'] ?? s['topic'] ?? 'Bimbingan')
+                  .toString();
+              final dateStr = s['requestedDateFormatted'] ??
+                  s['approvedDateFormatted'] ??
+                  _formatDate(s['requestedDate'] ?? s['approvedDate']) ??
+                  '-';
+
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: isPending
+                            ? AppColors.warning
+                            : (isCompleted
+                                ? AppColors.success
+                                : AppColors.textTertiary),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(topic, style: AppTextStyles.label),
+                          Text(dateStr.toString(),
+                              style: AppTextStyles.caption),
+                        ],
+                      ),
+                    ),
+                    if (isCompleted)
+                      AppBadge(
+                          label: 'Selesai', variant: BadgeVariant.success),
+                    if (isPending)
+                      AppBadge(
+                          label: 'Menunggu', variant: BadgeVariant.warning),
+                  ],
+                ),
+              );
+            }),
         ],
       ),
     );
+  }
+
+  String? _formatDate(dynamic raw) {
+    if (raw == null) return null;
+    try {
+      final dt = DateTime.parse(raw.toString());
+      return '${dt.day}/${dt.month}/${dt.year}';
+    } catch (_) {
+      return raw.toString();
+    }
   }
 }

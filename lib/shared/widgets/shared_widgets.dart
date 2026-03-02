@@ -27,17 +27,17 @@ class AppCard extends StatelessWidget {
       width: double.infinity,
       padding: padding ?? const EdgeInsets.all(AppSpacing.cardPadding),
       decoration: BoxDecoration(
-        color: backgroundColor ?? AppColors.surface,
-        borderRadius: BorderRadius.circular(radius ?? AppSpacing.cardRadius),
-        border: Border.all(color: AppColors.border.withValues(alpha: 0.6), width: 1),
+        color: backgroundColor ?? Colors.white,
+        borderRadius: BorderRadius.circular(radius ?? 24),
         boxShadow: [
           BoxShadow(
-            color: AppColors.shadow,
-            blurRadius: 8,
-            offset: const Offset(0, 2),
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 24,
+            offset: const Offset(0, 8),
           ),
         ],
       ),
+      clipBehavior: Clip.antiAlias,
       child: child,
     );
 

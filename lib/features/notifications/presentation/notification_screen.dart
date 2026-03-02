@@ -3,6 +3,8 @@ import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_spacing.dart';
 import '../../../../core/constants/app_text_styles.dart';
 import '../../../../core/services/notification_api_service.dart';
+import '../../../../core/utils/formatters.dart' as fmt;
+import '../../../../core/utils/notification_helpers.dart' as nh;
 import '../../../../shared/widgets/shared_widgets.dart';
 
 class NotificationScreen extends StatefulWidget {
@@ -14,55 +16,218 @@ class NotificationScreen extends StatefulWidget {
 
 class _NotificationScreenState extends State<NotificationScreen> {
   final _api = NotificationApiService();
+  final _scrollController = ScrollController();
+
   bool _isLoading = true;
+  bool _isLoadingMore = false;
+  bool _hasMore = true;
+
   List<dynamic> _notifications = [];
+  int _unreadCount = 0;
+
+  static const int _pageSize = 20;
 
   @override
   void initState() {
     super.initState();
-    _fetchNotifications();
+    _loadInitial();
+    _scrollController.addListener(_onScroll);
   }
 
-  Future<void> _fetchNotifications() async {
-    setState(() => _isLoading = true);
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (_scrollController.position.pixels >=
+            _scrollController.position.maxScrollExtent - 200 &&
+        !_isLoadingMore &&
+        _hasMore) {
+      _loadMore();
+    }
+  }
+
+  Future<void> _loadInitial() async {
+    setState(() {
+      _isLoading = true;
+      _hasMore = true;
+    });
     try {
-      final notifs = await _api.getNotifications();
+      final result = await _api.getNotifications(limit: _pageSize, offset: 0);
+      final list = result['notifications'] as List<dynamic>;
+      if (!mounted) return;
       setState(() {
-        _notifications = notifs;
+        _notifications = list;
+        _unreadCount = result['unreadCount'] as int;
+        _hasMore = list.length >= _pageSize;
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() => _isLoading = false);
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Gagal memuat notifikasi: $e')));
-      }
+      _showError('Gagal memuat notifikasi: $e');
+    }
+  }
+
+  Future<void> _loadMore() async {
+    if (_isLoadingMore || !_hasMore) return;
+    setState(() => _isLoadingMore = true);
+    try {
+      final result = await _api.getNotifications(
+        limit: _pageSize,
+        offset: _notifications.length,
+      );
+      final list = result['notifications'] as List<dynamic>;
+      if (!mounted) return;
+      setState(() {
+        _notifications.addAll(list);
+        _hasMore = list.length >= _pageSize;
+        _isLoadingMore = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _isLoadingMore = false);
     }
   }
 
   Future<void> _markAllAsRead() async {
     try {
       await _api.markAllAsRead();
-      _fetchNotifications();
+      await _loadInitial();
     } catch (e) {
-      // Ignore errors for now
+      _showError('Gagal menandai notifikasi: $e');
     }
+  }
+
+  Future<void> _deleteAll() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Hapus Semua'),
+        content: const Text(
+          'Yakin ingin menghapus semua notifikasi? Tindakan ini tidak dapat dibatalkan.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Batal'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text('Hapus', style: TextStyle(color: AppColors.destructive)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await _api.deleteAllNotifications();
+      await _loadInitial();
+    } catch (e) {
+      _showError('Gagal menghapus notifikasi: $e');
+    }
+  }
+
+  Future<void> _deleteSingle(String id) async {
+    try {
+      await _api.deleteNotification(id);
+      setState(() {
+        _notifications.removeWhere((n) => n['id'].toString() == id);
+        // Refresh unread count to stay accurate
+        _api.getUnreadCount().then((c) {
+          if (mounted) setState(() => _unreadCount = c);
+        });
+      });
+    } catch (e) {
+      _showError('Gagal menghapus notifikasi: $e');
+    }
+  }
+
+  Future<void> _markOneAsRead(String id) async {
+    try {
+      await _api.markAsRead(id);
+      setState(() {
+        final idx = _notifications.indexWhere((n) => n['id'].toString() == id);
+        if (idx != -1) {
+          final updated = Map<String, dynamic>.from(_notifications[idx] as Map);
+          updated['isRead'] = true;
+          _notifications[idx] = updated;
+          if (_unreadCount > 0) _unreadCount--;
+        }
+      });
+    } catch (_) {}
+  }
+
+  void _showError(String msg) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), backgroundColor: AppColors.destructive),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppColors.surfaceSecondary,
       appBar: AppBar(
-        title: const Text('Notifikasi'),
+        backgroundColor: AppColors.surfaceSecondary,
+        elevation: 0,
+        title: Row(
+          children: [
+            Text('Notifikasi', style: AppTextStyles.h4),
+            if (_unreadCount > 0) ...[
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: AppColors.primary,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  '$_unreadCount',
+                  style: AppTextStyles.caption.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
         actions: [
           if (_notifications.isNotEmpty)
-            TextButton(
-              onPressed: _markAllAsRead,
-              child: const Text(
-                'Baca Semua',
-                style: TextStyle(color: Colors.white),
-              ),
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.more_vert),
+              onSelected: (value) {
+                if (value == 'read_all') _markAllAsRead();
+                if (value == 'delete_all') _deleteAll();
+              },
+              itemBuilder: (_) => [
+                const PopupMenuItem(
+                  value: 'read_all',
+                  child: Row(
+                    children: [
+                      Icon(Icons.done_all, size: 18),
+                      SizedBox(width: 8),
+                      Text('Tandai Semua Dibaca'),
+                    ],
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'delete_all',
+                  child: Row(
+                    children: [
+                      Icon(Icons.delete_sweep, size: 18, color: AppColors.destructive),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Hapus Semua',
+                        style: TextStyle(color: AppColors.destructive),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
         ],
       ),
@@ -71,16 +236,53 @@ class _NotificationScreenState extends State<NotificationScreen> {
           : _notifications.isEmpty
           ? _buildEmptyState()
           : RefreshIndicator(
-              onRefresh: _fetchNotifications,
+              onRefresh: _loadInitial,
               child: ListView.separated(
+                controller: _scrollController,
+                physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.all(AppSpacing.base),
-                itemCount: _notifications.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 12),
+                itemCount: _notifications.length + (_isLoadingMore ? 1 : 0),
+                separatorBuilder: (_, __) => const SizedBox(height: 10),
                 itemBuilder: (context, index) {
+                  if (index == _notifications.length) {
+                    return const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(16),
+                        child: CircularProgressIndicator(),
+                      ),
+                    );
+                  }
                   final item = _notifications[index];
-                  return _NotificationItem(
-                    notification: item,
-                    onRead: () => _api.markAsRead(item['id'].toString()),
+                  final id = item['id'].toString();
+                  return Dismissible(
+                    key: Key(id),
+                    direction: DismissDirection.endToStart,
+                    background: Container(
+                      alignment: Alignment.centerRight,
+                      padding: const EdgeInsets.only(right: 20),
+                      margin: const EdgeInsets.symmetric(vertical: 2),
+                      decoration: BoxDecoration(
+                        color: AppColors.destructive,
+                        borderRadius: BorderRadius.circular(24),
+                      ),
+                      child: const Icon(
+                        Icons.delete_outline,
+                        color: Colors.white,
+                        size: 24,
+                      ),
+                    ),
+                    confirmDismiss: (_) async {
+                      await _deleteSingle(id);
+                      return false; // we handle list update manually
+                    },
+                    child: _NotificationItem(
+                      notification: item,
+                      onTap: () {
+                        if (item['isRead'] != true) {
+                          _markOneAsRead(id);
+                        }
+                      },
+                    ),
                   );
                 },
               ),
@@ -105,117 +307,115 @@ class _NotificationScreenState extends State<NotificationScreen> {
             'Notifikasi terbaru akan muncul di sini',
             style: AppTextStyles.bodySmall,
           ),
+          const SizedBox(height: 24),
+          OutlinedButton.icon(
+            onPressed: _loadInitial,
+            icon: const Icon(Icons.refresh),
+            label: const Text('Muat Ulang'),
+          ),
         ],
       ),
     );
   }
 }
 
+// ─── Notification item tile ───────────────────────────────────────────────────
+
 class _NotificationItem extends StatelessWidget {
   final Map<String, dynamic> notification;
-  final VoidCallback onRead;
+  final VoidCallback onTap;
 
-  const _NotificationItem({required this.notification, required this.onRead});
+  const _NotificationItem({required this.notification, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    final isUnread = notification['status'] == 'unread';
-    final title = notification['title'] ?? 'Notifikasi';
-    final message = notification['message'] ?? '';
-    final createdAt = notification['createdAt'];
-
-    String timeStr = '';
-    if (createdAt != null) {
-      try {
-        final dt = DateTime.parse(createdAt.toString());
-        timeStr =
-            '${dt.day}/${dt.month} ${dt.hour}:${dt.minute.toString().padLeft(2, '0')}';
-      } catch (_) {}
-    }
+    final isUnread = notification['isRead'] != true;
+    final title = notification['title']?.toString() ?? 'Notifikasi';
+    final message = notification['message']?.toString() ?? '';
+    final type = notification['type']?.toString() ?? '';
+    final createdAt = notification['createdAt']?.toString();
 
     return AppCard(
-      onTap: () {
-        if (isUnread) onRead();
-        // Potential navigation based on type?
-      },
+      padding: const EdgeInsets.all(14),
+      radius: 16,
       backgroundColor: isUnread
           ? AppColors.primary.withValues(alpha: 0.05)
-          : null,
+          : Colors.white,
+      onTap: onTap,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Icon bubble
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: _getIconColor(notification['type']).withValues(alpha: 0.1),
+              color: _iconColor(type).withValues(alpha: 0.1),
               shape: BoxShape.circle,
             ),
-            child: Icon(
-              _getIcon(notification['type']),
-              color: _getIconColor(notification['type']),
-              size: 20,
-            ),
+            child: Icon(_iconData(type), color: _iconColor(type), size: 20),
           ),
           const SizedBox(width: 12),
+          // Content
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Expanded(
                       child: Text(
                         title,
                         style: AppTextStyles.label.copyWith(
                           fontWeight: isUnread
-                              ? FontWeight.bold
-                              : FontWeight.normal,
+                              ? FontWeight.w700
+                              : FontWeight.w500,
                         ),
                       ),
                     ),
-                    Text(timeStr, style: AppTextStyles.caption),
+                    if (createdAt != null) ...[
+                      const SizedBox(width: 8),
+                      Text(
+                        _relativeTime(createdAt),
+                        style: AppTextStyles.caption.copyWith(
+                          color: AppColors.textTertiary,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
                 const SizedBox(height: 4),
-                Text(message, style: AppTextStyles.bodySmall),
+                Text(
+                  message,
+                  style: AppTextStyles.bodySmall.copyWith(
+                    color: AppColors.textSecondary,
+                  ),
+                ),
               ],
             ),
           ),
-          if (isUnread)
-            Padding(
-              padding: const EdgeInsets.only(left: 8, top: 4),
-              child: Container(
-                width: 8,
-                height: 8,
-                decoration: const BoxDecoration(
-                  color: AppColors.primary,
-                  shape: BoxShape.circle,
-                ),
+          // Unread dot
+          if (isUnread) ...[
+            const SizedBox(width: 10),
+            Container(
+              width: 8,
+              height: 8,
+              margin: const EdgeInsets.only(top: 5),
+              decoration: BoxDecoration(
+                color: AppColors.primary,
+                shape: BoxShape.circle,
               ),
             ),
+          ],
         ],
       ),
     );
   }
 
-  IconData _getIcon(dynamic type) {
-    switch (type.toString()) {
-      case 'GUIDANCE_REQUEST':
-        return Icons.calendar_today;
-      case 'TRANSFER_REQUEST':
-        return Icons.swap_horiz;
-      case 'TOPIC_CHANGE_REQUEST':
-        return Icons.edit_note;
-      case 'VAL_SEMINAR':
-        return Icons.school;
-      default:
-        return Icons.notifications;
-    }
-  }
+  IconData _iconData(String type) => nh.notificationIconData(type);
 
-  Color _getIconColor(dynamic type) {
-    switch (type.toString()) {
+  Color _iconColor(String type) {
+    switch (type) {
       case 'GUIDANCE_REQUEST':
         return AppColors.info;
       case 'TRANSFER_REQUEST':
@@ -224,8 +424,14 @@ class _NotificationItem extends StatelessWidget {
         return AppColors.primary;
       case 'VAL_SEMINAR':
         return AppColors.success;
+      case 'ADVISOR_REQUEST':
+        return AppColors.primaryLight;
+      case 'MILESTONE_UPDATE':
+        return AppColors.success;
       default:
         return AppColors.primary;
     }
   }
+
+  String _relativeTime(String iso) => fmt.relativeTime(iso);
 }

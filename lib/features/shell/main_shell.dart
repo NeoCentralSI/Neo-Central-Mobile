@@ -27,11 +27,13 @@ class MainShell extends StatefulWidget {
 class _MainShellState extends State<MainShell> {
   int _currentIndex = 0;
   int _initialSubTab = 0;
+  int _approvalReloadKey = 0;
 
   void _switchTab(int index, {int initialTab = 0}) {
     setState(() {
       _currentIndex = index;
       _initialSubTab = initialTab;
+      if (index == 1) _approvalReloadKey++;
     });
   }
 
@@ -40,7 +42,7 @@ class _MainShellState extends State<MainShell> {
     GuidanceRequestsScreen(
       isTab: true,
       initialTab: _initialSubTab,
-      key: ValueKey('approval_$_initialSubTab'),
+      key: ValueKey('approval_${_initialSubTab}_$_approvalReloadKey'),
     ),
     const StudentListScreen(isTab: true),
     ProfileScreen(user: widget.user),

@@ -23,101 +23,132 @@ class ProfileScreen extends StatelessWidget {
     final identityNumber = user?.identityNumber ?? '-';
 
     return Scaffold(
-      backgroundColor: AppColors.background,
-      body: CustomScrollView(
-        slivers: [
-          _buildSliverAppBar(isLecturer, name),
-          SliverPadding(
-            padding: const EdgeInsets.all(AppSpacing.pagePadding),
-            sliver: SliverList(
-              delegate: SliverChildListDelegate([
-                _buildInfoCard(isLecturer, identityNumber, email),
-                const SizedBox(height: AppSpacing.base),
-                _buildMenuCard(context, isLecturer),
-                const SizedBox(height: AppSpacing.base),
-                _buildLogoutButton(context),
-                const SizedBox(height: AppSpacing.xxl),
-              ]),
+      backgroundColor: AppColors.surfaceSecondary,
+      body: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            _buildHeaderBackground(context, isLecturer, name),
+            Padding(
+              padding: const EdgeInsets.only(
+                top: 280,
+                left: AppSpacing.pagePadding,
+                right: AppSpacing.pagePadding,
+                bottom: 40,
+              ),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(24),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.05),
+                      blurRadius: 24,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _buildInfoCard(isLecturer, identityNumber, email),
+                    const Divider(
+                      color: AppColors.surfaceSecondary,
+                      thickness: 8,
+                      height: 8,
+                    ),
+                    _buildMenuCard(context, isLecturer),
+                    const SizedBox(height: AppSpacing.xl),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      child: _buildLogoutButton(context),
+                    ),
+                    const SizedBox(height: AppSpacing.xl),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeaderBackground(
+    BuildContext context,
+    bool isLecturer,
+    String name,
+  ) {
+    return Container(
+      width: double.infinity,
+      height: 380,
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [AppColors.primaryLight, AppColors.primary],
+        ),
+        borderRadius: BorderRadius.vertical(bottom: Radius.circular(32)),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const SizedBox(height: 20),
+          Stack(
+            children: [
+              CircleAvatar(
+                radius: 50,
+                backgroundColor: Colors.white.withValues(alpha: 0.2),
+                child: const Icon(Icons.person, color: Colors.white, size: 50),
+              ),
+              Positioned(
+                bottom: 0,
+                right: 0,
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Container(
+                    padding: const EdgeInsets.all(5),
+                    decoration: const BoxDecoration(
+                      color: AppColors.success,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.verified,
+                      color: Colors.white,
+                      size: 14,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Text(
+            name,
+            style: AppTextStyles.h1.copyWith(color: Colors.white, fontSize: 24),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            isLecturer ? 'Dosen Pembimbing' : 'Mahasiswa',
+            style: AppTextStyles.body.copyWith(
+              color: Colors.white.withValues(alpha: 0.9),
             ),
           ),
+          const SizedBox(height: 40),
         ],
       ),
     );
   }
 
-  Widget _buildSliverAppBar(bool isLecturer, String name) {
-    return SliverAppBar(
-      expandedHeight: 240,
-      pinned: true,
-      backgroundColor: AppColors.primary,
-      flexibleSpace: FlexibleSpaceBar(
-        background: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [AppColors.primary, AppColors.primaryDark],
-            ),
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const SizedBox(height: 50),
-              Stack(
-                children: [
-                  CircleAvatar(
-                    radius: 50,
-                    backgroundColor: Colors.white.withValues(alpha: 0.2),
-                    child: const Icon(
-                      Icons.person,
-                      color: Colors.white,
-                      size: 50,
-                    ),
-                  ),
-                  Positioned(
-                    bottom: 0,
-                    right: 0,
-                    child: Container(
-                      padding: const EdgeInsets.all(4),
-                      decoration: const BoxDecoration(
-                        color: Colors.white,
-                        shape: BoxShape.circle,
-                      ),
-                      child: Container(
-                        padding: const EdgeInsets.all(5),
-                        decoration: const BoxDecoration(
-                          color: AppColors.success,
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.verified,
-                          color: Colors.white,
-                          size: 14,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 14),
-              Text(name, style: AppTextStyles.h3.copyWith(color: Colors.white)),
-              const SizedBox(height: 4),
-              Text(
-                isLecturer ? 'Dosen Pembimbing' : 'Mahasiswa',
-                style: AppTextStyles.body.copyWith(
-                  color: Colors.white.withValues(alpha: 0.8),
-                ),
-              ),
-            ],
-          ),
-        ),
-        collapseMode: CollapseMode.parallax,
-      ),
-    );
-  }
-
   Widget _buildInfoCard(bool isLecturer, String identityNumber, String email) {
-    return AppCard(
+    return Padding(
+      padding: const EdgeInsets.all(24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -164,7 +195,8 @@ class ProfileScreen extends StatelessWidget {
       ),
     ];
 
-    return AppCard(
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
       child: Column(
         children: items.asMap().entries.map((entry) {
           final isLast = entry.key == items.length - 1;

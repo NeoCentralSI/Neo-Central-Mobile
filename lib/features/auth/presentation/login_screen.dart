@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../core/constants/app_assets.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_spacing.dart';
 import '../../../core/constants/app_text_styles.dart';
 import '../../../core/services/auth_service.dart';
+import '../../../core/services/fcm_service.dart';
+import '../../../core/utils/error_mapper.dart';
 import '../../shell/main_shell.dart';
 
 /// Login screen – Microsoft SSO only. Role is determined by the backend.
@@ -65,6 +68,15 @@ class _LoginScreenState extends State<LoginScreen>
       final result = await _authService.login();
       if (!mounted) return;
 
+      // Register FCM token after successful login
+      try {
+        final fcm = FcmService();
+        await fcm.init();
+        await fcm.registerAfterLogin();
+      } catch (_) {
+        // Don't block login if FCM fails
+      }
+
       // Navigate to the correct shell based on role returned from backend
       Navigator.of(context).pushReplacement(
         PageRouteBuilder(
@@ -84,164 +96,178 @@ class _LoginScreenState extends State<LoginScreen>
     }
   }
 
-  String _friendlyError(String raw) {
-    if (raw.contains('cancelled') || raw.contains('cancel')) {
-      return 'Login dibatalkan.';
-    }
-    if (raw.contains('not found') || raw.contains('belum terdaftar')) {
-      return 'Akun tidak ditemukan. Silakan hubungi admin.';
-    }
-    if (raw.contains('403') || raw.contains('belum diaktivasi')) {
-      return 'Akun belum diaktivasi. Hubungi admin.';
-    }
-    return 'Login gagal. Coba lagi nanti.';
-  }
+  String _friendlyError(String raw) => friendlyAuthError(raw);
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.surface,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
-          child: Column(
-            children: [
-              const SizedBox(height: 60),
+    final topHeight = MediaQuery.of(context).size.height * 0.42;
 
-              // ── Logo ──────────────────────────────────────────
-              FadeTransition(
-                opacity: _fadeAnimation,
-                child: Column(
-                  children: [
-                    Container(
-                      decoration: BoxDecoration(
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppColors.primary.withValues(alpha: 0.3),
-                            blurRadius: 60,
-                            spreadRadius: 20,
-                          ),
-                        ],
-                      ),
-                      child: Image.asset(
-                        AppAssets.logo,
-                        width: 130,
-                        height: 130,
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.lg),
-                    Text(
-                      'NEOCENTRAL',
-                      style: AppTextStyles.h2.copyWith(
-                        color: AppColors.primary,
-                        letterSpacing: 5,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      'Sistem Informasi Tugas Akhir',
-                      style: AppTextStyles.bodySmall,
-                    ),
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.light,
+      child: Scaffold(
+        body: Stack(
+          children: [
+            // ── Full-screen gradient background ──────────────
+            Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    AppColors.primaryLight,
+                    AppColors.primary,
                   ],
                 ),
               ),
+            ),
 
-              const SizedBox(height: 56),
-
-              // ── Login Card ────────────────────────────────────
-              SlideTransition(
+            // ── White bottom card ────────────────────────────
+            Positioned(
+              top: topHeight,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: SlideTransition(
                 position: _slideAnimation,
                 child: FadeTransition(
                   opacity: _fadeAnimation,
-                  child: Column(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(AppSpacing.xl),
-                        decoration: BoxDecoration(
-                          color: AppColors.surface,
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: AppColors.border),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.05),
-                              blurRadius: 24,
-                              offset: const Offset(0, 8),
+                  child: Container(
+                    decoration: const BoxDecoration(
+                      color: AppColors.surfaceSecondary,
+                      borderRadius: BorderRadius.only(
+                        topLeft: Radius.circular(32),
+                        topRight: Radius.circular(32),
+                      ),
+                    ),
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.fromLTRB(
+                        AppSpacing.xl,
+                        AppSpacing.xxl + 8,
+                        AppSpacing.xl,
+                        AppSpacing.xl,
+                      ),
+                      child: Column(
+                        children: [
+                          Text(
+                            'Masuk ke Akun Anda',
+                            style: AppTextStyles.h3,
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Gunakan akun Microsoft Universitas Andalas Anda\nuntuk mengakses dashboard akademik.',
+                            style: AppTextStyles.bodySmall.copyWith(
+                              color: AppColors.textSecondary,
                             ),
-                          ],
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Masuk ke Akun Anda', style: AppTextStyles.h4),
-                            const SizedBox(height: 6),
-                            Text(
-                              'Gunakan akun Microsoft Universitas Andalas Anda',
-                              style: AppTextStyles.bodySmall,
-                            ),
-                            const SizedBox(height: AppSpacing.xl),
-                            _MicrosoftLoginButton(
-                              onPressed: _handleMicrosoftLogin,
-                              isLoading: _isLoading,
-                            ),
-                            if (_errorMessage != null) ...[
-                              const SizedBox(height: AppSpacing.md),
-                              Container(
-                                padding: const EdgeInsets.all(AppSpacing.md),
-                                decoration: BoxDecoration(
-                                  color: AppColors.destructiveLight,
-                                  borderRadius: BorderRadius.circular(10),
-                                  border: Border.all(
-                                    color: AppColors.destructive.withValues(
-                                      alpha: 0.3,
-                                    ),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: AppSpacing.xxl),
+                          _MicrosoftLoginButton(
+                            onPressed: _handleMicrosoftLogin,
+                            isLoading: _isLoading,
+                          ),
+                          if (_errorMessage != null) ...[
+                            const SizedBox(height: AppSpacing.md),
+                            Container(
+                              padding: const EdgeInsets.all(AppSpacing.md),
+                              decoration: BoxDecoration(
+                                color: AppColors.destructiveLight,
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  color: AppColors.destructive.withValues(
+                                    alpha: 0.3,
                                   ),
                                 ),
-                                child: Row(
-                                  children: [
-                                    const Icon(
-                                      Icons.error_outline,
-                                      color: AppColors.destructive,
-                                      size: 18,
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: Text(
-                                        _errorMessage!,
-                                        style: AppTextStyles.bodySmall.copyWith(
-                                          color: AppColors.destructive,
-                                        ),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(
+                                    Icons.error_outline,
+                                    color: AppColors.destructive,
+                                    size: 18,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      _errorMessage!,
+                                      style: AppTextStyles.bodySmall.copyWith(
+                                        color: AppColors.destructive,
                                       ),
                                     ),
-                                  ],
-                                ),
+                                  ),
+                                ],
                               ),
-                            ],
+                            ),
                           ],
+                          const SizedBox(height: AppSpacing.xl),
+                          Text(
+                            'HANYA DAPAT DIAKSES OLEH CIVITAS AKADEMIKA\nUNIVERSITAS ANDALAS',
+                            style: AppTextStyles.caption.copyWith(
+                              letterSpacing: 0.5,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: AppSpacing.md),
+                          Text(
+                            'v1.0.0 · Universitas Andalas',
+                            style: AppTextStyles.caption,
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+
+            // ── Logo section (on top of gradient) ────────────
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              height: topHeight,
+              child: SafeArea(
+                bottom: false,
+                child: FadeTransition(
+                  opacity: _fadeAnimation,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: AppColors.transparent,
+                        ),
+                        child: Image.asset(
+                          AppAssets.logoWhite,
+                          width: 72,
+                          height: 72,
                         ),
                       ),
-                      const SizedBox(height: AppSpacing.base),
+                      const SizedBox(height: 20),
                       Text(
-                        'Hanya dapat diakses oleh civitas akademika\nUniversitas Andalas',
-                        style: AppTextStyles.caption,
-                        textAlign: TextAlign.center,
+                        'NEOCENTRAL',
+                        style: AppTextStyles.h1.copyWith(
+                          color: AppColors.white,
+                          letterSpacing: 5,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'SISTEM INFORMASI TUGAS AKHIR',
+                        style: AppTextStyles.bodySmall.copyWith(
+                          color: AppColors.white.withValues(alpha: 0.85),
+                          letterSpacing: 2,
+                        ),
                       ),
                     ],
                   ),
                 ),
               ),
-
-              const SizedBox(height: AppSpacing.xl),
-
-              FadeTransition(
-                opacity: _fadeAnimation,
-                child: Text(
-                  'v1.0.0 · Universitas Andalas',
-                  style: AppTextStyles.caption,
-                ),
-              ),
-              const SizedBox(height: AppSpacing.xl),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -282,7 +308,7 @@ class _MicrosoftLoginButtonState extends State<_MicrosoftLoginButton> {
         ),
         height: 54,
         decoration: BoxDecoration(
-          color: AppColors.white,
+          color: AppColors.surfaceSecondary,
           borderRadius: BorderRadius.circular(AppSpacing.buttonRadius),
           border: Border.all(
             color: AppColors.primary.withValues(alpha: 0.6),

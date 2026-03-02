@@ -3,10 +3,10 @@ import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_spacing.dart';
 import '../../../../core/constants/app_text_styles.dart';
 import '../../../../core/models/auth_models.dart';
+import '../../../../core/services/fcm_service.dart';
 import '../../../../core/services/student_api_service.dart';
 import '../../../../core/services/notification_api_service.dart';
-import '../../../../shared/widgets/shared_widgets.dart';
-import '../../../notifications/presentation/notification_screen.dart';
+import '../../../notifications/presentation/notification_screen.dart' show NotificationScreen;
 
 /// Student dashboard – shows a summary of their active thesis.
 class StudentDashboardScreen extends StatefulWidget {
@@ -21,6 +21,7 @@ class StudentDashboardScreen extends StatefulWidget {
 class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
   final _api = StudentApiService();
   final _notifApi = NotificationApiService();
+  final _fcm = FcmService();
 
   bool _isLoading = true;
   String? _error;
@@ -31,19 +32,33 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
   Map<String, dynamic>? _thesis;
   List<dynamic> _milestones = [];
   int _completedGuidanceCount = 0;
-  int _totalGuidanceCount = 0;
+  int _milestoneProgress = 0;
 
   @override
   void initState() {
     super.initState();
     _loadData();
+    _fcm.addListener(_onFcmMessage);
   }
 
-  Future<void> _loadData() async {
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
+  @override
+  void dispose() {
+    _fcm.removeListener(_onFcmMessage);
+    super.dispose();
+  }
+
+  /// Silently refresh when an FCM notification arrives (e.g. daily reminder).
+  void _onFcmMessage(Map<String, dynamic> data) {
+    _loadData(silent: true);
+  }
+
+  Future<void> _loadData({bool silent = false}) async {
+    if (!silent) {
+      setState(() {
+        _isLoading = true;
+        _error = null;
+      });
+    }
 
     try {
       final results = await Future.wait([
@@ -61,9 +76,9 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
 
         // Count completed guidances from thesis stats
         final stats = _thesis?['stats'] as Map<String, dynamic>?;
-        _totalGuidanceCount = (stats?['totalGuidances'] as int?) ?? 0;
+        _milestoneProgress = (stats?['milestoneProgress'] as int?) ?? 0;
 
-        _completedGuidanceCount = _totalGuidanceCount;
+        _completedGuidanceCount = (stats?['completedGuidances'] as int?) ?? 0;
         _isLoading = false;
       });
 
@@ -86,215 +101,277 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
     final firstName = userName.split(' ').first;
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: AppColors.surfaceSecondary,
       body: RefreshIndicator(
         onRefresh: _loadData,
-        child: CustomScrollView(
-          slivers: [
-            _buildAppBar(context, firstName),
-            if (_isLoading)
-              const SliverFillRemaining(
-                child: Center(child: CircularProgressIndicator()),
-              )
-            else if (_error != null)
-              SliverFillRemaining(
-                child: Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(AppSpacing.pagePadding),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(
-                          Icons.error_outline,
-                          size: 48,
-                          color: AppColors.textTertiary,
+        color: AppColors.primary,
+        child: _isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : _error != null
+            ? CustomScrollView(
+                slivers: [
+                  SliverFillRemaining(
+                    child: Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(AppSpacing.pagePadding),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.error_outline,
+                              size: 48,
+                              color: AppColors.textTertiary,
+                            ),
+                            const SizedBox(height: 12),
+                            Text('Gagal memuat data', style: AppTextStyles.h4),
+                            const SizedBox(height: 8),
+                            Text(
+                              _error!,
+                              style: AppTextStyles.bodySmall,
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 16),
+                            ElevatedButton.icon(
+                              icon: const Icon(Icons.refresh),
+                              label: const Text('Coba Lagi'),
+                              onPressed: _loadData,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.primary,
+                                foregroundColor: AppColors.white,
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 12),
-                        Text('Gagal memuat data', style: AppTextStyles.h4),
-                        const SizedBox(height: 8),
-                        Text(
-                          _error!,
-                          style: AppTextStyles.bodySmall,
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 16),
-                        AppButton(
-                          label: 'Coba Lagi',
-                          icon: Icons.refresh,
-                          onPressed: _loadData,
-                        ),
-                      ],
+                      ),
                     ),
                   ),
-                ),
+                ],
               )
-            else
-              SliverPadding(
-                padding: const EdgeInsets.all(AppSpacing.pagePadding),
-                sliver: SliverList(
-                  delegate: SliverChildListDelegate([
-                    _ThesisSummaryCard(thesis: _thesis),
-                    const SizedBox(height: AppSpacing.base),
-                    _ProgressSection(milestones: _milestones),
-                    const SizedBox(height: AppSpacing.base),
-                    _GuidanceProgressCard(
-                      completedCount: _completedGuidanceCount,
+            : SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    _buildHeaderBackground(context, firstName),
+                    Padding(
+                      padding: const EdgeInsets.only(
+                        top: 280,
+                        left: AppSpacing.pagePadding,
+                        right: AppSpacing.pagePadding,
+                        bottom: 100, // padding for FAB
+                      ),
+                      child: _buildMainContent(),
                     ),
-                    const SizedBox(height: AppSpacing.base),
-                    _SeminarReadinessCard(
-                      thesis: _thesis,
-                      completedGuidanceCount: _completedGuidanceCount,
-                    ),
-                    const SizedBox(height: AppSpacing.xxl),
-                  ]),
+                  ],
                 ),
               ),
-          ],
-        ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
+      floatingActionButton: FloatingActionButton(
         onPressed: () {
-          // Switch to "Jadwalkan" tab (index 1) instead of pushing a new route
           widget.onSwitchTab?.call(1);
         },
-        backgroundColor: AppColors.primary,
+        backgroundColor: AppColors.primaryLight, // Dark slate blue/black
         foregroundColor: AppColors.white,
-        icon: const Icon(Icons.add),
-        label: Text(
-          'Jadwalkan Bimbingan',
-          style: AppTextStyles.label.copyWith(color: AppColors.white),
-        ),
         elevation: 4,
+        child: const Icon(Icons.add, size: 28),
       ),
     );
   }
 
-  Widget _buildAppBar(BuildContext context, String name) {
-    return SliverAppBar(
-      expandedHeight: 140,
-      floating: false,
-      pinned: true,
-      backgroundColor: AppColors.primary,
-      flexibleSpace: FlexibleSpaceBar(
-        background: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [AppColors.primary, AppColors.primaryDark],
-            ),
-          ),
-          padding: const EdgeInsets.fromLTRB(
-            AppSpacing.pagePadding,
-            60,
-            AppSpacing.pagePadding,
-            AppSpacing.base,
-          ),
-          child: Column(
+  Widget _buildHeaderBackground(BuildContext context, String name) {
+    return Container(
+      width: double.infinity,
+      height: 320,
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.pagePadding,
+        60,
+        AppSpacing.pagePadding,
+        24,
+      ),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            AppColors.primaryLight,
+            AppColors.primary,
+          ], // Vibrant Orange gradient
+        ),
+        borderRadius: BorderRadius.vertical(bottom: Radius.circular(32)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.end,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Dashboard Tugas Akhir',
+                      style: AppTextStyles.bodySmall.copyWith(
+                        color: Colors.white.withValues(alpha: 0.9),
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Hi, $name',
+                      style: AppTextStyles.h1.copyWith(
+                        color: Colors.white,
+                        fontSize: 28,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Stack(
                 children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Halo,',
-                          style: AppTextStyles.body.copyWith(
-                            color: AppColors.white.withValues(alpha: 0.85),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.2),
+                      shape: BoxShape.circle,
+                    ),
+                    child: IconButton(
+                      icon: const Icon(
+                        Icons.notifications_none_outlined,
+                        color: Colors.white,
+                        size: 26,
+                      ),
+                      onPressed: () async {
+                        await Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const NotificationScreen(),
                           ),
-                        ),
-                        Text(
-                          name,
-                          style: AppTextStyles.h2.copyWith(
-                            color: AppColors.white,
-                          ),
-                        ),
-                      ],
+                        );
+                        final count = await _notifApi.getUnreadCount();
+                        if (mounted) setState(() => _unreadCount = count);
+                      },
                     ),
                   ),
-                  const CircleAvatar(
-                    radius: 22,
-                    backgroundColor: Colors.white24,
-                    child: Icon(Icons.person, color: Colors.white, size: 24),
-                  ),
-                  const SizedBox(width: 8),
-                  Stack(
-                    children: [
-                      IconButton(
-                        icon: const Icon(
-                          Icons.notifications_none_outlined,
-                          color: AppColors.white,
-                          size: 28,
+                  if (_unreadCount > 0)
+                    Positioned(
+                      right: 6,
+                      top: 6,
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: const BoxDecoration(
+                          color: Colors.red,
+                          shape: BoxShape.circle,
                         ),
-                        onPressed: () async {
-                          await Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => const NotificationScreen(),
-                            ),
-                          );
-                          // Refresh unread count when returning
-                          final count = await _notifApi.getUnreadCount();
-                          if (mounted) setState(() => _unreadCount = count);
-                        },
+                        constraints: const BoxConstraints(
+                          minWidth: 12,
+                          minHeight: 12,
+                        ),
                       ),
-                      if (_unreadCount > 0)
-                        Positioned(
-                          right: 8,
-                          top: 8,
-                          child: Container(
-                            padding: const EdgeInsets.all(4),
-                            decoration: const BoxDecoration(
-                              color: Colors.red,
-                              shape: BoxShape.circle,
-                            ),
-                            constraints: const BoxConstraints(
-                              minWidth: 16,
-                              minHeight: 16,
-                            ),
-                            child: Text(
-                              '$_unreadCount',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
+                    ),
                 ],
               ),
             ],
           ),
-        ),
-        collapseMode: CollapseMode.parallax,
+          const SizedBox(height: 32),
+          // OVERALL PROGRESS
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.3),
+                width: 1,
+              ),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'PROGRES KESELURUHAN',
+                      style: AppTextStyles.label.copyWith(
+                        color: Colors.white.withValues(alpha: 0.9),
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.baseline,
+                      textBaseline: TextBaseline.alphabetic,
+                      children: [
+                        Text(
+                          '$_milestoneProgress%',
+                          style: AppTextStyles.h1.copyWith(
+                            color: Colors.white,
+                            fontSize: 36,
+                            height: 1,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'selesai',
+                          style: AppTextStyles.body.copyWith(
+                            color: Colors.white.withValues(alpha: 0.9),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 3),
+                  ),
+                  child: const Center(
+                    child: Icon(
+                      Icons.check_circle,
+                      color: Colors.white,
+                      size: 28,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
-}
 
-// ─── Thesis Summary Card ──────────────────────────────────────
-class _ThesisSummaryCard extends StatelessWidget {
-  final Map<String, dynamic>? thesis;
-  const _ThesisSummaryCard({required this.thesis});
-
-  @override
-  Widget build(BuildContext context) {
-    final title = thesis?['title'] ?? 'Belum ada tugas akhir';
-    final status = thesis?['status'] ?? '-';
-    final supervisors = (thesis?['supervisors'] as List<dynamic>?) ?? [];
-    final deadlineDate = thesis?['deadlineDate'];
+  Widget _buildMainContent() {
+    final title = _thesis?['title'] ?? 'Belum ada tugas akhir';
+    final status = _thesis?['status'] ?? '-';
+    final supervisors = (_thesis?['supervisors'] as List<dynamic>?) ?? [];
+    final deadlineDate = _thesis?['deadlineDate'];
 
     String deadlineStr = '-';
+    int remainingDays = 0;
     if (deadlineDate != null) {
       try {
         final dt = DateTime.parse(deadlineDate.toString());
-        deadlineStr = '${dt.day}/${dt.month}/${dt.year}';
+        // format: Jan 8, 2026
+        final months = [
+          'Jan',
+          'Feb',
+          'Mar',
+          'Apr',
+          'May',
+          'Jun',
+          'Jul',
+          'Aug',
+          'Sep',
+          'Oct',
+          'Nov',
+          'Dec',
+        ];
+        deadlineStr = '${months[dt.month - 1]} ${dt.day}, ${dt.year}';
+        remainingDays = dt.difference(DateTime.now()).inDays;
       } catch (_) {
         deadlineStr = deadlineDate.toString();
       }
@@ -304,322 +381,489 @@ class _ThesisSummaryCard extends StatelessWidget {
         status.toString().toLowerCase().contains('aktif') ||
         status.toString().toLowerCase().contains('berlangsung');
 
-    return AppCard(
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 24,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      clipBehavior: Clip.antiAlias,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: AppColors.primary.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Icon(
-                  Icons.menu_book,
-                  color: AppColors.primary,
-                  size: 20,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Text(
-                'Tugas Akhir',
-                style: AppTextStyles.label.copyWith(
-                  color: AppColors.textSecondary,
-                ),
-              ),
-              const Spacer(),
-              AppBadge(
-                label: isActive ? 'Aktif' : status.toString(),
-                variant: isActive ? BadgeVariant.success : BadgeVariant.outline,
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.md),
-          Text(title.toString(), style: AppTextStyles.h4),
-          const SizedBox(height: AppSpacing.sm),
-          for (final sup in supervisors) ...[
-            InfoRow(
-              icon: Icons.person_outline,
-              label: (sup['role'] ?? 'Pembimbing').toString(),
-              value: (sup['name'] ?? '-').toString(),
-            ),
-            const SizedBox(height: AppSpacing.sm),
-          ],
-          if (deadlineDate != null)
-            InfoRow(
-              icon: Icons.calendar_today_outlined,
-              label: 'Deadline',
-              value: deadlineStr,
-              valueColor: AppColors.warning,
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-// ─── Progress Section ─────────────────────────────────────────
-class _ProgressSection extends StatelessWidget {
-  final List<dynamic> milestones;
-  const _ProgressSection({required this.milestones});
-
-  @override
-  Widget build(BuildContext context) {
-    final total = milestones.length;
-    final completed = milestones
-        .where((m) => m['status'] == 'completed')
-        .length;
-    final progress = total > 0 ? completed / total : 0.0;
-
-    return AppCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SectionHeader(title: 'Progress Milestone'),
-          const SizedBox(height: AppSpacing.md),
-          AppProgressBar(value: progress),
-          const SizedBox(height: AppSpacing.sm),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                '${(progress * 100).round()}% selesai',
-                style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600),
-              ),
-              Text(
-                '$completed dari $total milestone',
-                style: AppTextStyles.bodySmall,
-              ),
-            ],
-          ),
-          if (milestones.isNotEmpty) const AppDivider(),
-          for (final m in milestones)
-            _MilestoneRow(
-              title: (m['name'] ?? m['title'] ?? '').toString(),
-              status: _statusLabel(m['status']?.toString() ?? ''),
-              isDone: m['status'] == 'completed',
-              isCurrent: m['status'] == 'in_progress',
-            ),
-        ],
-      ),
-    );
-  }
-
-  String _statusLabel(String status) {
-    switch (status) {
-      case 'completed':
-        return 'Selesai';
-      case 'in_progress':
-        return 'Sedang Dikerjakan';
-      default:
-        return 'Belum Dimulai';
-    }
-  }
-}
-
-class _MilestoneRow extends StatelessWidget {
-  final String title;
-  final String status;
-  final bool isDone;
-  final bool isCurrent;
-
-  const _MilestoneRow({
-    required this.title,
-    required this.status,
-    required this.isDone,
-    this.isCurrent = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
-        children: [
-          Icon(
-            isDone
-                ? Icons.check_circle
-                : (isCurrent
-                      ? Icons.radio_button_unchecked
-                      : Icons.circle_outlined),
-            color: isDone
-                ? AppColors.success
-                : (isCurrent ? AppColors.primary : AppColors.textTertiary),
-            size: 18,
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              title,
-              style: AppTextStyles.body.copyWith(
-                fontWeight: isCurrent ? FontWeight.w600 : FontWeight.normal,
-              ),
-            ),
-          ),
-          AppBadge(
-            label: status,
-            variant: isDone
-                ? BadgeVariant.success
-                : (isCurrent ? BadgeVariant.primary : BadgeVariant.outline),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ─── Guidance Progress Card ───────────────────────────────────
-class _GuidanceProgressCard extends StatelessWidget {
-  final int completedCount;
-  const _GuidanceProgressCard({required this.completedCount});
-
-  @override
-  Widget build(BuildContext context) {
-    const required = 8;
-    final remaining = (required - completedCount).clamp(0, required);
-    final progress = completedCount / required;
-
-    return AppCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SectionHeader(title: 'Progress Bimbingan'),
-          const SizedBox(height: AppSpacing.md),
-          AppProgressBar(
-            value: progress.clamp(0.0, 1.0),
-            color: AppColors.info,
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  Text(
-                    '$completedCount',
-                    style: AppTextStyles.h3.copyWith(color: AppColors.primary),
-                  ),
-                  Text(
-                    ' / $required sesi',
-                    style: AppTextStyles.body.copyWith(
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                ],
-              ),
-              if (remaining > 0)
-                Text(
-                  'Perlu $remaining sesi lagi',
-                  style: AppTextStyles.bodySmall.copyWith(
-                    color: AppColors.warning,
-                  ),
-                )
-              else
-                Text(
-                  'Syarat terpenuhi ✓',
-                  style: AppTextStyles.bodySmall.copyWith(
-                    color: AppColors.success,
-                  ),
-                ),
-            ],
-          ),
-          const AppDivider(),
-          Row(
-            children: [
-              const Icon(
-                Icons.info_outline,
-                size: 14,
-                color: AppColors.textSecondary,
-              ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  'Minimal 8 sesi bimbingan diperlukan sebelum approval seminar',
-                  style: AppTextStyles.bodySmall,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ─── Seminar Readiness Card ───────────────────────────────────
-class _SeminarReadinessCard extends StatelessWidget {
-  final Map<String, dynamic>? thesis;
-  final int completedGuidanceCount;
-  const _SeminarReadinessCard({
-    required this.thesis,
-    required this.completedGuidanceCount,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final seminar = thesis?['seminarApproval'] as Map<String, dynamic>?;
-    final isFullyApproved = seminar?['isFullyApproved'] == true;
-    final guidanceMet = completedGuidanceCount >= 8;
-    final isReady = isFullyApproved && guidanceMet;
-
-    final stats = thesis?['stats'] as Map<String, dynamic>?;
-    final milestoneProgress = (stats?['milestoneProgress'] as int?) ?? 0;
-    final milestoneMet = milestoneProgress >= 100;
-
-    String statusText;
-    if (isReady) {
-      statusText = 'Semua syarat terpenuhi!';
-    } else if (milestoneMet && !guidanceMet) {
-      statusText =
-          'Belum memenuhi syarat – ${8 - completedGuidanceCount} sesi bimbingan lagi';
-    } else if (!milestoneMet && guidanceMet) {
-      statusText = 'Belum memenuhi syarat – milestone belum 100%';
-    } else {
-      statusText = 'Belum memenuhi syarat';
-    }
-
-    return AppCard(
-      backgroundColor: isReady
-          ? AppColors.successLight
-          : AppColors.warningLight,
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: (isReady ? AppColors.success : AppColors.warning)
-                  .withValues(alpha: 0.2),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              Icons.school_outlined,
-              color: isReady ? AppColors.successDark : AppColors.warningDark,
-              size: 24,
-            ),
-          ),
-          const SizedBox(width: AppSpacing.md),
-          Expanded(
+          Padding(
+            padding: const EdgeInsets.all(24),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Status Kesiapan Seminar', style: AppTextStyles.label),
-                const SizedBox(height: 2),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        title.toString(),
+                        style: AppTextStyles.h3.copyWith(
+                          fontSize: 20,
+                          height: 1.3,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFF7ED),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFFFEDD5)),
+                      ),
+                      child: Text(
+                        isActive ? 'AKTIF' : status.toString().toUpperCase(),
+                        style: AppTextStyles.label.copyWith(
+                          color: AppColors.primaryDark,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
                 Text(
-                  statusText,
-                  style: AppTextStyles.bodySmall.copyWith(
-                    color: isReady
-                        ? AppColors.successDark
-                        : AppColors.warningDark,
+                  'Pantau perjalanan tugas akhirmu, kelola tenggat waktu, dan koordinasi dengan dosen pembimbing.',
+                  style: AppTextStyles.body.copyWith(
+                    color: AppColors.textSecondary,
+                    height: 1.5,
                   ),
                 ),
+                const SizedBox(height: 24),
+                // Supervisors mapped dynamically
+                if (supervisors.isNotEmpty)
+                  GridView.builder(
+                    padding: EdgeInsets.zero,
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 2,
+                          childAspectRatio: 3,
+                          crossAxisSpacing: 16,
+                          mainAxisSpacing: 16,
+                        ),
+                    itemCount: supervisors.length,
+                    itemBuilder: (context, index) {
+                      final sup = supervisors[index];
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.person,
+                                size: 14,
+                                color: AppColors.textTertiary,
+                              ),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                child: Text(
+                                  (sup['role'] ?? 'PEMBIMBING')
+                                      .toString()
+                                      .toUpperCase(),
+                                  style: AppTextStyles.label.copyWith(
+                                    fontSize: 10,
+                                    color: AppColors.textTertiary,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            (sup['name'] ?? '-').toString(),
+                            style: AppTextStyles.body.copyWith(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 13,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                const SizedBox(height: 20),
+                // Submission Deadline
+                if (deadlineDate != null)
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFF7ED),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: const Color(0xFFFFEDD5)),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(
+                            Icons.calendar_today_rounded,
+                            color: AppColors.primaryDark,
+                            size: 20,
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'TENGGAT WAKTU',
+                                style: AppTextStyles.label.copyWith(
+                                  fontSize: 10,
+                                  color: AppColors.primaryDark,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                deadlineStr,
+                                style: AppTextStyles.body.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.black87,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              'Sisa',
+                              style: AppTextStyles.label.copyWith(
+                                fontSize: 10,
+                                color: AppColors.textTertiary,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              '${remainingDays > 0 ? remainingDays : 0} Hari',
+                              style: AppTextStyles.body.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.primaryDark,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
               ],
             ),
           ),
-          AppBadge(
-            label: isReady ? 'Siap' : 'Belum',
-            variant: isReady ? BadgeVariant.success : BadgeVariant.warning,
+          Divider(color: AppColors.surfaceSecondary, thickness: 8, height: 8),
+          Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Milestones',
+                        style: AppTextStyles.h4.copyWith(
+                          fontSize: 14,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFF7ED),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFFFEDD5)),
+                      ),
+                      child: Text(
+                        _milestoneProgress == 100
+                            ? 'Selesai Semua'
+                            : 'Sedang Berjalan',
+                        style: AppTextStyles.label.copyWith(
+                          color: const Color(0xFFEA580C),
+                          fontSize: 10,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                if (_milestones.isEmpty)
+                  Text('Belum ada milestone', style: AppTextStyles.bodySmall)
+                else
+                  ...List.generate(_milestones.length, (index) {
+                    final m = _milestones[index];
+                    final isLast = index == _milestones.length - 1;
+                    final isCompleted = m['status'] == 'completed';
+                    return _TimelineItem(
+                      title: (m['name'] ?? m['title'] ?? '').toString(),
+                      isCompleted: isCompleted,
+                      isLast: isLast,
+                    );
+                  }),
+              ],
+            ),
+          ),
+          Divider(color: AppColors.surfaceSecondary, thickness: 8, height: 8),
+          Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Progres Bimbingan',
+                  style: AppTextStyles.h4.copyWith(
+                    fontSize: 14,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  children: [
+                    SizedBox(
+                      width: 64,
+                      height: 64,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          Positioned.fill(
+                            child: CircularProgressIndicator(
+                              value: (_completedGuidanceCount / 8).clamp(
+                                0.0,
+                                1.0,
+                              ),
+                              backgroundColor: Colors.grey[200],
+                              color: const Color(0xFFEA580C),
+                              strokeWidth: 6,
+                              strokeCap: StrokeCap.round,
+                            ),
+                          ),
+                          Text.rich(
+                            TextSpan(
+                              children: [
+                                TextSpan(
+                                  text: '$_completedGuidanceCount',
+                                  style: AppTextStyles.h3.copyWith(
+                                    fontSize: 18,
+                                  ),
+                                ),
+                                TextSpan(
+                                  text: '/8',
+                                  style: AppTextStyles.label.copyWith(
+                                    color: AppColors.textTertiary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 20),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text.rich(
+                            TextSpan(
+                              children: [
+                                TextSpan(
+                                  text: "Kamu sudah menyelesaikan ",
+                                  style: AppTextStyles.body.copyWith(
+                                    color: AppColors.textSecondary,
+                                  ),
+                                ),
+                                TextSpan(
+                                  text: "$_completedGuidanceCount sesi.",
+                                  style: AppTextStyles.body.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.textPrimary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          if (_completedGuidanceCount < 8)
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Icon(
+                                  Icons.warning_amber_rounded,
+                                  color: Color(0xFFEF4444),
+                                  size: 16,
+                                ),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: Text(
+                                    '${8 - _completedGuidanceCount} sesi bimbingan lagi untuk kesiapan seminar.',
+                                    style: AppTextStyles.bodySmall.copyWith(
+                                      color: const Color(0xFFEF4444),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            )
+                          else
+                            Row(
+                              children: [
+                                const Icon(
+                                  Icons.check_circle,
+                                  color: Color(0xFF22C55E),
+                                  size: 16,
+                                ),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: Text(
+                                    'Syarat kesiapan seminar telah terpenuhi.',
+                                    style: AppTextStyles.bodySmall.copyWith(
+                                      color: const Color(0xFF22C55E),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                const Divider(height: 1, color: AppColors.borderLight),
+                const SizedBox(height: 16),
+                _buildSeminarReadinessRow(),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSeminarReadinessRow() {
+    final seminar = _thesis?['seminarApproval'] as Map<String, dynamic>?;
+    final isFullyApproved = seminar?['isFullyApproved'] == true;
+    final guidanceMet = _completedGuidanceCount >= 8;
+    final isReady = isFullyApproved && guidanceMet && _milestoneProgress >= 100;
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Expanded(
+          child: Text(
+            'Kesiapan Seminar',
+            style: AppTextStyles.body.copyWith(color: AppColors.textSecondary),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: isReady ? const Color(0xFFDCFCE7) : const Color(0xFFFFF7ED),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Text(
+            isReady ? 'Memenuhi Syarat' : 'Belum Memenuhi Syarat',
+            style: AppTextStyles.label.copyWith(
+              color: isReady
+                  ? const Color(0xFF16A34A)
+                  : const Color(0xFFEA580C),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _TimelineItem extends StatelessWidget {
+  final String title;
+  final bool isCompleted;
+  final bool isLast;
+
+  const _TimelineItem({
+    required this.title,
+    required this.isCompleted,
+    required this.isLast,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(
+            width: 24,
+            child: Column(
+              children: [
+                Container(
+                  width: 16,
+                  height: 16,
+                  decoration: BoxDecoration(
+                    color: isCompleted ? const Color(0xFFF97316) : Colors.white,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: isCompleted
+                          ? const Color(0xFFFFEDD5)
+                          : Colors.grey[300]!,
+                      width: isCompleted ? 4 : 2,
+                    ),
+                  ),
+                ),
+                if (!isLast)
+                  Expanded(child: Container(width: 2, color: Colors.grey[200])),
+              ],
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 24),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: AppTextStyles.body.copyWith(
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                  ),
+                  if (isCompleted)
+                    const Icon(Icons.check, size: 16, color: Color(0xFFF97316)),
+                ],
+              ),
+            ),
           ),
         ],
       ),

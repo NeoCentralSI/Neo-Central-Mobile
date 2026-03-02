@@ -68,13 +68,11 @@ class AuthService {
       await _storage.saveAuthResult(result);
 
       return result;
-    } on http.ClientException catch (e) {
-      print('[AUTH] Network ClientException: $e');
+    } on http.ClientException catch (_) {
       throw Exception(
         'Tidak dapat terhubung ke server. Periksa koneksi internet atau IP server.',
       );
-    } catch (e) {
-      print('[AUTH] Unexpected Error during backend exchange: $e');
+    } catch (_) {
       rethrow;
     }
   }
