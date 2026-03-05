@@ -16,7 +16,10 @@ abstract class AppTheme {
         seedColor: AppColors.primary,
         brightness: Brightness.light,
         primary: AppColors.primary,
+        onPrimary: AppColors.white,
         surface: AppColors.surface,
+        error: AppColors.destructive,
+        onError: AppColors.white,
       ),
       scaffoldBackgroundColor: AppColors.background,
       appBarTheme: const AppBarTheme(

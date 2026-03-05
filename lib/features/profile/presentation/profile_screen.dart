@@ -275,6 +275,7 @@ class ProfileScreen extends StatelessWidget {
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.destructive,
+                  foregroundColor: AppColors.white,
                 ),
                 child: const Text('Keluar'),
               ),

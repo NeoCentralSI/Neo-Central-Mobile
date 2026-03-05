@@ -383,7 +383,10 @@ class _SeminarReadinessCard extends StatelessWidget {
                 ),
               );
             },
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.success),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.success,
+              foregroundColor: AppColors.white,
+            ),
             child: const Text('Setujui'),
           ),
         ],

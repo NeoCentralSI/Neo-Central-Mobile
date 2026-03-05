@@ -7,6 +7,7 @@ import '../../../../core/services/fcm_service.dart';
 import '../../../../core/services/student_api_service.dart';
 import '../../../../core/services/notification_api_service.dart';
 import '../../../notifications/presentation/notification_screen.dart' show NotificationScreen;
+import 'milestone_progress_screen.dart';
 
 /// Student dashboard – shows a summary of their active thesis.
 class StudentDashboardScreen extends StatefulWidget {
@@ -616,7 +617,7 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: AppSpacing.base),
                 if (_milestones.isEmpty)
                   Text('Belum ada milestone', style: AppTextStyles.bodySmall)
                 else
@@ -630,6 +631,32 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
                       isLast: isLast,
                     );
                   }),
+                const SizedBox(height: AppSpacing.base),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      final thesisId = (_thesis?['id'] ?? _thesis?['thesisId'] ?? '').toString();
+                      if (thesisId.isEmpty) return;
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => MilestoneProgressScreen(thesisId: thesisId),
+                        ),
+                      ).then((_) => _loadData(silent: true));
+                    },
+                    icon: const Icon(Icons.trending_up_rounded, size: 18),
+                    label: const Text('Kelola Milestone'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.primary,
+                      side: const BorderSide(color: AppColors.border),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(AppSpacing.buttonRadius),
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
@@ -792,7 +819,7 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
             borderRadius: BorderRadius.circular(12),
           ),
           child: Text(
-            isReady ? 'Memenuhi Syarat' : 'Belum Memenuhi Syarat',
+            isReady ? 'Sudah diApprove' : 'Belum diApprove',
             style: AppTextStyles.label.copyWith(
               color: isReady
                   ? const Color(0xFF16A34A)

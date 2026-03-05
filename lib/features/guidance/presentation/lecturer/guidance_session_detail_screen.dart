@@ -6,6 +6,7 @@ import '../../../../core/constants/app_spacing.dart';
 import '../../../../core/constants/app_text_styles.dart';
 import '../../../../core/services/api_client.dart';
 import '../../../../core/services/lecturer_api_service.dart';
+import '../../../../core/services/secure_storage_service.dart';
 import '../../../../shared/widgets/shared_widgets.dart';
 
 /// Guidance session detail screen for lecturer to approve or reject a request.
@@ -179,10 +180,27 @@ class _GuidanceSessionDetailScreenState
 
   Future<void> _openDocument(String? url) async {
     if (url == null || url.isEmpty) return;
-    // Build full URL if relative
-    final fullUrl = url.startsWith('http') ? url : '${AppConfig.baseUrl}$url';
+    // Build full URL if relative — ensure slash between base URL and path
+    final String fullUrl;
+    if (url.startsWith('http')) {
+      fullUrl = url;
+    } else {
+      final path = url.startsWith('/') ? url : '/$url';
+      fullUrl = '${AppConfig.baseUrl}$path';
+    }
     try {
-      final uri = Uri.parse(fullUrl);
+      var uri = Uri.parse(fullUrl);
+      // Thesis uploads require authentication — append token as query param
+      // so the external browser can access the protected route.
+      if (uri.path.contains('/uploads/thesis')) {
+        final token = await SecureStorageService().getAccessToken();
+        if (token != null && token.isNotEmpty) {
+          uri = uri.replace(queryParameters: {
+            ...uri.queryParameters,
+            'token': token,
+          });
+        }
+      }
       if (await canLaunchUrl(uri)) {
         await launchUrl(uri, mode: LaunchMode.externalApplication);
       } else {

@@ -180,4 +180,105 @@ class StudentApiService {
     }
     return {'success': true};
   }
+
+  // ── Cancel Guidance ─────────────────────────────────────────
+
+  /// PATCH /thesisGuidance/student/guidance/:guidanceId/cancel
+  /// Cancels a guidance request (before it's completed).
+  Future<Map<String, dynamic>> cancelGuidance(
+    String guidanceId, {
+    String? reason,
+  }) async {
+    final body = <String, dynamic>{};
+    if (reason != null && reason.trim().isNotEmpty) {
+      body['reason'] = reason;
+    }
+    final res = await _api.patch(
+      '$_base/guidance/$guidanceId/cancel',
+      body: body,
+    );
+    if (res is Map<String, dynamic>) return res;
+    return {'success': true};
+  }
+
+  // ── Reschedule Guidance ─────────────────────────────────────
+
+  /// PATCH /thesisGuidance/student/guidance/:guidanceId/reschedule
+  /// Reschedules a guidance request to a new date/time.
+  Future<Map<String, dynamic>> rescheduleGuidance(
+    String guidanceId, {
+    required DateTime guidanceDate,
+    String? studentNotes,
+  }) async {
+    final body = <String, dynamic>{
+      'guidanceDate': guidanceDate.toUtc().toIso8601String(),
+    };
+    if (studentNotes != null && studentNotes.trim().isNotEmpty) {
+      body['studentNotes'] = studentNotes;
+    }
+    final res = await _api.patch(
+      '$_base/guidance/$guidanceId/reschedule',
+      body: body,
+    );
+    if (res is Map<String, dynamic>) return res;
+    return {'success': true};
+  }
+
+  // ── Submit Session Summary (Catatan Bimbingan) ──────────────
+
+  /// POST /thesisGuidance/student/guidance/:guidanceId/submit-summary
+  /// Submits session summary and action items after a guidance session.
+  Future<Map<String, dynamic>> submitSessionSummary(
+    String guidanceId, {
+    required String sessionSummary,
+    String? actionItems,
+  }) async {
+    final body = <String, dynamic>{
+      'sessionSummary': sessionSummary,
+    };
+    if (actionItems != null && actionItems.trim().isNotEmpty) {
+      body['actionItems'] = actionItems;
+    }
+    final res = await _api.post(
+      '$_base/guidance/$guidanceId/submit-summary',
+      body: body,
+    );
+    if (res is Map<String, dynamic>) return res;
+    return {'success': true};
+  }
+
+  // ── Update Milestone Progress ───────────────────────────────
+
+  /// PATCH /milestones/:milestoneId/progress
+  /// Updates milestone progress percentage (0–100).
+  Future<Map<String, dynamic>> updateMilestoneProgress(
+    String milestoneId, {
+    required int progressPercentage,
+  }) async {
+    final res = await _api.patch(
+      '/milestones/$milestoneId/progress',
+      body: {'progressPercentage': progressPercentage},
+    );
+    if (res is Map<String, dynamic>) return res;
+    return {'success': true};
+  }
+
+  /// PATCH /milestones/:milestoneId/status
+  /// Updates milestone status (not_started, in_progress, pending_review, revision_needed).
+  Future<Map<String, dynamic>> updateMilestoneStatus(
+    String milestoneId, {
+    required String status,
+    String? notes,
+  }) async {
+    final body = <String, dynamic>{'status': status};
+    if (notes != null && notes.trim().isNotEmpty) {
+      body['notes'] = notes;
+    }
+    final res = await _api.patch(
+      '/milestones/$milestoneId/status',
+      body: body,
+    );
+    if (res is Map<String, dynamic>) return res;
+    return {'success': true};
+  }
 }
