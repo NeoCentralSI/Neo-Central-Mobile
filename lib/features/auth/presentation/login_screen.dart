@@ -77,6 +77,8 @@ class _LoginScreenState extends State<LoginScreen>
         // Don't block login if FCM fails
       }
 
+      if (!mounted) return;
+
       // Navigate to the correct shell based on role returned from backend
       Navigator.of(context).pushReplacement(
         PageRouteBuilder(
@@ -113,10 +115,7 @@ class _LoginScreenState extends State<LoginScreen>
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
-                  colors: [
-                    AppColors.primaryLight,
-                    AppColors.primary,
-                  ],
+                  colors: [AppColors.primaryLight, AppColors.primary],
                 ),
               ),
             ),
@@ -237,9 +236,7 @@ class _LoginScreenState extends State<LoginScreen>
                     children: [
                       Container(
                         padding: const EdgeInsets.all(20),
-                        decoration: BoxDecoration(
-                          color: AppColors.transparent,
-                        ),
+                        decoration: BoxDecoration(color: AppColors.transparent),
                         child: Image.asset(
                           AppAssets.logoWhite,
                           width: 72,

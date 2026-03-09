@@ -89,9 +89,7 @@ class _GuidanceHistoryScreenState extends State<GuidanceHistoryScreen> {
                     children: [
                       if (!widget.isTab)
                         Padding(
-                          padding: const EdgeInsets.only(
-                            bottom: AppSpacing.sm,
-                          ),
+                          padding: const EdgeInsets.only(bottom: AppSpacing.sm),
                           child: GestureDetector(
                             onTap: () => Navigator.pop(context),
                             child: const Icon(
@@ -129,8 +127,7 @@ class _GuidanceHistoryScreenState extends State<GuidanceHistoryScreen> {
                             onPressed: () => Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (_) =>
-                                    const GuidanceScheduleScreen(),
+                                builder: (_) => const GuidanceScheduleScreen(),
                               ),
                             ),
                             icon: const Icon(Icons.add, size: 18),
@@ -162,134 +159,187 @@ class _GuidanceHistoryScreenState extends State<GuidanceHistoryScreen> {
               child: _isLoading
                   ? const Center(child: CircularProgressIndicator())
                   : _error != null
-                      ? Center(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(
-                                Icons.error_outline,
-                                size: 48,
-                                color: AppColors.textTertiary,
-                              ),
-                              const SizedBox(height: 12),
-                              Text(
-                                'Gagal memuat data',
-                                style: AppTextStyles.h4,
-                              ),
-                              const SizedBox(height: 8),
-                              AppButton(
-                                label: 'Coba Lagi',
-                                icon: Icons.refresh,
-                                onPressed: _loadData,
-                              ),
-                            ],
-                          ),
-                        )
-                      : RefreshIndicator(
-                          onRefresh: _loadData,
-                          child: _sessions.isEmpty
-                              ? ListView(
-                                  children: [
-                                    SizedBox(
-                                      height:
-                                          MediaQuery.of(context).size.height *
-                                          0.4,
-                                      child: Center(
-                                        child: Text(
-                                          'Belum ada riwayat bimbingan',
-                                          style: AppTextStyles.body,
-                                        ),
-                                      ),
+                  ? Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(AppSpacing.pagePadding),
+                        child: _error!.contains('Active thesis not found')
+                            ? _buildRequirementsNotMet()
+                            : _buildErrorState(),
+                      ),
+                    )
+                  : RefreshIndicator(
+                      onRefresh: _loadData,
+                      child: _sessions.isEmpty
+                          ? ListView(
+                              children: [
+                                SizedBox(
+                                  height:
+                                      MediaQuery.of(context).size.height * 0.4,
+                                  child: Center(
+                                    child: Text(
+                                      'Belum ada riwayat bimbingan',
+                                      style: AppTextStyles.body,
                                     ),
-                                  ],
-                                )
-                              : Column(
-                                  children: [
-                                    // Session list with chips inside card
-                                    Expanded(
-                                      child: Padding(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: AppSpacing.pagePadding,
-                                          vertical: AppSpacing.md,
-                                        ),
-                                        child: AppCard(
-                                          padding: EdgeInsets.zero,
-                                          radius: 20,
-                                          child: Column(
-                                            children: [
-                                              // Filter chips inside card
-                                              Padding(
-                                                padding: const EdgeInsets.fromLTRB(
-                                                  AppSpacing.cardPadding,
-                                                  AppSpacing.cardPadding,
-                                                  AppSpacing.cardPadding,
-                                                  AppSpacing.sm,
-                                                ),
-                                                child: SingleChildScrollView(
-                                                  scrollDirection: Axis.horizontal,
-                                                  child: Row(
-                                                    children: [
-                                                      _StatChip(
-                                                        label:
-                                                            '${_countByStatus("completed")} Selesai',
-                                                        icon: Icons.check_circle,
-                                                        color: AppColors.success,
-                                                      ),
-                                                      const SizedBox(
-                                                        width: AppSpacing.sm,
-                                                      ),
-                                                      _StatChip(
-                                                        label:
-                                                            '${_countByStatus("accepted")} Dijadwalkan',
-                                                        icon: Icons.event,
-                                                        color: AppColors.info,
-                                                      ),
-                                                      const SizedBox(
-                                                        width: AppSpacing.sm,
-                                                      ),
-                                                      _StatChip(
-                                                        label:
-                                                            '${_countByStatus("requested")} Menunggu',
-                                                        icon: Icons.hourglass_empty,
-                                                        color: AppColors.warning,
-                                                      ),
-                                                    ],
-                                                  ),
-                                                ),
-                                              ),
-                                              const Divider(
-                                                height: 1,
-                                                color: AppColors.divider,
-                                              ),
-                                              // Session list
-                                              Expanded(
-                                                child: ListView.separated(
-                                                  padding: EdgeInsets.zero,
-                                                  itemCount: _sessions.length,
-                                                  separatorBuilder: (_, __) =>
-                                                      const Divider(
-                                                        height: 1,
-                                                        color: AppColors.divider,
-                                                      ),
-                                                  itemBuilder: (context, index) =>
-                                                      _GuidanceSessionItem(
-                                                        session: _sessions[index],
-                                                        onRefresh: _loadData,
-                                                      ),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
+                                  ),
                                 ),
-                        ),
+                              ],
+                            )
+                          : Column(
+                              children: [
+                                // Session list with chips inside card
+                                Expanded(
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: AppSpacing.pagePadding,
+                                      vertical: AppSpacing.md,
+                                    ),
+                                    child: AppCard(
+                                      padding: EdgeInsets.zero,
+                                      radius: 20,
+                                      child: Column(
+                                        children: [
+                                          // Filter chips inside card
+                                          Padding(
+                                            padding: const EdgeInsets.fromLTRB(
+                                              AppSpacing.cardPadding,
+                                              AppSpacing.cardPadding,
+                                              AppSpacing.cardPadding,
+                                              AppSpacing.sm,
+                                            ),
+                                            child: SingleChildScrollView(
+                                              scrollDirection: Axis.horizontal,
+                                              child: Row(
+                                                children: [
+                                                  _StatChip(
+                                                    label:
+                                                        '${_countByStatus("completed")} Selesai',
+                                                    icon: Icons.check_circle,
+                                                    color: AppColors.success,
+                                                  ),
+                                                  const SizedBox(
+                                                    width: AppSpacing.sm,
+                                                  ),
+                                                  _StatChip(
+                                                    label:
+                                                        '${_countByStatus("accepted")} Dijadwalkan',
+                                                    icon: Icons.event,
+                                                    color: AppColors.info,
+                                                  ),
+                                                  const SizedBox(
+                                                    width: AppSpacing.sm,
+                                                  ),
+                                                  _StatChip(
+                                                    label:
+                                                        '${_countByStatus("requested")} Menunggu',
+                                                    icon: Icons.hourglass_empty,
+                                                    color: AppColors.warning,
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                          const Divider(
+                                            height: 1,
+                                            color: AppColors.divider,
+                                          ),
+                                          // Session list
+                                          Expanded(
+                                            child: ListView.separated(
+                                              padding: EdgeInsets.zero,
+                                              itemCount: _sessions.length,
+                                              separatorBuilder: (_, __) =>
+                                                  const Divider(
+                                                    height: 1,
+                                                    color: AppColors.divider,
+                                                  ),
+                                              itemBuilder: (context, index) =>
+                                                  _GuidanceSessionItem(
+                                                    session: _sessions[index],
+                                                    onRefresh: _loadData,
+                                                  ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                    ),
             ),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildErrorState() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Icon(
+          Icons.error_outline,
+          size: 48,
+          color: AppColors.textTertiary,
+        ),
+        const SizedBox(height: 12),
+        Text('Gagal memuat data', style: AppTextStyles.h4),
+        const SizedBox(height: 8),
+        AppButton(
+          label: 'Coba Lagi',
+          icon: Icons.refresh,
+          onPressed: _loadData,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRequirementsNotMet() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Container(
+          height: 80,
+          width: 80,
+          decoration: BoxDecoration(
+            color: Colors.amber.withValues(alpha: 0.15),
+            shape: BoxShape.circle,
+          ),
+          child: const Icon(
+            Icons.warning_amber_rounded,
+            size: 48,
+            color: Colors.amber,
+          ),
+        ),
+        const SizedBox(height: 24),
+        Text(
+          'Syarat Mata Kuliah Belum Terpenuhi',
+          style: AppTextStyles.h3,
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 12),
+        Text(
+          'Anda belum memenuhi persyaratan untuk mengambil mata kuliah Tugas Akhir. Anda harus tercatat mengambil mata kuliah Tugas Akhir (proposal disetujui).',
+          style: AppTextStyles.body.copyWith(
+            color: AppColors.textSecondary,
+            height: 1.5,
+          ),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 32),
+        ElevatedButton.icon(
+          onPressed: _loadData,
+          icon: const Icon(Icons.refresh),
+          label: const Text('Muat Ulang'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.primary,
+            foregroundColor: AppColors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -377,7 +427,9 @@ class _GuidanceSessionItemState extends State<_GuidanceSessionItem> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
           title: Row(
             children: [
               Container(
@@ -386,8 +438,11 @@ class _GuidanceSessionItemState extends State<_GuidanceSessionItem> {
                   color: AppColors.primary.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: const Icon(Icons.schedule,
-                    color: AppColors.primary, size: 20),
+                child: const Icon(
+                  Icons.schedule,
+                  color: AppColors.primary,
+                  size: 20,
+                ),
               ),
               const SizedBox(width: 12),
               const Text('Jadwal Ulang'),
@@ -400,7 +455,9 @@ class _GuidanceSessionItemState extends State<_GuidanceSessionItem> {
             children: [
               Text(
                 'Pilih tanggal dan waktu baru untuk sesi bimbingan.',
-                style: AppTextStyles.body.copyWith(color: AppColors.textSecondary),
+                style: AppTextStyles.body.copyWith(
+                  color: AppColors.textSecondary,
+                ),
               ),
               const SizedBox(height: 16),
               // Date picker
@@ -417,7 +474,10 @@ class _GuidanceSessionItemState extends State<_GuidanceSessionItem> {
                   }
                 },
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 14,
+                  ),
                   decoration: BoxDecoration(
                     border: Border.all(color: AppColors.borderLight),
                     borderRadius: BorderRadius.circular(12),
@@ -425,14 +485,20 @@ class _GuidanceSessionItemState extends State<_GuidanceSessionItem> {
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.calendar_today, size: 18, color: AppColors.textTertiary),
+                      const Icon(
+                        Icons.calendar_today,
+                        size: 18,
+                        color: AppColors.textTertiary,
+                      ),
                       const SizedBox(width: 10),
                       Text(
                         selectedDate != null
                             ? '${selectedDate!.day}/${selectedDate!.month}/${selectedDate!.year}'
                             : 'Pilih tanggal',
                         style: AppTextStyles.body.copyWith(
-                          color: selectedDate != null ? AppColors.textPrimary : AppColors.textTertiary,
+                          color: selectedDate != null
+                              ? AppColors.textPrimary
+                              : AppColors.textTertiary,
                         ),
                       ),
                     ],
@@ -452,7 +518,10 @@ class _GuidanceSessionItemState extends State<_GuidanceSessionItem> {
                   }
                 },
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 14,
+                  ),
                   decoration: BoxDecoration(
                     border: Border.all(color: AppColors.borderLight),
                     borderRadius: BorderRadius.circular(12),
@@ -460,14 +529,20 @@ class _GuidanceSessionItemState extends State<_GuidanceSessionItem> {
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.access_time, size: 18, color: AppColors.textTertiary),
+                      const Icon(
+                        Icons.access_time,
+                        size: 18,
+                        color: AppColors.textTertiary,
+                      ),
                       const SizedBox(width: 10),
                       Text(
                         selectedTime != null
                             ? '${selectedTime!.hour.toString().padLeft(2, '0')}:${selectedTime!.minute.toString().padLeft(2, '0')}'
                             : 'Pilih waktu',
                         style: AppTextStyles.body.copyWith(
-                          color: selectedTime != null ? AppColors.textPrimary : AppColors.textTertiary,
+                          color: selectedTime != null
+                              ? AppColors.textPrimary
+                              : AppColors.textTertiary,
                         ),
                       ),
                     ],
@@ -481,7 +556,9 @@ class _GuidanceSessionItemState extends State<_GuidanceSessionItem> {
               onPressed: () => Navigator.pop(ctx, false),
               child: Text(
                 'Batal',
-                style: AppTextStyles.label.copyWith(color: AppColors.textSecondary),
+                style: AppTextStyles.label.copyWith(
+                  color: AppColors.textSecondary,
+                ),
               ),
             ),
             ElevatedButton(
@@ -502,7 +579,12 @@ class _GuidanceSessionItemState extends State<_GuidanceSessionItem> {
       ),
     );
 
-    if (confirmed != true || selectedDate == null || selectedTime == null || !mounted) return;
+    if (confirmed != true ||
+        selectedDate == null ||
+        selectedTime == null ||
+        !mounted) {
+      return;
+    }
 
     final guidanceDate = DateTime(
       selectedDate!.year,
@@ -515,7 +597,9 @@ class _GuidanceSessionItemState extends State<_GuidanceSessionItem> {
     setState(() => _isRescheduling = true);
     try {
       await _api.rescheduleGuidance(_guidanceId, guidanceDate: guidanceDate);
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Jadwal bimbingan berhasil diubah'),
@@ -558,8 +642,11 @@ class _GuidanceSessionItemState extends State<_GuidanceSessionItem> {
                 color: AppColors.destructiveLight,
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: const Icon(Icons.cancel_outlined,
-                  color: AppColors.destructive, size: 20),
+              child: const Icon(
+                Icons.cancel_outlined,
+                color: AppColors.destructive,
+                size: 20,
+              ),
             ),
             const SizedBox(width: 12),
             const Text('Batalkan Bimbingan?'),
@@ -572,8 +659,9 @@ class _GuidanceSessionItemState extends State<_GuidanceSessionItem> {
           children: [
             Text(
               'Sesi bimbingan ini akan dibatalkan. Tindakan ini tidak bisa dikembalikan.',
-              style: AppTextStyles.body
-                  .copyWith(color: AppColors.textSecondary),
+              style: AppTextStyles.body.copyWith(
+                color: AppColors.textSecondary,
+              ),
             ),
             const SizedBox(height: 16),
             TextField(
@@ -582,8 +670,9 @@ class _GuidanceSessionItemState extends State<_GuidanceSessionItem> {
               maxLength: 1000,
               decoration: InputDecoration(
                 hintText: 'Alasan pembatalan (opsional)',
-                hintStyle: AppTextStyles.body
-                    .copyWith(color: AppColors.textTertiary),
+                hintStyle: AppTextStyles.body.copyWith(
+                  color: AppColors.textTertiary,
+                ),
                 filled: true,
                 fillColor: AppColors.surfaceSecondary,
                 border: OutlineInputBorder(
@@ -596,8 +685,10 @@ class _GuidanceSessionItemState extends State<_GuidanceSessionItem> {
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide:
-                      const BorderSide(color: AppColors.primary, width: 1.5),
+                  borderSide: const BorderSide(
+                    color: AppColors.primary,
+                    width: 1.5,
+                  ),
                 ),
                 contentPadding: const EdgeInsets.all(14),
               ),
@@ -609,8 +700,9 @@ class _GuidanceSessionItemState extends State<_GuidanceSessionItem> {
             onPressed: () => Navigator.pop(ctx, false),
             child: Text(
               'Kembali',
-              style: AppTextStyles.label
-                  .copyWith(color: AppColors.textSecondary),
+              style: AppTextStyles.label.copyWith(
+                color: AppColors.textSecondary,
+              ),
             ),
           ),
           ElevatedButton(
@@ -722,11 +814,12 @@ class _GuidanceSessionItemState extends State<_GuidanceSessionItem> {
         widget.session['approvedDateFormatted'] ??
         _formatDate(widget.session['requestedDate']) ??
         '-';
-    final supervisorName =
-        (widget.session['supervisorName'] ?? '-').toString();
+    final supervisorName = (widget.session['supervisorName'] ?? '-').toString();
     // Use studentNotes as topic if available
     final topic =
-        (widget.session['studentNotes'] ?? widget.session['topic'] ?? 'Bimbingan')
+        (widget.session['studentNotes'] ??
+                widget.session['topic'] ??
+                'Bimbingan')
             .toString();
 
     return Padding(
@@ -745,8 +838,7 @@ class _GuidanceSessionItemState extends State<_GuidanceSessionItem> {
                 height: 48,
                 decoration: BoxDecoration(
                   color: AppColors.primary.withValues(alpha: 0.1),
-                  borderRadius:
-                      BorderRadius.circular(AppSpacing.smallRadius),
+                  borderRadius: BorderRadius.circular(AppSpacing.smallRadius),
                 ),
                 child: const Icon(
                   Icons.menu_book_outlined,
@@ -789,8 +881,7 @@ class _GuidanceSessionItemState extends State<_GuidanceSessionItem> {
                           color: AppColors.textTertiary,
                         ),
                         const SizedBox(width: 4),
-                        Text(dateStr.toString(),
-                            style: AppTextStyles.caption),
+                        Text(dateStr.toString(), style: AppTextStyles.caption),
                       ],
                     ),
                   ],
@@ -810,19 +901,20 @@ class _GuidanceSessionItemState extends State<_GuidanceSessionItem> {
                       height: 36,
                       child: OutlinedButton.icon(
                         onPressed: _navigateToSessionSummary,
-                        icon:
-                            const Icon(Icons.edit_note_rounded, size: 16),
-                        label: const Text('Isi Catatan',
-                            style: TextStyle(fontSize: 12)),
+                        icon: const Icon(Icons.edit_note_rounded, size: 16),
+                        label: const Text(
+                          'Isi Catatan',
+                          style: TextStyle(fontSize: 12),
+                        ),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: AppColors.primary,
                           side: const BorderSide(color: AppColors.border),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(
-                                AppSpacing.buttonRadius),
+                              AppSpacing.buttonRadius,
+                            ),
                           ),
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 12),
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
                         ),
                       ),
                     ),
@@ -854,8 +946,11 @@ class _GuidanceSessionItemState extends State<_GuidanceSessionItem> {
                               customBorder: const CircleBorder(),
                               child: const Padding(
                                 padding: EdgeInsets.all(8),
-                                child: Icon(Icons.schedule,
-                                    size: 18, color: AppColors.primary),
+                                child: Icon(
+                                  Icons.schedule,
+                                  size: 18,
+                                  color: AppColors.primary,
+                                ),
                               ),
                             ),
                           ),
@@ -886,8 +981,11 @@ class _GuidanceSessionItemState extends State<_GuidanceSessionItem> {
                               customBorder: const CircleBorder(),
                               child: const Padding(
                                 padding: EdgeInsets.all(8),
-                                child: Icon(Icons.close_rounded,
-                                    size: 18, color: AppColors.destructive),
+                                child: Icon(
+                                  Icons.close_rounded,
+                                  size: 18,
+                                  color: AppColors.destructive,
+                                ),
                               ),
                             ),
                           ),

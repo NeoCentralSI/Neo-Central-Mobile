@@ -15,9 +15,7 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Initialize Firebase
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
   // Register background message handler
   FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
@@ -82,6 +80,8 @@ class _AuthGateState extends State<_AuthGate> {
           debugPrint('[AuthGate] FCM init error (non-fatal): $e');
         }
 
+        if (!mounted) return;
+
         // Already logged in – go straight to the correct shell
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(
@@ -99,9 +99,9 @@ class _AuthGateState extends State<_AuthGate> {
       debugPrint('[AuthGate] Auth check error: $e');
       if (!mounted) return;
       // Fallback to login screen on any error
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const LoginScreen()),
-      );
+      Navigator.of(
+        context,
+      ).pushReplacement(MaterialPageRoute(builder: (_) => const LoginScreen()));
     }
   }
 

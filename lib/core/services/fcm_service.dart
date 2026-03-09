@@ -141,7 +141,9 @@ class FcmService {
 
   Future<void> _setupLocalNotifications() async {
     // Android init
-    const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const androidInit = AndroidInitializationSettings(
+      '@drawable/ic_notification',
+    );
 
     // iOS init
     const iosInit = DarwinInitializationSettings(
@@ -189,7 +191,7 @@ class FcmService {
       importance: Importance.high,
       priority: Priority.high,
       playSound: true,
-      icon: '@mipmap/ic_launcher',
+      icon: '@drawable/ic_notification',
       actions:
           (data != null &&
               data['type'] == 'thesis-guidance:requested' &&
@@ -245,7 +247,7 @@ class FcmService {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $accessToken',
         },
-        body: jsonEncode({'token': fcmToken}),
+        body: jsonEncode({'token': fcmToken, 'platform': 'mobile'}),
       );
 
       if (response.statusCode == 200) {
@@ -344,7 +346,9 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   if (title.isNotEmpty || body.isNotEmpty) {
     final plugin = FlutterLocalNotificationsPlugin();
 
-    const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const androidInit = AndroidInitializationSettings(
+      '@drawable/ic_notification',
+    );
     const initSettings = InitializationSettings(android: androidInit);
     await plugin.initialize(initSettings);
 
@@ -362,7 +366,7 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
       importance: Importance.high,
       priority: Priority.high,
       playSound: true,
-      icon: '@mipmap/ic_launcher',
+      icon: '@drawable/ic_notification',
       actions:
           (data['type'] == 'thesis-guidance:requested' &&
               data['role'] == 'supervisor')

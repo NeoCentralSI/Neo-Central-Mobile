@@ -6,7 +6,9 @@ import '../../../../core/models/auth_models.dart';
 import '../../../../core/services/fcm_service.dart';
 import '../../../../core/services/student_api_service.dart';
 import '../../../../core/services/notification_api_service.dart';
-import '../../../notifications/presentation/notification_screen.dart' show NotificationScreen;
+import '../../../notifications/presentation/notification_screen.dart'
+    show NotificationScreen;
+import '../../../../core/widgets/app_drawer.dart';
 import 'milestone_progress_screen.dart';
 
 /// Student dashboard – shows a summary of their active thesis.
@@ -73,7 +75,37 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
       if (!mounted) return;
       setState(() {
         _thesis = thesisData['thesis'] as Map<String, dynamic>?;
-        _milestones = (progressData['components'] as List<dynamic>?) ?? [];
+
+        final List<dynamic> rawMilestones =
+            (progressData['components'] as List<dynamic>?) ?? [];
+        final List<dynamic> inProgress = [];
+        final List<dynamic> notStarted = [];
+        final List<dynamic> completed = [];
+
+        for (var c in rawMilestones) {
+          final rawStatus = (c['status'] ?? '').toString().toLowerCase();
+          final completedAt = c['completedAt'];
+          final validated = c['validatedBySupervisor'] == true;
+
+          String status;
+          if (rawStatus == 'completed' || validated) {
+            status = 'completed';
+          } else if (rawStatus == 'in_progress' || completedAt != null) {
+            status = 'in_progress';
+          } else {
+            status = 'not_started';
+          }
+
+          if (status == 'in_progress') {
+            inProgress.add(c);
+          } else if (status == 'not_started') {
+            notStarted.add(c);
+          } else {
+            completed.add(c);
+          }
+        }
+
+        _milestones = [...inProgress, ...notStarted, ...completed.reversed];
 
         // Count completed guidances from thesis stats
         final stats = _thesis?['stats'] as Map<String, dynamic>?;
@@ -83,9 +115,10 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
         _isLoading = false;
       });
 
-      // Fetch unread count separately (non-blocking for UI)
       _notifApi.getUnreadCount().then((count) {
-        if (mounted) setState(() => _unreadCount = count);
+        if (mounted) {
+          setState(() => _unreadCount = count);
+        }
       });
     } catch (e) {
       if (!mounted) return;
@@ -103,6 +136,7 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.surfaceSecondary,
+      drawer: AppDrawer(user: widget.user),
       body: RefreshIndicator(
         onRefresh: _loadData,
         color: AppColors.primary,
@@ -115,34 +149,9 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
                     child: Center(
                       child: Padding(
                         padding: const EdgeInsets.all(AppSpacing.pagePadding),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(
-                              Icons.error_outline,
-                              size: 48,
-                              color: AppColors.textTertiary,
-                            ),
-                            const SizedBox(height: 12),
-                            Text('Gagal memuat data', style: AppTextStyles.h4),
-                            const SizedBox(height: 8),
-                            Text(
-                              _error!,
-                              style: AppTextStyles.bodySmall,
-                              textAlign: TextAlign.center,
-                            ),
-                            const SizedBox(height: 16),
-                            ElevatedButton.icon(
-                              icon: const Icon(Icons.refresh),
-                              label: const Text('Coba Lagi'),
-                              onPressed: _loadData,
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: AppColors.primary,
-                                foregroundColor: AppColors.white,
-                              ),
-                            ),
-                          ],
-                        ),
+                        child: _error!.contains('Active thesis not found')
+                            ? _buildRequirementsNotMet()
+                            : _buildErrorState(),
                       ),
                     ),
                   ),
@@ -167,15 +176,96 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
                 ),
               ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          widget.onSwitchTab?.call(1);
-        },
-        backgroundColor: AppColors.primaryLight, // Dark slate blue/black
-        foregroundColor: AppColors.white,
-        elevation: 4,
-        child: const Icon(Icons.add, size: 28),
-      ),
+      floatingActionButton: _error == null && _thesis != null
+          ? FloatingActionButton(
+              onPressed: () {
+                widget.onSwitchTab?.call(1);
+              },
+              backgroundColor: AppColors.primaryLight,
+              foregroundColor: AppColors.white,
+              elevation: 4,
+              child: const Icon(Icons.add, size: 28),
+            )
+          : null,
+    );
+  }
+
+  Widget _buildErrorState() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Icon(
+          Icons.error_outline,
+          size: 48,
+          color: AppColors.textTertiary,
+        ),
+        const SizedBox(height: 12),
+        Text('Gagal memuat data', style: AppTextStyles.h4),
+        const SizedBox(height: 8),
+        Text(
+          _error!,
+          style: AppTextStyles.bodySmall,
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 16),
+        ElevatedButton.icon(
+          icon: const Icon(Icons.refresh),
+          label: const Text('Coba Lagi'),
+          onPressed: _loadData,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.primary,
+            foregroundColor: AppColors.white,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRequirementsNotMet() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Container(
+          height: 80,
+          width: 80,
+          decoration: BoxDecoration(
+            color: Colors.amber.withValues(alpha: 0.15),
+            shape: BoxShape.circle,
+          ),
+          child: const Icon(
+            Icons.warning_amber_rounded,
+            size: 48,
+            color: Colors.amber,
+          ),
+        ),
+        const SizedBox(height: 24),
+        Text(
+          'Syarat Mata Kuliah Belum Terpenuhi',
+          style: AppTextStyles.h3,
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 12),
+        Text(
+          'Anda belum memenuhi persyaratan untuk mengambil mata kuliah Tugas Akhir. Anda harus tercatat mengambil mata kuliah Tugas Akhir (proposal disetujui).',
+          style: AppTextStyles.body.copyWith(
+            color: AppColors.textSecondary,
+            height: 1.5,
+          ),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 32),
+        ElevatedButton.icon(
+          onPressed: _loadData,
+          icon: const Icon(Icons.refresh),
+          label: const Text('Muat Ulang'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.primary,
+            foregroundColor: AppColors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+          ),
+        ),
+      ],
     );
   }
 
@@ -205,8 +295,28 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
         children: [
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
+              Builder(
+                builder: (BuildContext innerContext) {
+                  return Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.2),
+                      shape: BoxShape.circle,
+                    ),
+                    child: IconButton(
+                      icon: const Icon(
+                        Icons.menu,
+                        color: Colors.white,
+                        size: 26,
+                      ),
+                      onPressed: () {
+                        Scaffold.of(innerContext).openDrawer();
+                      },
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -230,49 +340,51 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
                 ),
               ),
               Stack(
-                children: [
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.2),
-                      shape: BoxShape.circle,
-                    ),
-                    child: IconButton(
-                      icon: const Icon(
-                        Icons.notifications_none_outlined,
-                        color: Colors.white,
-                        size: 26,
-                      ),
-                      onPressed: () async {
-                        await Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => const NotificationScreen(),
+                        children: [
+                          Container(
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.2),
+                              shape: BoxShape.circle,
+                            ),
+                            child: IconButton(
+                              icon: const Icon(
+                                Icons.notifications_none_outlined,
+                                color: Colors.white,
+                                size: 26,
+                              ),
+                              onPressed: () async {
+                                await Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) => const NotificationScreen(),
+                                  ),
+                                );
+                                final count = await _notifApi.getUnreadCount();
+                                if (mounted) {
+                                  setState(() => _unreadCount = count);
+                                }
+                              },
+                            ),
                           ),
-                        );
-                        final count = await _notifApi.getUnreadCount();
-                        if (mounted) setState(() => _unreadCount = count);
-                      },
-                    ),
-                  ),
-                  if (_unreadCount > 0)
-                    Positioned(
-                      right: 6,
-                      top: 6,
-                      child: Container(
-                        padding: const EdgeInsets.all(4),
-                        decoration: const BoxDecoration(
-                          color: Colors.red,
-                          shape: BoxShape.circle,
-                        ),
-                        constraints: const BoxConstraints(
-                          minWidth: 12,
-                          minHeight: 12,
-                        ),
+                          if (_unreadCount > 0)
+                            Positioned(
+                              right: 6,
+                              top: 6,
+                              child: Container(
+                                padding: const EdgeInsets.all(4),
+                                decoration: const BoxDecoration(
+                                  color: Colors.red,
+                                  shape: BoxShape.circle,
+                                ),
+                                constraints: const BoxConstraints(
+                                  minWidth: 12,
+                                  minHeight: 12,
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
-                    ),
-                ],
-              ),
-            ],
-          ),
+                    ],
+                  ),
           const SizedBox(height: 32),
           // OVERALL PROGRESS
           Container(
@@ -348,7 +460,15 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
   Widget _buildMainContent() {
     final title = _thesis?['title'] ?? 'Belum ada tugas akhir';
     final status = _thesis?['status'] ?? '-';
-    final supervisors = (_thesis?['supervisors'] as List<dynamic>?) ?? [];
+    final supervisors = List<dynamic>.from(
+      (_thesis?['supervisors'] as List<dynamic>?) ?? [],
+    );
+    // Sort supervisors so Pembimbing 1 is first
+    supervisors.sort((a, b) {
+      final roleA = (a['role'] ?? '').toString().toLowerCase();
+      final roleB = (b['role'] ?? '').toString().toLowerCase();
+      return roleA.compareTo(roleB);
+    });
     final deadlineDate = _thesis?['deadlineDate'];
 
     String deadlineStr = '-';
@@ -636,12 +756,15 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
                   width: double.infinity,
                   child: OutlinedButton.icon(
                     onPressed: () {
-                      final thesisId = (_thesis?['id'] ?? _thesis?['thesisId'] ?? '').toString();
+                      final thesisId =
+                          (_thesis?['id'] ?? _thesis?['thesisId'] ?? '')
+                              .toString();
                       if (thesisId.isEmpty) return;
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (_) => MilestoneProgressScreen(thesisId: thesisId),
+                          builder: (_) =>
+                              MilestoneProgressScreen(thesisId: thesisId),
                         ),
                       ).then((_) => _loadData(silent: true));
                     },
@@ -651,7 +774,9 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
                       foregroundColor: AppColors.primary,
                       side: const BorderSide(color: AppColors.border),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(AppSpacing.buttonRadius),
+                        borderRadius: BorderRadius.circular(
+                          AppSpacing.buttonRadius,
+                        ),
                       ),
                       padding: const EdgeInsets.symmetric(vertical: 12),
                     ),

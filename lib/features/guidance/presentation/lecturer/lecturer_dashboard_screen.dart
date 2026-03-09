@@ -6,7 +6,10 @@ import '../../../../core/models/auth_models.dart';
 import '../../../../core/services/fcm_service.dart';
 import '../../../../core/services/lecturer_api_service.dart';
 import '../../../../core/services/notification_api_service.dart';
-import '../../../notifications/presentation/notification_screen.dart' show NotificationScreen;
+import '../../../notifications/presentation/notification_screen.dart'
+    show NotificationScreen;
+
+import '../../../../core/widgets/app_drawer.dart';
 
 /// Lecturer main dashboard – shows pending approval stats + quick actions
 class LecturerDashboardScreen extends StatefulWidget {
@@ -67,7 +70,9 @@ class _LecturerDashboardScreenState extends State<LecturerDashboardScreen> {
         _api.getMyStudents().catchError((_) => <dynamic>[]),
         _api.getRequests().catchError((_) => <dynamic>[]),
         _api.getPendingApproval().catchError((_) => <dynamic>[]),
-        _api.getPendingReviewMilestones().catchError((_) => <Map<String, dynamic>>[]),
+        _api.getPendingReviewMilestones().catchError(
+          (_) => <Map<String, dynamic>>[],
+        ),
         _api.getPendingTopicChanges().catchError((_) => <dynamic>[]),
       ]);
       if (!mounted) return;
@@ -100,6 +105,7 @@ class _LecturerDashboardScreenState extends State<LecturerDashboardScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.surfaceSecondary,
+      drawer: AppDrawer(user: widget.user),
       body: RefreshIndicator(
         onRefresh: _loadData,
         color: AppColors.primary,
@@ -196,8 +202,28 @@ class _LecturerDashboardScreenState extends State<LecturerDashboardScreen> {
         children: [
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
+              Builder(
+                builder: (BuildContext innerContext) {
+                  return Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.2),
+                      shape: BoxShape.circle,
+                    ),
+                    child: IconButton(
+                      icon: const Icon(
+                        Icons.menu,
+                        color: Colors.white,
+                        size: 26,
+                      ),
+                      onPressed: () {
+                        Scaffold.of(innerContext).openDrawer();
+                      },
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -221,49 +247,51 @@ class _LecturerDashboardScreenState extends State<LecturerDashboardScreen> {
                 ),
               ),
               Stack(
-                children: [
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.2),
-                      shape: BoxShape.circle,
-                    ),
-                    child: IconButton(
-                      icon: const Icon(
-                        Icons.notifications_none_outlined,
-                        color: Colors.white,
-                        size: 26,
-                      ),
-                      onPressed: () async {
-                        await Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => const NotificationScreen(),
+                        children: [
+                          Container(
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.2),
+                              shape: BoxShape.circle,
+                            ),
+                            child: IconButton(
+                              icon: const Icon(
+                                Icons.notifications_none_outlined,
+                                color: Colors.white,
+                                size: 26,
+                              ),
+                              onPressed: () async {
+                                await Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) => const NotificationScreen(),
+                                  ),
+                                );
+                                final count = await _notifApi.getUnreadCount();
+                                if (mounted) {
+                                  setState(() => _unreadCount = count);
+                                }
+                              },
+                            ),
                           ),
-                        );
-                        final count = await _notifApi.getUnreadCount();
-                        if (mounted) setState(() => _unreadCount = count);
-                      },
-                    ),
-                  ),
-                  if (_unreadCount > 0)
-                    Positioned(
-                      right: 6,
-                      top: 6,
-                      child: Container(
-                        padding: const EdgeInsets.all(4),
-                        decoration: const BoxDecoration(
-                          color: Colors.red,
-                          shape: BoxShape.circle,
-                        ),
-                        constraints: const BoxConstraints(
-                          minWidth: 12,
-                          minHeight: 12,
-                        ),
+                          if (_unreadCount > 0)
+                            Positioned(
+                              right: 6,
+                              top: 6,
+                              child: Container(
+                                padding: const EdgeInsets.all(4),
+                                decoration: const BoxDecoration(
+                                  color: Colors.red,
+                                  shape: BoxShape.circle,
+                                ),
+                                constraints: const BoxConstraints(
+                                  minWidth: 12,
+                                  minHeight: 12,
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
-                    ),
-                ],
-              ),
-            ],
-          ),
+                    ],
+                  ),
           const SizedBox(height: 32),
           // OVERALL STATS
           Container(

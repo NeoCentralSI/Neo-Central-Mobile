@@ -431,29 +431,9 @@ class _GuidanceScheduleScreenState extends State<GuidanceScheduleScreen> {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(AppSpacing.pagePadding),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(
-                Icons.error_outline,
-                size: 48,
-                color: AppColors.destructive,
-              ),
-              const SizedBox(height: AppSpacing.base),
-              Text(
-                'Gagal memuat data',
-                style: AppTextStyles.h4.copyWith(color: AppColors.destructive),
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              Text(
-                _error!,
-                style: AppTextStyles.bodySmall,
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: AppSpacing.base),
-              AppButton(label: 'Coba Lagi', onPressed: _loadData),
-            ],
-          ),
+          child: _error!.contains('Active thesis not found')
+              ? _buildRequirementsNotMet()
+              : _buildErrorState(),
         ),
       );
     }
@@ -605,6 +585,76 @@ class _GuidanceScheduleScreenState extends State<GuidanceScheduleScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildErrorState() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Icon(Icons.error_outline, size: 48, color: AppColors.destructive),
+        const SizedBox(height: AppSpacing.base),
+        Text(
+          'Gagal memuat data',
+          style: AppTextStyles.h4.copyWith(color: AppColors.destructive),
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        Text(
+          _error!,
+          style: AppTextStyles.bodySmall,
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: AppSpacing.base),
+        AppButton(label: 'Coba Lagi', onPressed: _loadData),
+      ],
+    );
+  }
+
+  Widget _buildRequirementsNotMet() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Container(
+          height: 80,
+          width: 80,
+          decoration: BoxDecoration(
+            color: Colors.amber.withValues(alpha: 0.15),
+            shape: BoxShape.circle,
+          ),
+          child: const Icon(
+            Icons.warning_amber_rounded,
+            size: 48,
+            color: Colors.amber,
+          ),
+        ),
+        const SizedBox(height: 24),
+        Text(
+          'Syarat Mata Kuliah Belum Terpenuhi',
+          style: AppTextStyles.h3,
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 12),
+        Text(
+          'Anda belum memenuhi persyaratan untuk mengambil mata kuliah Tugas Akhir. Anda harus tercatat mengambil mata kuliah Tugas Akhir (proposal disetujui).',
+          style: AppTextStyles.body.copyWith(
+            color: AppColors.textSecondary,
+            height: 1.5,
+          ),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 32),
+        ElevatedButton.icon(
+          onPressed: _loadData,
+          icon: const Icon(Icons.refresh),
+          label: const Text('Muat Ulang'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.primary,
+            foregroundColor: AppColors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+          ),
+        ),
+      ],
     );
   }
 

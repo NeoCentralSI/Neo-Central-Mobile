@@ -38,7 +38,40 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
       if (!mounted) return;
       setState(() {
         if (detailData.containsKey('milestones')) {
-          _milestoneComponents = detailData['milestones'] as List<dynamic>;
+          final List<dynamic> rawMilestones =
+              detailData['milestones'] as List<dynamic>;
+          final List<dynamic> inProgress = [];
+          final List<dynamic> notStarted = [];
+          final List<dynamic> completed = [];
+
+          for (var c in rawMilestones) {
+            final rawStatus = (c['status'] ?? '').toString().toLowerCase();
+            final completedAt = c['completedAt'];
+            final validated = c['validatedBySupervisor'] == true;
+
+            String status;
+            if (rawStatus == 'completed' || validated) {
+              status = 'completed';
+            } else if (rawStatus == 'in_progress' || completedAt != null) {
+              status = 'in_progress';
+            } else {
+              status = 'not_started';
+            }
+
+            if (status == 'in_progress') {
+              inProgress.add(c);
+            } else if (status == 'not_started') {
+              notStarted.add(c);
+            } else {
+              completed.add(c);
+            }
+          }
+
+          _milestoneComponents = [
+            ...inProgress,
+            ...notStarted,
+            ...completed.reversed,
+          ];
         }
         // Extract guidance history from the same response
         if (detailData.containsKey('guidanceHistory')) {
@@ -49,7 +82,7 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
             _guidanceHistory = gh;
           }
         }
-              _isLoadingMilestones = false;
+        _isLoadingMilestones = false;
         _isLoadingHistory = false;
       });
     } catch (_) {
@@ -69,8 +102,14 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
         ? milestoneRaw / 100
         : (milestoneRaw is double ? milestoneRaw : 0.0);
     final int guidance =
-        (widget.student['completedGuidanceCount'] ?? widget.student['guidance'] ?? 0) is int
-        ? (widget.student['completedGuidanceCount'] ?? widget.student['guidance'] ?? 0) as int
+        (widget.student['completedGuidanceCount'] ??
+                widget.student['guidance'] ??
+                0)
+            is int
+        ? (widget.student['completedGuidanceCount'] ??
+                  widget.student['guidance'] ??
+                  0)
+              as int
         : 0;
 
     return Scaffold(
@@ -83,10 +122,7 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [
-                  AppColors.primaryLight,
-                  AppColors.primary,
-                ],
+                colors: [AppColors.primaryLight, AppColors.primary],
               ),
               borderRadius: BorderRadius.only(
                 bottomLeft: Radius.circular(28),
@@ -105,15 +141,16 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
                 child: Row(
                   children: [
                     IconButton(
-                      icon: const Icon(Icons.arrow_back_ios_new,
-                          size: 20, color: AppColors.white),
+                      icon: const Icon(
+                        Icons.arrow_back_ios_new,
+                        size: 20,
+                        color: AppColors.white,
+                      ),
                       onPressed: () => Navigator.pop(context),
                     ),
                     Text(
                       'Detail Mahasiswa',
-                      style: AppTextStyles.h2.copyWith(
-                        color: AppColors.white,
-                      ),
+                      style: AppTextStyles.h2.copyWith(color: AppColors.white),
                     ),
                   ],
                 ),
@@ -144,15 +181,6 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
                       children: [
                         _SummaryCard(
                           student: widget.student,
-                          milestone: milestone,
-                          guidance: guidance,
-                        ),
-                        const Divider(
-                          color: AppColors.surfaceSecondary,
-                          thickness: 8,
-                          height: 8,
-                        ),
-                        _SeminarReadinessCard(
                           milestone: milestone,
                           guidance: guidance,
                         ),
@@ -285,144 +313,6 @@ class _SummaryCard extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-// ─── Seminar Readiness Card ───────────────────────────────────
-class _SeminarReadinessCard extends StatelessWidget {
-  final double milestone;
-  final int guidance;
-
-  const _SeminarReadinessCard({
-    required this.milestone,
-    required this.guidance,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final isReady = milestone >= 1.0 && guidance >= 8;
-    final isMilestoneOnly = milestone >= 1.0 && guidance < 8;
-
-    final Color backColor = isReady
-        ? AppColors.successLight
-        : (isMilestoneOnly ? AppColors.warningLight : Colors.white);
-    final Color iconColor = isReady
-        ? AppColors.success
-        : (isMilestoneOnly ? AppColors.warning : AppColors.textSecondary);
-    final String statusText = isReady
-        ? 'Semua syarat terpenuhi – dapat approval seminar'
-        : isMilestoneOnly
-        ? 'Milestone selesai, namun bimbingan belum cukup ($guidance/8)'
-        : 'Belum memenuhi syarat kesiapan seminar';
-
-    return Container(
-      color: backColor,
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.school_outlined, color: iconColor, size: 20),
-              const SizedBox(width: 10),
-              Text('Kesiapan Seminar', style: AppTextStyles.label),
-              const Spacer(),
-              if (isReady)
-                AppButton(
-                  label: 'Setujui',
-                  icon: Icons.check,
-                  width: 110,
-                  color: AppColors.success,
-                  onPressed: () => _showApproveDialog(context),
-                ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          Text(
-            statusText,
-            style: AppTextStyles.bodySmall.copyWith(color: iconColor),
-          ),
-          const SizedBox(height: AppSpacing.md),
-          _ReadinessCheckRow(
-            icon: Icons.task_alt,
-            label: 'Milestone 100%',
-            isDone: milestone >= 1.0,
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          _ReadinessCheckRow(
-            icon: Icons.chat,
-            label: 'Bimbingan ≥ 8 sesi ($guidance/8)',
-            isDone: guidance >= 8,
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showApproveDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Setujui Kesiapan Seminar'),
-        content: const Text(
-          'Anda akan menyetujui kesiapan seminar mahasiswa ini. Lanjutkan?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Batal'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Kesiapan seminar berhasil disetujui!'),
-                  backgroundColor: AppColors.success,
-                ),
-              );
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.success,
-              foregroundColor: AppColors.white,
-            ),
-            child: const Text('Setujui'),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ReadinessCheckRow extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final bool isDone;
-
-  const _ReadinessCheckRow({
-    required this.icon,
-    required this.label,
-    required this.isDone,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Icon(
-          isDone ? Icons.check_circle : Icons.cancel_outlined,
-          size: 16,
-          color: isDone ? AppColors.success : AppColors.destructive,
-        ),
-        const SizedBox(width: 8),
-        Text(
-          label,
-          style: AppTextStyles.body.copyWith(
-            color: isDone ? AppColors.textPrimary : AppColors.textSecondary,
-          ),
-        ),
-      ],
     );
   }
 }
@@ -566,9 +456,7 @@ class _GuidanceHistorySection extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SectionHeader(
-            title: 'Riwayat Bimbingan',
-          ),
+          SectionHeader(title: 'Riwayat Bimbingan'),
           const SizedBox(height: AppSpacing.sm),
           if (isLoading)
             const Center(
@@ -590,12 +478,13 @@ class _GuidanceHistorySection extends StatelessWidget {
           else
             ...sessions.map((s) {
               final status = (s['status'] ?? '').toString();
-              final isPending = status == 'summary_pending' ||
-                  status == 'requested';
+              final isPending =
+                  status == 'summary_pending' || status == 'requested';
               final isCompleted = status == 'completed';
               final topic = (s['studentNotes'] ?? s['topic'] ?? 'Bimbingan')
                   .toString();
-              final dateStr = s['requestedDateFormatted'] ??
+              final dateStr =
+                  s['requestedDateFormatted'] ??
                   s['approvedDateFormatted'] ??
                   _formatDate(s['requestedDate'] ?? s['approvedDate']) ??
                   '-';
@@ -611,8 +500,8 @@ class _GuidanceHistorySection extends StatelessWidget {
                         color: isPending
                             ? AppColors.warning
                             : (isCompleted
-                                ? AppColors.success
-                                : AppColors.textTertiary),
+                                  ? AppColors.success
+                                  : AppColors.textTertiary),
                         shape: BoxShape.circle,
                       ),
                     ),
@@ -622,17 +511,20 @@ class _GuidanceHistorySection extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(topic, style: AppTextStyles.label),
-                          Text(dateStr.toString(),
-                              style: AppTextStyles.caption),
+                          Text(
+                            dateStr.toString(),
+                            style: AppTextStyles.caption,
+                          ),
                         ],
                       ),
                     ),
                     if (isCompleted)
-                      AppBadge(
-                          label: 'Selesai', variant: BadgeVariant.success),
+                      AppBadge(label: 'Selesai', variant: BadgeVariant.success),
                     if (isPending)
                       AppBadge(
-                          label: 'Menunggu', variant: BadgeVariant.warning),
+                        label: 'Menunggu',
+                        variant: BadgeVariant.warning,
+                      ),
                   ],
                 ),
               );
