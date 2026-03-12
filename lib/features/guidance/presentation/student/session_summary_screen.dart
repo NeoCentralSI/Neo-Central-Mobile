@@ -239,24 +239,29 @@ class _SessionSummaryScreenState extends State<SessionSummaryScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              GestureDetector(
-                onTap: () => Navigator.pop(context),
-                child: const Icon(
-                  Icons.arrow_back_ios_new,
-                  color: AppColors.white,
-                  size: 20,
-                ),
+              Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(
+                      Icons.arrow_back_ios_new,
+                      size: 20,
+                      color: AppColors.white,
+                    ),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                  Text(
+                    'Catatan Bimbingan',
+                    style: AppTextStyles.h2.copyWith(color: AppColors.white),
+                  ),
+                ],
               ),
-              const SizedBox(height: AppSpacing.md),
-              Text(
-                'Catatan Bimbingan',
-                style: AppTextStyles.h2.copyWith(color: AppColors.white),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Isi ringkasan hasil bimbingan',
-                style: AppTextStyles.bodySmall.copyWith(
-                  color: AppColors.white.withValues(alpha: 0.85),
+              Padding(
+                padding: const EdgeInsets.only(left: 48, top: 0),
+                child: Text(
+                  'Isi ringkasan hasil bimbingan',
+                  style: AppTextStyles.bodySmall.copyWith(
+                    color: AppColors.white.withValues(alpha: 0.85),
+                  ),
                 ),
               ),
             ],

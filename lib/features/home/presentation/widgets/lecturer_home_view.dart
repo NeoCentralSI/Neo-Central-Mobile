@@ -7,6 +7,8 @@ import '../../../profile/presentation/profile_screen.dart';
 import '../../../notifications/presentation/notification_screen.dart' show NotificationScreen;
 import '../../../settings/presentation/settings_screen.dart';
 
+import '../../../../core/services/lecturer_api_service.dart';
+
 class LecturerHomeView extends StatefulWidget {
   const LecturerHomeView({super.key});
 
@@ -16,12 +18,52 @@ class LecturerHomeView extends StatefulWidget {
 
 class _LecturerHomeViewState extends State<LecturerHomeView> {
   final _notifApi = NotificationApiService();
+  final _lecturerApi = LecturerApiService();
   int _unreadCount = 0;
+  int _pendingApprovalCount = 0;
+  bool _isLoadingStats = true;
 
   @override
   void initState() {
     super.initState();
-    _refreshUnreadCount();
+    _refreshData();
+  }
+
+  Future<void> _refreshData() async {
+    await Future.wait([
+      _refreshUnreadCount(),
+      _refreshStats(),
+    ]);
+  }
+
+  Future<void> _refreshStats() async {
+    if (!mounted) return;
+    setState(() => _isLoadingStats = true);
+    try {
+      // Fetch various pending items to sum up
+      final results = await Future.wait([
+        _lecturerApi.getRequests(),
+        _lecturerApi.getPendingApproval(),
+        _lecturerApi.getPendingReviewMilestones(),
+        _lecturerApi.getPendingTopicChanges(),
+      ]);
+
+      int total = 0;
+      for (final list in results) {
+        if (list is List) {
+          total += list.length;
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _pendingApprovalCount = total;
+          _isLoadingStats = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _isLoadingStats = false);
+    }
   }
 
   Future<void> _refreshUnreadCount() async {
@@ -155,15 +197,21 @@ class _LecturerHomeViewState extends State<LecturerHomeView> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          '14',
-          style: TextStyle(
-            fontSize: 96,
-            fontWeight: FontWeight.w900,
-            color: AppColors.primary,
-            height: 1.0,
+        if (_isLoadingStats)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 32),
+            child: CircularProgressIndicator(strokeWidth: 2),
+          )
+        else
+          Text(
+            '$_pendingApprovalCount',
+            style: TextStyle(
+              fontSize: 96,
+              fontWeight: FontWeight.w900,
+              color: AppColors.primary,
+              height: 1.0,
+            ),
           ),
-        ),
         const SizedBox(height: 8),
         Row(
           children: [
@@ -240,11 +288,12 @@ class _LecturerHomeViewState extends State<LecturerHomeView> {
       width: double.infinity,
       height: 56,
       child: ElevatedButton(
-        onPressed: () {
-          Navigator.push(
+        onPressed: () async {
+          await Navigator.push(
             context,
             MaterialPageRoute(builder: (context) => const GuidanceRequestsScreen()),
           );
+          _refreshStats();
         },
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.primary,

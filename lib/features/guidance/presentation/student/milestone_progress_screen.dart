@@ -287,7 +287,7 @@ class _MilestoneTimelineItemState extends State<_MilestoneTimelineItem> {
       (widget.milestone['progressPercentage'] as num?)?.toInt() ?? 0;
 
   bool get _canUpdate =>
-      _status != 'completed' && _status != 'pending_review';
+      _status != 'completed';
 
   String get _deadline {
     final raw = widget.milestone['deadline'] ?? widget.milestone['dueDate'];

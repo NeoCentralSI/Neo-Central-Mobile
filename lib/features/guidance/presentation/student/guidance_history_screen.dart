@@ -6,7 +6,6 @@ import '../../../../core/constants/app_text_styles.dart';
 import '../../../../core/services/api_client.dart';
 import '../../../../core/services/student_api_service.dart';
 import '../../../../shared/widgets/shared_widgets.dart';
-import 'guidance_schedule_screen.dart';
 import 'session_summary_screen.dart';
 
 /// Student guidance history screen – fetches sessions from backend
@@ -101,50 +100,25 @@ class _GuidanceHistoryScreenState extends State<GuidanceHistoryScreen> {
                         ),
                       Row(
                         children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Riwayat Bimbingan',
-                                  style: AppTextStyles.h2.copyWith(
-                                    color: AppColors.white,
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Riwayat Bimbingan',
+                                style: AppTextStyles.h2.copyWith(
+                                  color: AppColors.white,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Total $completedCount Sesi Selesai',
+                                style: AppTextStyles.bodySmall.copyWith(
+                                  color: AppColors.white.withValues(
+                                    alpha: 0.85,
                                   ),
                                 ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  'Total $completedCount Sesi Selesai',
-                                  style: AppTextStyles.bodySmall.copyWith(
-                                    color: AppColors.white.withValues(
-                                      alpha: 0.85,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          OutlinedButton.icon(
-                            onPressed: () => Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => const GuidanceScheduleScreen(),
                               ),
-                            ),
-                            icon: const Icon(Icons.add, size: 18),
-                            label: const Text('Baru'),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: AppColors.white,
-                              side: const BorderSide(color: AppColors.white),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(
-                                  AppSpacing.buttonRadius,
-                                ),
-                              ),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 10,
-                              ),
-                            ),
+                            ],
                           ),
                         ],
                       ),

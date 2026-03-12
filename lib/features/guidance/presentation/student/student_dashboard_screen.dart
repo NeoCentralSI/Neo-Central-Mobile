@@ -865,7 +865,7 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
                             ),
                           ),
                           const SizedBox(height: 6),
-                          if (_completedGuidanceCount < 8)
+                          if (_completedGuidanceCount < 8 || _milestoneProgress < 100)
                             Row(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
@@ -877,7 +877,11 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
                                 const SizedBox(width: 6),
                                 Expanded(
                                   child: Text(
-                                    '${8 - _completedGuidanceCount} sesi bimbingan lagi untuk kesiapan seminar.',
+                                    _completedGuidanceCount < 8 && _milestoneProgress < 100
+                                        ? 'Selesaikan ${8 - _completedGuidanceCount} sesi lagi dan 100% milestone untuk siap seminar.'
+                                        : (_completedGuidanceCount < 8
+                                            ? '${8 - _completedGuidanceCount} sesi bimbingan lagi untuk kesiapan seminar.'
+                                            : 'Selesaikan milestone hingga 100% untuk siap seminar.'),
                                     style: AppTextStyles.bodySmall.copyWith(
                                       color: const Color(0xFFEF4444),
                                     ),

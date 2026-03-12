@@ -349,4 +349,10 @@ class LecturerApiService {
     if (res is Map<String, dynamic>) return res;
     return {'success': true};
   }
+
+  /// POST /thesisGuidance/lecturer/my-students/:thesisId/send-warning
+  /// Sends a warning notification to the student.
+  Future<void> sendWarningNotification(String thesisId) async {
+    await _api.post('$_base/my-students/$thesisId/send-warning', body: {});
+  }
 }
