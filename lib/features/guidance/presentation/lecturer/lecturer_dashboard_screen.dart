@@ -10,6 +10,7 @@ import '../../../notifications/presentation/notification_screen.dart'
     show NotificationScreen;
 
 import '../../../../core/widgets/app_drawer.dart';
+import '../../../internship/presentation/internship_shell.dart';
 
 /// Lecturer main dashboard – shows pending approval stats + quick actions
 class LecturerDashboardScreen extends StatefulWidget {
@@ -105,7 +106,7 @@ class _LecturerDashboardScreenState extends State<LecturerDashboardScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.surfaceSecondary,
-      drawer: AppDrawer(user: widget.user),
+      drawer: AppDrawer(user: widget.user, activeRoute: 'tugas_akhir'),
       body: RefreshIndicator(
         onRefresh: _loadData,
         color: AppColors.primary,
@@ -465,6 +466,21 @@ class _LecturerDashboardScreenState extends State<LecturerDashboardScreen> {
                       ? '${_topicChanges.length}'
                       : null,
                   onTap: () => widget.onSwitchTab?.call(1, initialTab: 3),
+                  isLast: false,
+                ),
+                _QuickActionItem(
+                  icon: Icons.work_outline,
+                  label: 'Bimbingan Kerja Praktik',
+                  subtitle: 'Kelola mahasiswa bimbingan KP',
+                  color: Colors.amber,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => InternshipShell(user: widget.user),
+                      ),
+                    );
+                  },
                   isLast: true,
                 ),
               ],

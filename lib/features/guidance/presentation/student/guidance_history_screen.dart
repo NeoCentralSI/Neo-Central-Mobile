@@ -6,12 +6,15 @@ import '../../../../core/constants/app_text_styles.dart';
 import '../../../../core/services/api_client.dart';
 import '../../../../core/services/student_api_service.dart';
 import '../../../../shared/widgets/shared_widgets.dart';
+import '../../../../core/widgets/app_drawer.dart';
+import '../../../../core/models/auth_models.dart';
 import 'session_summary_screen.dart';
 
 /// Student guidance history screen – fetches sessions from backend
 class GuidanceHistoryScreen extends StatefulWidget {
   final bool isTab;
-  const GuidanceHistoryScreen({super.key, this.isTab = false});
+  final UserModel? user;
+  const GuidanceHistoryScreen({super.key, this.isTab = false, this.user});
 
   @override
   State<GuidanceHistoryScreen> createState() => _GuidanceHistoryScreenState();
@@ -59,6 +62,7 @@ class _GuidanceHistoryScreenState extends State<GuidanceHistoryScreen> {
       value: SystemUiOverlayStyle.light,
       child: Scaffold(
         backgroundColor: AppColors.surfaceSecondary,
+        drawer: AppDrawer(user: widget.user, activeRoute: 'tugas_akhir'),
         body: Column(
           children: [
             // ── Gradient Header ──────────────────────────────
@@ -95,6 +99,20 @@ class _GuidanceHistoryScreenState extends State<GuidanceHistoryScreen> {
                               Icons.arrow_back_ios_new,
                               color: AppColors.white,
                               size: 20,
+                            ),
+                          ),
+                        )
+                      else
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                          child: Builder(
+                            builder: (context) => GestureDetector(
+                              onTap: () => Scaffold.of(context).openDrawer(),
+                              child: const Icon(
+                                Icons.menu,
+                                color: AppColors.white,
+                                size: 24,
+                              ),
                             ),
                           ),
                         ),

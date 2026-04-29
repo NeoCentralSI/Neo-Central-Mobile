@@ -66,6 +66,19 @@ class ApiClient {
     return _handleResponse(response);
   }
 
+  /// DELETE request with Bearer token.
+  Future<dynamic> delete(String path, {Object? body}) async {
+    final token = await _storage.getAccessToken();
+    final uri = Uri.parse('${AppConfig.baseUrl}$path');
+
+    final response = await http.delete(
+      uri,
+      headers: _headers(token),
+      body: body != null ? jsonEncode(body) : null,
+    );
+    return _handleResponse(response);
+  }
+
   /// POST multipart/form-data request with Bearer token.
   ///
   /// [fields] are text fields, [filePath] + [fileField] for optional file.

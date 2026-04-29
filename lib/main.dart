@@ -10,6 +10,8 @@ import 'core/services/fcm_service.dart';
 import 'features/splash/presentation/splash_screen.dart';
 import 'features/auth/presentation/login_screen.dart';
 import 'features/shell/main_shell.dart';
+import 'features/internship/presentation/internship_shell.dart';
+import 'core/services/preferences_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -82,12 +84,22 @@ class _AuthGateState extends State<_AuthGate> {
 
         if (!mounted) return;
 
-        // Already logged in – go straight to the correct shell
+        // Check preferred default home
+        final prefs = PreferencesService();
+        final defaultHome = await prefs.getDefaultHome();
+
+        if (!mounted) return;
+
+        // Already logged in – go to preferred shell
+        Widget targetScreen;
+        if (defaultHome == 'internship') {
+          targetScreen = InternshipShell(user: result.user);
+        } else {
+          targetScreen = MainShell(userRole: result.user.appRole, user: result.user);
+        }
+
         Navigator.of(context).pushReplacement(
-          MaterialPageRoute(
-            builder: (_) =>
-                MainShell(userRole: result.user.appRole, user: result.user),
-          ),
+          MaterialPageRoute(builder: (_) => targetScreen),
         );
       } else {
         // Not logged in – show login screen

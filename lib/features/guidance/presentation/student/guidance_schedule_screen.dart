@@ -7,6 +7,9 @@ import '../../../../core/services/api_client.dart';
 import '../../../../core/services/student_api_service.dart';
 import '../../../../core/utils/formatters.dart' as fmt;
 import '../../../../shared/widgets/shared_widgets.dart';
+import '../../../../core/widgets/app_drawer.dart';
+import '../../../../core/models/auth_models.dart';
+import '../../../../core/services/auth_service.dart';
 
 /// Student screen to request a new guidance session (bimbingan).
 ///
@@ -14,7 +17,8 @@ import '../../../../shared/widgets/shared_widgets.dart';
 /// POST /thesisGuidance/student/guidance/request (multipart/form-data).
 class GuidanceScheduleScreen extends StatefulWidget {
   final bool isTab;
-  const GuidanceScheduleScreen({super.key, this.isTab = false});
+  final UserModel? user;
+  const GuidanceScheduleScreen({super.key, this.isTab = false, this.user});
 
   @override
   State<GuidanceScheduleScreen> createState() => _GuidanceScheduleScreenState();
@@ -367,6 +371,7 @@ class _GuidanceScheduleScreenState extends State<GuidanceScheduleScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.surfaceSecondary,
+      drawer: AppDrawer(user: widget.user, activeRoute: 'metopel'), // Metopel is often the 'Schedule' context here
       body: Column(
         children: [
           _buildHeader(),
@@ -408,7 +413,15 @@ class _GuidanceScheduleScreenState extends State<GuidanceScheduleScreen> {
                     color: AppColors.white,
                   ),
                   onPressed: () => Navigator.pop(context),
+                )
+              else
+                Builder(
+                  builder: (context) => IconButton(
+                    icon: const Icon(Icons.menu, color: AppColors.white),
+                    onPressed: () => Scaffold.of(context).openDrawer(),
+                  ),
                 ),
+              const SizedBox(width: 8),
               Text(
                 'Ajukan Bimbingan',
                 style: AppTextStyles.h2.copyWith(color: AppColors.white),
