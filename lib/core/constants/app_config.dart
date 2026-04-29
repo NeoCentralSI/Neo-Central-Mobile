@@ -7,7 +7,8 @@ abstract class AppConfig {
   /// For emulator use 10.0.2.2 (Android) or localhost (iOS simulator).
   // static const String baseUrl = 'http://10.44.9.138:3000';
   // static const String baseUrl = 'http://172.22.64.1:3000';
-  static const String baseUrl = 'https://api.neocentral.dev';
+  // static const String baseUrl = 'https://api.neocentral.dev';
+  static const String baseUrl = 'http://10.0.2.2:3000';
 
   // ── Microsoft Azure OAuth2 credentials ──────────────────────
   /// Application (client) ID from Azure portal

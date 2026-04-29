@@ -1,15 +1,25 @@
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_text_styles.dart';
+import '../../../../core/models/auth_models.dart';
+import '../../../core/widgets/app_drawer.dart';
 
 class _BasePlaceholderScreen extends StatelessWidget {
   final String title;
-  const _BasePlaceholderScreen({required this.title});
+  final UserModel? user;
+  final String activeRoute;
+
+  const _BasePlaceholderScreen({
+    required this.title,
+    this.user,
+    required this.activeRoute,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.surfaceSecondary,
+      drawer: AppDrawer(user: user, activeRoute: activeRoute),
       appBar: AppBar(
         title: Text(
           title,
@@ -43,30 +53,57 @@ class _BasePlaceholderScreen extends StatelessWidget {
   }
 }
 
-class KerjaPraktekScreen extends StatelessWidget {
-  const KerjaPraktekScreen({super.key});
-  @override
-  Widget build(BuildContext context) =>
-      const _BasePlaceholderScreen(title: 'Kerja Praktek');
-}
+
 
 class MetopelScreen extends StatelessWidget {
-  const MetopelScreen({super.key});
+  final UserModel? user;
+  const MetopelScreen({super.key, this.user});
+
   @override
   Widget build(BuildContext context) =>
-      const _BasePlaceholderScreen(title: 'Metopel');
+      _BasePlaceholderScreen(title: 'Metopel', user: user, activeRoute: 'metopel');
 }
 
 class SeminarSidangScreen extends StatelessWidget {
-  const SeminarSidangScreen({super.key});
+  final UserModel? user;
+  const SeminarSidangScreen({super.key, this.user});
+
   @override
-  Widget build(BuildContext context) =>
-      const _BasePlaceholderScreen(title: 'Seminar & Sidang');
+  Widget build(BuildContext context) => _BasePlaceholderScreen(
+        title: 'Seminar & Sidang',
+        user: user,
+        activeRoute: 'seminar_sidang',
+      );
 }
 
 class YudisiumScreen extends StatelessWidget {
-  const YudisiumScreen({super.key});
+  final UserModel? user;
+  const YudisiumScreen({super.key, this.user});
+
   @override
-  Widget build(BuildContext context) =>
-      const _BasePlaceholderScreen(title: 'Yudisium');
+  Widget build(BuildContext context) => _BasePlaceholderScreen(
+        title: 'Yudisium',
+        user: user,
+        activeRoute: 'yudisium',
+      );
+}
+
+class HelpScreen extends StatelessWidget {
+  const HelpScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(title: const Text('Bantuan')),
+        body: const Center(child: Text('Halaman Bantuan sedang dikembangkan.')),
+      );
+}
+
+class AboutScreen extends StatelessWidget {
+  const AboutScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(title: const Text('Tentang Aplikasi')),
+        body: const Center(child: Text('NeoCentral v1.0.0')),
+      );
 }

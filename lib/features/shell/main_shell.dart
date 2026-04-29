@@ -50,8 +50,8 @@ class _MainShellState extends State<MainShell> {
 
   List<Widget> get _studentPages => [
     StudentDashboardScreen(user: widget.user, onSwitchTab: _switchTab),
-    const GuidanceScheduleScreen(isTab: true),
-    const GuidanceHistoryScreen(isTab: true),
+    GuidanceScheduleScreen(isTab: true, user: widget.user),
+    GuidanceHistoryScreen(isTab: true, user: widget.user),
     ProfileScreen(user: widget.user),
   ];
 

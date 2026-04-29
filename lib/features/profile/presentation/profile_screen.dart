@@ -7,23 +7,56 @@ import '../../../core/models/auth_models.dart';
 import '../../../core/services/auth_service.dart';
 import '../../../shared/widgets/shared_widgets.dart';
 import '../../auth/presentation/login_screen.dart';
+import '../../notifications/presentation/notification_screen.dart';
+import '../../placeholder/presentation/placeholder_screens.dart';
+import '../../../core/widgets/app_drawer.dart';
+
+import '../../../core/services/preferences_service.dart';
 
 /// Profile screen - role-aware display for both lecturer and student
-class ProfileScreen extends StatelessWidget {
+class ProfileScreen extends StatefulWidget {
   final UserModel? user;
   const ProfileScreen({super.key, this.user});
 
   @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
+  String _defaultHome = 'tugas_akhir';
+  bool _showHomeSettings = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSettings();
+  }
+
+  Future<void> _loadSettings() async {
+    final prefs = PreferencesService();
+    final home = await prefs.getDefaultHome();
+    setState(() => _defaultHome = home);
+  }
+
+  Future<void> _updateDefaultHome(String? value) async {
+    if (value == null) return;
+    final prefs = PreferencesService();
+    await prefs.setDefaultHome(value);
+    setState(() => _defaultHome = value);
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final role = user?.appRole ?? UserRole.lecturer;
+    final role = widget.user?.appRole ?? UserRole.lecturer;
     final isLecturer = role == UserRole.lecturer;
 
-    final name = user?.fullName ?? (isLecturer ? 'Dosen' : 'Mahasiswa');
-    final email = user?.email ?? '-';
-    final identityNumber = user?.identityNumber ?? '-';
+    final name = widget.user?.fullName ?? (isLecturer ? 'Dosen' : 'Mahasiswa');
+    final email = widget.user?.email ?? '-';
+    final identityNumber = widget.user?.identityNumber ?? '-';
 
     return Scaffold(
       backgroundColor: AppColors.surfaceSecondary,
+      drawer: AppDrawer(user: widget.user, activeRoute: 'profile'),
       body: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
         child: Stack(
@@ -92,55 +125,72 @@ class ProfileScreen extends StatelessWidget {
         ),
         borderRadius: BorderRadius.vertical(bottom: Radius.circular(32)),
       ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+      child: Stack(
         children: [
-          const SizedBox(height: 20),
-          Stack(
-            children: [
-              CircleAvatar(
-                radius: 50,
-                backgroundColor: Colors.white.withValues(alpha: 0.2),
-                child: const Icon(Icons.person, color: Colors.white, size: 50),
+          Positioned(
+            top: 50,
+            left: 20,
+            child: Builder(
+              builder: (context) => IconButton(
+                icon: const Icon(Icons.menu, color: Colors.white, size: 28),
+                onPressed: () => Scaffold.of(context).openDrawer(),
               ),
-              Positioned(
-                bottom: 0,
-                right: 0,
-                child: Container(
-                  padding: const EdgeInsets.all(4),
-                  decoration: const BoxDecoration(
-                    color: Colors.white,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Container(
-                    padding: const EdgeInsets.all(5),
-                    decoration: const BoxDecoration(
-                      color: AppColors.success,
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.verified,
-                      color: Colors.white,
-                      size: 14,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          Text(
-            name,
-            style: AppTextStyles.h1.copyWith(color: Colors.white, fontSize: 24),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            isLecturer ? 'Dosen Pembimbing' : 'Mahasiswa',
-            style: AppTextStyles.body.copyWith(
-              color: Colors.white.withValues(alpha: 0.9),
             ),
           ),
-          const SizedBox(height: 40),
+          Positioned.fill(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                const SizedBox(height: 20),
+                Stack(
+                  children: [
+                    CircleAvatar(
+                      radius: 50,
+                      backgroundColor: Colors.white.withValues(alpha: 0.2),
+                      child: const Icon(Icons.person, color: Colors.white, size: 50),
+                    ),
+                    Positioned(
+                      bottom: 0,
+                      right: 0,
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: const BoxDecoration(
+                          color: Colors.white,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Container(
+                          padding: const EdgeInsets.all(5),
+                          decoration: const BoxDecoration(
+                            color: AppColors.success,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.verified,
+                            color: Colors.white,
+                            size: 14,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  name,
+                  style: AppTextStyles.h1.copyWith(color: Colors.white, fontSize: 24),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  isLecturer ? 'Dosen Pembimbing' : 'Mahasiswa',
+                  style: AppTextStyles.body.copyWith(
+                    color: Colors.white.withValues(alpha: 0.9),
+                  ),
+                ),
+                const SizedBox(height: 60),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -167,12 +217,12 @@ class ProfileScreen extends StatelessWidget {
             label: 'Departemen',
             value: 'Sistem Informasi – FTI Unand',
           ),
-          if (!isLecturer && user?.student?.enrollmentYear != null) ...[
+          if (!isLecturer && widget.user?.student?.enrollmentYear != null) ...[
             const SizedBox(height: AppSpacing.md),
             InfoRow(
               icon: Icons.calendar_today_outlined,
               label: 'Angkatan',
-              value: user!.student!.enrollmentYear.toString(),
+              value: widget.user!.student!.enrollmentYear.toString(),
             ),
           ],
         ],
@@ -180,67 +230,196 @@ class ProfileScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildMenuCard(BuildContext context, bool isLecturer) {
-    final items = [
-      _MenuItem(
-        icon: Icons.notifications_outlined,
-        label: 'Notifikasi',
-        onTap: () {},
-      ),
-      _MenuItem(icon: Icons.help_outline, label: 'Bantuan', onTap: () {}),
-      _MenuItem(
-        icon: Icons.info_outline,
-        label: 'Tentang Aplikasi',
-        onTap: () {},
-      ),
-    ];
 
+
+  Widget _buildMenuCard(BuildContext context, bool isLecturer) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
       child: Column(
-        children: items.asMap().entries.map((entry) {
-          final isLast = entry.key == items.length - 1;
-          return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Pengaturan & Informasi', style: AppTextStyles.h4),
+          const AppDivider(),
+          
+          // Default Home Setting (Expandable)
+          _buildExpandableMenuItem(
+            icon: Icons.home_outlined,
+            label: 'Halaman Utama Default',
+            value: _defaultHome == 'internship' ? 'Kerja Praktik' : 'Tugas Akhir',
+            isExpanded: _showHomeSettings,
+            onTap: () => setState(() => _showHomeSettings = !_showHomeSettings),
             children: [
-              InkWell(
-                onTap: entry.value.onTap,
-                borderRadius: BorderRadius.circular(8),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  child: Row(
+              _buildSubMenuItem(
+                label: 'Tugas Akhir',
+                isSelected: _defaultHome == 'tugas_akhir',
+                onTap: () => _updateDefaultHome('tugas_akhir'),
+              ),
+              _buildSubMenuItem(
+                label: 'Kerja Praktik',
+                isSelected: _defaultHome == 'internship',
+                onTap: () => _updateDefaultHome('internship'),
+              ),
+            ],
+          ),
+          Divider(height: 1, color: AppColors.divider),
+
+          _buildPlainMenuItem(
+            icon: Icons.notifications_outlined,
+            label: 'Notifikasi',
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const NotificationScreen()),
+              );
+            },
+          ),
+          Divider(height: 1, color: AppColors.divider),
+          
+          _buildPlainMenuItem(
+            icon: Icons.help_outline,
+            label: 'Bantuan',
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const HelpScreen()),
+              );
+            },
+          ),
+          Divider(height: 1, color: AppColors.divider),
+
+          _buildPlainMenuItem(
+            icon: Icons.info_outline,
+            label: 'Tentang Aplikasi',
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const AboutScreen()),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildExpandableMenuItem({
+    required IconData icon,
+    required String label,
+    required String value,
+    required bool isExpanded,
+    required VoidCallback onTap,
+    required List<Widget> children,
+  }) {
+    return Column(
+      children: [
+        InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(8),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Row(
+              children: [
+                _buildMenuIcon(icon),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Container(
-                        padding: const EdgeInsets.all(7),
-                        decoration: BoxDecoration(
-                          color: AppColors.primary.withValues(alpha: 0.08),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Icon(
-                          entry.value.icon,
-                          size: 18,
-                          color: AppColors.primary,
-                        ),
-                      ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Text(
-                          entry.value.label,
-                          style: AppTextStyles.label,
-                        ),
-                      ),
-                      const Icon(
-                        Icons.chevron_right,
-                        size: 18,
-                        color: AppColors.textTertiary,
-                      ),
+                      Text(label, style: AppTextStyles.label),
+                      Text(value, style: AppTextStyles.bodySmall.copyWith(color: AppColors.primary, fontWeight: FontWeight.bold)),
                     ],
                   ),
                 ),
+                Icon(
+                  isExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                  size: 20,
+                  color: AppColors.textTertiary,
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (isExpanded)
+          Container(
+            margin: const EdgeInsets.only(left: 46, bottom: 8),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceSecondary.withValues(alpha: 0.5),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Column(children: children),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildSubMenuItem({
+    required String label,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                label,
+                style: AppTextStyles.bodySmall.copyWith(
+                  color: isSelected ? AppColors.primary : AppColors.textPrimary,
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                ),
               ),
-              if (!isLast) Divider(height: 1, color: AppColors.divider),
-            ],
-          );
-        }).toList(),
+            ),
+            if (isSelected)
+              const Icon(Icons.check, size: 16, color: AppColors.primary),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPlainMenuItem({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Row(
+          children: [
+            _buildMenuIcon(icon),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Text(label, style: AppTextStyles.label),
+            ),
+            const Icon(
+              Icons.chevron_right,
+              size: 18,
+              color: AppColors.textTertiary,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMenuIcon(IconData icon) {
+    return Container(
+      padding: const EdgeInsets.all(7),
+      decoration: BoxDecoration(
+        color: AppColors.primary.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Icon(
+        icon,
+        size: 18,
+        color: AppColors.primary,
       ),
     );
   }
@@ -285,11 +464,4 @@ class ProfileScreen extends StatelessWidget {
       },
     );
   }
-}
-
-class _MenuItem {
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-  _MenuItem({required this.icon, required this.label, required this.onTap});
 }

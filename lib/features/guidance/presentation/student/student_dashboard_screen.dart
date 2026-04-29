@@ -136,7 +136,7 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.surfaceSecondary,
-      drawer: AppDrawer(user: widget.user),
+      drawer: AppDrawer(user: widget.user, activeRoute: 'tugas_akhir'),
       body: RefreshIndicator(
         onRefresh: _loadData,
         color: AppColors.primary,
@@ -145,6 +145,27 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
             : _error != null
             ? CustomScrollView(
                 slivers: [
+                  SliverAppBar(
+                    backgroundColor: Colors.transparent,
+                    elevation: 0,
+                    leading: Builder(
+                      builder: (innerContext) => Container(
+                        margin: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withValues(alpha: 0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: IconButton(
+                          icon: const Icon(
+                            Icons.menu,
+                            color: AppColors.primary,
+                            size: 20,
+                          ),
+                          onPressed: () => Scaffold.of(innerContext).openDrawer(),
+                        ),
+                      ),
+                    ),
+                  ),
                   SliverFillRemaining(
                     child: Center(
                       child: Padding(
