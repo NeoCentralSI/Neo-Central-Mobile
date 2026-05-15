@@ -174,7 +174,12 @@ class _ExaminerResponseDialogState extends State<_ExaminerResponseDialog> {
                         const SizedBox(height: 12),
                         const Divider(height: 1),
                         const SizedBox(height: 10),
-                        for (final sup in supervisors.whereType<Map>())
+                        for (final sup in _sortSupervisors(
+                          supervisors
+                              .whereType<Map>()
+                              .map((m) => Map<String, dynamic>.from(m))
+                              .toList(),
+                        ))
                           Padding(
                             padding: const EdgeInsets.only(bottom: 2),
                             child: Text(
@@ -352,5 +357,20 @@ class _ExaminerResponseDialogState extends State<_ExaminerResponseDialog> {
         ),
       ],
     );
+  }
+
+  List<Map<String, dynamic>> _sortSupervisors(List<Map<String, dynamic>> sups) {
+    return sups
+      ..sort((a, b) {
+        final aOrder = _extractSupervisorOrder(a);
+        final bOrder = _extractSupervisorOrder(b);
+        return aOrder.compareTo(bOrder);
+      });
+  }
+
+  int _extractSupervisorOrder(Map<String, dynamic> sup) {
+    final role = (sup['role'] ?? '').toString();
+    final match = RegExp(r'(\d+)').firstMatch(role);
+    return int.tryParse(match?.group(1) ?? '') ?? 999;
   }
 }
