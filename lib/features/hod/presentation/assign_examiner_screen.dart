@@ -7,6 +7,7 @@ import '../../../core/models/auth_models.dart';
 import '../../../core/services/examiner_assignment_api_service.dart';
 import '../../../core/widgets/app_drawer.dart';
 import '../../../shared/widgets/shared_widgets.dart';
+import '../../seminar/presentation/seminar_detail_screen.dart';
 import 'assign_examiner_form_screen.dart';
 
 /// Tetapkan Penguji — Head of Department screen.
@@ -63,8 +64,8 @@ class _AssignExaminerScreenState extends State<AssignExaminerScreen>
               child: TabBarView(
                 controller: _tabController,
                 children: [
-                  _AssignmentListTab(kind: 'seminar'),
-                  _AssignmentListTab(kind: 'defence'),
+                  _AssignmentListTab(kind: 'seminar', user: widget.user),
+                  _AssignmentListTab(kind: 'defence', user: widget.user),
                 ],
               ),
             ),
@@ -145,7 +146,8 @@ class _AssignExaminerScreenState extends State<AssignExaminerScreen>
 class _AssignmentListTab extends StatefulWidget {
   /// 'seminar' or 'defence'.
   final String kind;
-  const _AssignmentListTab({required this.kind});
+  final UserModel? user;
+  const _AssignmentListTab({required this.kind, this.user});
 
   @override
   State<_AssignmentListTab> createState() => _AssignmentListTabState();
@@ -237,6 +239,21 @@ class _AssignmentListTabState extends State<_AssignmentListTab>
       ),
     );
     if (result == true) _fetch();
+  }
+
+  Future<void> _openSeminarDetail(Map<String, dynamic> item) async {
+    if (widget.kind != 'seminar') return;
+    final id = item['id']?.toString();
+    if (id == null) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => SeminarDetailScreen(
+          seminarId: id,
+          user: widget.user,
+        ),
+      ),
+    );
+    if (mounted) _fetch();
   }
 
   @override
@@ -400,6 +417,9 @@ class _AssignmentListTabState extends State<_AssignmentListTab>
         itemBuilder: (_, i) => _AssignmentCard(
           item: data[i],
           onAction: () => _openForm(data[i]),
+          onTap: widget.kind == 'seminar'
+              ? () => _openSeminarDetail(data[i])
+              : null,
         ),
       ),
     );
@@ -413,8 +433,13 @@ class _AssignmentListTabState extends State<_AssignmentListTab>
 class _AssignmentCard extends StatelessWidget {
   final Map<String, dynamic> item;
   final VoidCallback onAction;
+  final VoidCallback? onTap;
 
-  const _AssignmentCard({required this.item, required this.onAction});
+  const _AssignmentCard({
+    required this.item,
+    required this.onAction,
+    this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -427,6 +452,7 @@ class _AssignmentCard extends StatelessWidget {
     return AppCard(
       padding: const EdgeInsets.all(14),
       radius: 16,
+      onTap: onTap,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

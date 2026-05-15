@@ -8,6 +8,7 @@ import '../../../core/services/seminar_api_service.dart';
 import '../../../core/widgets/app_drawer.dart';
 import '../../../shared/widgets/shared_widgets.dart';
 import 'examiner_response_dialog.dart';
+import 'seminar_detail_screen.dart';
 
 /// Seminar Hasil — lecturer (and HoD acting as lecturer) view.
 ///
@@ -65,9 +66,9 @@ class _LecturerSeminarScreenState extends State<LecturerSeminarScreen>
             Expanded(
               child: TabBarView(
                 controller: _tabController,
-                children: const [
-                  _SupervisedTab(),
-                  _ExaminerRequestsTab(),
+                children: [
+                  _SupervisedTab(user: widget.user),
+                  _ExaminerRequestsTab(user: widget.user),
                 ],
               ),
             ),
@@ -147,7 +148,8 @@ class _LecturerSeminarScreenState extends State<LecturerSeminarScreen>
 // ════════════════════════════════════════════════════════════════
 
 class _SupervisedTab extends StatefulWidget {
-  const _SupervisedTab();
+  final UserModel? user;
+  const _SupervisedTab({this.user});
 
   @override
   State<_SupervisedTab> createState() => _SupervisedTabState();
@@ -209,6 +211,20 @@ class _SupervisedTabState extends State<_SupervisedTab>
     }).toList();
   }
 
+  Future<void> _openDetail(Map<String, dynamic> item) async {
+    final id = item['id']?.toString();
+    if (id == null) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => SeminarDetailScreen(
+          seminarId: id,
+          user: widget.user,
+        ),
+      ),
+    );
+    if (mounted) _fetch();
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -230,7 +246,10 @@ class _SupervisedTabState extends State<_SupervisedTab>
                           ? 'Belum ada mahasiswa bimbingan yang '
                               'mendaftar seminar hasil.'
                           : 'Tidak ada hasil yang cocok.',
-                      cardBuilder: (item) => _SupervisedCard(item: item),
+                      cardBuilder: (item) => _SupervisedCard(
+                        item: item,
+                        onTap: () => _openDetail(item),
+                      ),
                     ),
         ),
       ],
@@ -243,7 +262,8 @@ class _SupervisedTabState extends State<_SupervisedTab>
 // ════════════════════════════════════════════════════════════════
 
 class _ExaminerRequestsTab extends StatefulWidget {
-  const _ExaminerRequestsTab();
+  final UserModel? user;
+  const _ExaminerRequestsTab({this.user});
 
   @override
   State<_ExaminerRequestsTab> createState() => _ExaminerRequestsTabState();
@@ -329,6 +349,20 @@ class _ExaminerRequestsTabState extends State<_ExaminerRequestsTab>
     }
   }
 
+  Future<void> _openDetail(Map<String, dynamic> item) async {
+    final id = item['id']?.toString();
+    if (id == null) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => SeminarDetailScreen(
+          seminarId: id,
+          user: widget.user,
+        ),
+      ),
+    );
+    if (mounted) _fetch();
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -362,6 +396,7 @@ class _ExaminerRequestsTabState extends State<_ExaminerRequestsTab>
                       cardBuilder: (item) => _ExaminerRequestCard(
                         item: item,
                         onTanggapi: () => _openResponseDialog(item),
+                        onTap: () => _openDetail(item),
                       ),
                     ),
         ),
@@ -376,7 +411,8 @@ class _ExaminerRequestsTabState extends State<_ExaminerRequestsTab>
 
 class _SupervisedCard extends StatelessWidget {
   final Map<String, dynamic> item;
-  const _SupervisedCard({required this.item});
+  final VoidCallback? onTap;
+  const _SupervisedCard({required this.item, this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -387,6 +423,7 @@ class _SupervisedCard extends StatelessWidget {
     return AppCard(
       padding: const EdgeInsets.all(14),
       radius: 16,
+      onTap: onTap,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -447,8 +484,13 @@ class _SupervisedCard extends StatelessWidget {
 class _ExaminerRequestCard extends StatelessWidget {
   final Map<String, dynamic> item;
   final VoidCallback onTanggapi;
+  final VoidCallback? onTap;
 
-  const _ExaminerRequestCard({required this.item, required this.onTanggapi});
+  const _ExaminerRequestCard({
+    required this.item,
+    required this.onTanggapi,
+    this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -461,6 +503,7 @@ class _ExaminerRequestCard extends StatelessWidget {
     return AppCard(
       padding: const EdgeInsets.all(14),
       radius: 16,
+      onTap: onTap,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
