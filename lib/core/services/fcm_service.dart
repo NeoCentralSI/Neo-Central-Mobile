@@ -87,6 +87,18 @@ class FcmService {
     _listeners.remove(listener);
   }
 
+  /// Callbacks fired when the user taps a notification and opens the app.
+  /// Use this to navigate to the relevant screen (e.g. switch to Dashboard tab).
+  final List<void Function(Map<String, dynamic> data)> _openListeners = [];
+
+  void addOpenListener(void Function(Map<String, dynamic> data) listener) {
+    _openListeners.add(listener);
+  }
+
+  void removeOpenListener(void Function(Map<String, dynamic> data) listener) {
+    _openListeners.remove(listener);
+  }
+
   // ── Initialisation ──────────────────────────────────────────
 
   /// Call once after Firebase.initializeApp in main().
@@ -162,6 +174,15 @@ class FcmService {
       onDidReceiveNotificationResponse: (response) {
         debugPrint('[LocalNotif] Tapped: ${response.payload}');
         _handleNotificationAction(response);
+        // Fire open-listeners so the UI switches to the relevant screen
+        final data = response.payload != null
+            ? Map<String, dynamic>.from(
+                (jsonDecode(response.payload!) as Map),
+              )
+            : <String, dynamic>{};
+        for (final listener in List.of(_openListeners)) {
+          listener(data);
+        }
       },
       onDidReceiveBackgroundNotificationResponse:
           localNotificationTapBackground,
@@ -322,9 +343,13 @@ class FcmService {
   void _handleMessageOpen(RemoteMessage message) {
     debugPrint('[FCM] Message opened: ${message.data}');
 
-    // Notify listeners so screens can react (e.g. refresh data)
     final data = message.data;
-    for (final listener in _listeners) {
+    // Notify open-listeners first so the UI navigates to the right screen
+    for (final listener in List.of(_openListeners)) {
+      listener(data);
+    }
+    // Then notify data-refresh listeners
+    for (final listener in List.of(_listeners)) {
       listener(data);
     }
   }

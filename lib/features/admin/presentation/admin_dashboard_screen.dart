@@ -400,11 +400,14 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       child: Row(
         children: [
           Expanded(
-            child: _StatBlock(
-              icon: Icons.mark_email_unread_outlined,
-              iconColor: AppColors.primary,
-              label: 'Belum Dibaca',
-              value: '$_unreadCount',
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: _StatBlock(
+                icon: Icons.mark_email_unread_outlined,
+                iconColor: AppColors.primary,
+                label: 'Belum Dibaca',
+                value: '$_unreadCount',
+              ),
             ),
           ),
           Container(
@@ -413,11 +416,14 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             color: AppColors.divider,
           ),
           Expanded(
-            child: _StatBlock(
-              icon: Icons.inbox_outlined,
-              iconColor: AppColors.info,
-              label: 'Total Notifikasi',
-              value: '$_totalCount',
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: _StatBlock(
+                icon: Icons.inbox_outlined,
+                iconColor: AppColors.info,
+                label: 'Total Notifikasi',
+                value: '$_totalCount',
+              ),
             ),
           ),
         ],
