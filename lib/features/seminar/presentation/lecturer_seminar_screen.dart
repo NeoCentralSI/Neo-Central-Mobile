@@ -125,6 +125,7 @@ class _LecturerSeminarScreenState extends State<LecturerSeminarScreen>
           const SizedBox(height: 8),
           TabBar(
             controller: _tabController,
+            isScrollable: true,
             indicatorColor: Colors.white,
             indicatorWeight: 3,
             labelColor: Colors.white,

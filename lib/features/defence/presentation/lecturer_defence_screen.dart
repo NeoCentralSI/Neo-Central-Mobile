@@ -125,6 +125,7 @@ class _LecturerDefenceScreenState extends State<LecturerDefenceScreen>
           const SizedBox(height: 8),
           TabBar(
             controller: _tabController,
+            isScrollable: true,
             indicatorColor: Colors.white,
             indicatorWeight: 3,
             labelColor: Colors.white,
