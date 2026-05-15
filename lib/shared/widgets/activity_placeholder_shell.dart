@@ -24,6 +24,7 @@ class ActivityPlaceholderShell extends StatelessWidget {
   final List<ActivityTabItem> tabs;
   final Widget Function(BuildContext context, String activeTab) tabBuilder;
   final String initialTab;
+  final Widget? customDrawer;
 
   const ActivityPlaceholderShell({
     super.key,
@@ -35,6 +36,7 @@ class ActivityPlaceholderShell extends StatelessWidget {
     required this.tabs,
     required this.tabBuilder,
     this.initialTab = 'overview',
+    this.customDrawer,
   });
 
   @override
@@ -46,7 +48,7 @@ class ActivityPlaceholderShell extends StatelessWidget {
       initialIndex: initialIndex < 0 ? 0 : initialIndex,
       child: Scaffold(
         backgroundColor: AppColors.surfaceSecondary,
-        drawer: AppDrawer(user: user, activeRoute: activeRoute),
+        drawer: customDrawer ?? AppDrawer(user: user, activeRoute: activeRoute),
         body: SafeArea(
           child: Column(
             children: [

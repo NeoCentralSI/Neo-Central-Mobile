@@ -9,6 +9,7 @@ import '../../../core/services/notification_api_service.dart';
 import '../../../core/utils/formatters.dart' as fmt;
 import '../../../core/utils/notification_helpers.dart' as nh;
 import '../../../shared/widgets/shared_widgets.dart';
+import 'admin_drawer.dart';
 
 /// Admin Dashboard — Admin role landing page on mobile.
 ///
@@ -193,6 +194,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.surfaceSecondary,
+      drawer: AdminDrawer(user: widget.user, activeRoute: 'dashboard'),
       body: RefreshIndicator(
         onRefresh: () => _loadInitial(),
         color: AppColors.primary,
@@ -309,16 +311,16 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.2),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.admin_panel_settings_outlined,
-                color: Colors.white,
-                size: 26,
+            Builder(
+              builder: (ctx) => Container(
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.2),
+                  shape: BoxShape.circle,
+                ),
+                child: IconButton(
+                  icon: const Icon(Icons.menu, color: Colors.white, size: 24),
+                  onPressed: () => Scaffold.of(ctx).openDrawer(),
+                ),
               ),
             ),
             const SizedBox(width: 14),

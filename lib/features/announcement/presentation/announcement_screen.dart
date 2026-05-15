@@ -11,14 +11,16 @@ import '../../../core/enums/user_role.dart';
 
 class AnnouncementScreen extends StatelessWidget {
   final UserModel? user;
+  final Widget? customDrawer;
 
-  const AnnouncementScreen({super.key, this.user});
+  const AnnouncementScreen({super.key, this.user, this.customDrawer});
 
   @override
   Widget build(BuildContext context) {
     return ActivityPlaceholderShell(
       user: user,
       activeRoute: 'pengumuman',
+      customDrawer: customDrawer,
       title: 'Pengumuman',
       subtitle: 'Daftar pengumuman untuk Seminar dan Yudisium',
       activeRoleLabel: user == null ? 'Umum' : (user!.appRole == UserRole.lecturer ? 'Dosen' : 'Mahasiswa'),
