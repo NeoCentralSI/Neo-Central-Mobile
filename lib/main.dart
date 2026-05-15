@@ -7,10 +7,12 @@ import 'core/theme/app_theme.dart';
 import 'core/services/auth_service.dart';
 import 'core/services/fcm_service.dart';
 
+import 'core/enums/user_role.dart';
 import 'features/splash/presentation/splash_screen.dart';
 import 'features/auth/presentation/login_screen.dart';
 import 'features/shell/main_shell.dart';
 import 'features/internship/presentation/internship_shell.dart';
+import 'features/admin/presentation/admin_shell.dart';
 import 'core/services/preferences_service.dart';
 
 void main() async {
@@ -84,18 +86,27 @@ class _AuthGateState extends State<_AuthGate> {
 
         if (!mounted) return;
 
-        // Check preferred default home
-        final prefs = PreferencesService();
-        final defaultHome = await prefs.getDefaultHome();
+        // Admin role always lands on the AdminShell — admin-targeted features
+        // live on the web; the mobile experience is intentionally minimal.
+        final role = result.user.appRole;
 
         if (!mounted) return;
 
-        // Already logged in – go to preferred shell
         Widget targetScreen;
-        if (defaultHome == 'internship') {
-          targetScreen = InternshipShell(user: result.user);
+        if (role == UserRole.admin) {
+          targetScreen = AdminShell(user: result.user);
         } else {
-          targetScreen = MainShell(userRole: result.user.appRole, user: result.user);
+          // Check preferred default home for non-admin users
+          final prefs = PreferencesService();
+          final defaultHome = await prefs.getDefaultHome();
+
+          if (!mounted) return;
+
+          if (defaultHome == 'internship') {
+            targetScreen = InternshipShell(user: result.user);
+          } else {
+            targetScreen = MainShell(userRole: role, user: result.user);
+          }
         }
 
         Navigator.of(context).pushReplacement(
