@@ -7,6 +7,7 @@ import '../../../core/models/auth_models.dart';
 import '../../../core/services/examiner_assignment_api_service.dart';
 import '../../../core/widgets/app_drawer.dart';
 import '../../../shared/widgets/shared_widgets.dart';
+import '../../defence/presentation/defence_detail_screen.dart';
 import '../../seminar/presentation/seminar_detail_screen.dart';
 import 'assign_examiner_form_screen.dart';
 
@@ -256,6 +257,21 @@ class _AssignmentListTabState extends State<_AssignmentListTab>
     if (mounted) _fetch();
   }
 
+  Future<void> _openDefenceDetail(Map<String, dynamic> item) async {
+    if (widget.kind != 'defence') return;
+    final id = item['id']?.toString();
+    if (id == null) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => DefenceDetailScreen(
+          defenceId: id,
+          user: widget.user,
+        ),
+      ),
+    );
+    if (mounted) _fetch();
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -419,7 +435,7 @@ class _AssignmentListTabState extends State<_AssignmentListTab>
           onAction: () => _openForm(data[i]),
           onTap: widget.kind == 'seminar'
               ? () => _openSeminarDetail(data[i])
-              : null,
+              : () => _openDefenceDetail(data[i]),
         ),
       ),
     );
