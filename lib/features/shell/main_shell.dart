@@ -29,6 +29,11 @@ class _MainShellState extends State<MainShell> {
   int _initialSubTab = 0;
   int _approvalReloadKey = 0;
 
+  @override
+  void initState() {
+    super.initState();
+  }
+
   void _switchTab(int index, {int initialTab = 0}) {
     setState(() {
       _currentIndex = index;
@@ -55,8 +60,15 @@ class _MainShellState extends State<MainShell> {
     ProfileScreen(user: widget.user),
   ];
 
-  List<Widget> get _pages =>
-      widget.userRole == UserRole.lecturer ? _lecturerPages : _studentPages;
+  /// Head of Department is "Lecturer+" on mobile (see docs/neocentral-mobile.md
+  /// §2) — render the lecturer page set, not student. Without this, HoD users
+  /// landing on MainShell from AuthGate/login (which passes the real
+  /// appRole) would hit StudentDashboardScreen → 403 from student-only APIs.
+  bool get _isLecturerLike =>
+      widget.userRole == UserRole.lecturer ||
+      widget.userRole == UserRole.headOfDepartment;
+
+  List<Widget> get _pages => _isLecturerLike ? _lecturerPages : _studentPages;
 
   List<NavigationDestination> get _lecturerDestinations => const [
     NavigationDestination(
@@ -106,7 +118,7 @@ class _MainShellState extends State<MainShell> {
 
   @override
   Widget build(BuildContext context) {
-    final destinations = widget.userRole == UserRole.lecturer
+    final destinations = _isLecturerLike
         ? _lecturerDestinations
         : _studentDestinations;
 
