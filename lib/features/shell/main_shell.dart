@@ -3,6 +3,7 @@ import '../../core/constants/app_colors.dart';
 import '../../core/enums/user_role.dart';
 import '../../core/models/auth_models.dart';
 import '../../core/services/fcm_service.dart';
+import '../defence/presentation/lecturer_defence_screen.dart';
 import '../hod/presentation/assign_examiner_screen.dart';
 import '../profile/presentation/profile_screen.dart';
 import '../seminar/presentation/lecturer_seminar_screen.dart';
@@ -55,6 +56,8 @@ class _MainShellState extends State<MainShell> {
   /// defence}/{doc,examiner}.service.js):
   ///   • seminar_examiner_assigned    — any lecturer assigned as examiner
   ///                                    → Seminar Hasil ▸ Menguji Mahasiswa
+  ///   • defence_examiner_assigned    — any lecturer assigned as examiner
+  ///                                    → Sidang TA ▸ Menguji Mahasiswa
   ///   • seminar_need_examiner        — HoD only: doc verified, first assign
   ///   • seminar_examiner_unavailable — HoD only: an examiner rejected
   ///   • defence_need_examiner        — HoD only: defence variant
@@ -73,6 +76,18 @@ class _MainShellState extends State<MainShell> {
         Navigator.of(context).push(
           MaterialPageRoute(
             builder: (_) => LecturerSeminarScreen(
+              user: widget.user,
+              initialTab: 'menguji_mahasiswa',
+            ),
+          ),
+        );
+        return;
+      }
+
+      if (type == 'defence_examiner_assigned') {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => LecturerDefenceScreen(
               user: widget.user,
               initialTab: 'menguji_mahasiswa',
             ),
