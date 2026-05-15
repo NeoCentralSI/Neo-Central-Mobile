@@ -291,24 +291,6 @@ class AppDrawer extends StatelessWidget {
                           );
                         },
                       ),
-
-                    _buildMenuItem(
-                      context,
-                      title: 'Pengumuman',
-                      icon: Icons.campaign_outlined,
-                      isActive: activeRoute == 'pengumuman',
-                      onTap: () {
-                        Navigator.pop(context);
-                        if (activeRoute == 'pengumuman') return;
-
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => AnnouncementScreen(user: user),
-                          ),
-                        );
-                      },
-                    ),
                   ],
               ],
             ),
