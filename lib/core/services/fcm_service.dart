@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -91,8 +91,21 @@ class FcmService {
   /// Use this to navigate to the relevant screen (e.g. switch to Dashboard tab).
   final List<void Function(Map<String, dynamic> data)> _openListeners = [];
 
+  /// The most recent tap payload that arrived with no listeners registered.
+  /// Replayed to the next listener that calls [addOpenListener] so cold-start
+  /// taps (where FCM `getInitialMessage` fires inside AuthGate before any
+  /// shell has been built) are not silently lost.
+  Map<String, dynamic>? _pendingOpenData;
+
   void addOpenListener(void Function(Map<String, dynamic> data) listener) {
     _openListeners.add(listener);
+    final pending = _pendingOpenData;
+    if (pending != null) {
+      _pendingOpenData = null;
+      // Defer one frame so the listener's host widget has finished mounting
+      // before any Navigator.push it triggers.
+      WidgetsBinding.instance.addPostFrameCallback((_) => listener(pending));
+    }
   }
 
   void removeOpenListener(void Function(Map<String, dynamic> data) listener) {
@@ -344,11 +357,16 @@ class FcmService {
     debugPrint('[FCM] Message opened: ${message.data}');
 
     final data = message.data;
-    // Notify open-listeners first so the UI navigates to the right screen
-    for (final listener in List.of(_openListeners)) {
-      listener(data);
+    // If no listener is registered yet (cold-start: AuthGate has called
+    // getInitialMessage before any shell mounted), stash for replay.
+    if (_openListeners.isEmpty) {
+      _pendingOpenData = data;
+    } else {
+      for (final listener in List.of(_openListeners)) {
+        listener(data);
+      }
     }
-    // Then notify data-refresh listeners
+    // Data-refresh listeners always fire (no replay — they just refresh data).
     for (final listener in List.of(_listeners)) {
       listener(data);
     }

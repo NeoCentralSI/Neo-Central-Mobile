@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/enums/user_role.dart';
 import '../../core/models/auth_models.dart';
+import '../../core/services/fcm_service.dart';
+import '../hod/presentation/assign_examiner_screen.dart';
 import '../profile/presentation/profile_screen.dart';
 
 // Import screens - lecturer
@@ -28,10 +30,56 @@ class _MainShellState extends State<MainShell> {
   int _currentIndex = 0;
   int _initialSubTab = 0;
   int _approvalReloadKey = 0;
+  final _fcm = FcmService();
 
   @override
   void initState() {
     super.initState();
+    if (widget.userRole == UserRole.headOfDepartment) {
+      _fcm.addOpenListener(_onHodNotificationOpened);
+    }
+  }
+
+  @override
+  void dispose() {
+    if (widget.userRole == UserRole.headOfDepartment) {
+      _fcm.removeOpenListener(_onHodNotificationOpened);
+    }
+    super.dispose();
+  }
+
+  /// Deep-link from FCM tap into the HoD "Tetapkan Penguji" screen,
+  /// jumping straight to the matching tab.
+  ///
+  /// Notification `type` values (see services/src/services/thesis-{seminar,
+  /// defence}/{doc,examiner}.service.js):
+  ///   • seminar_need_examiner        — doc verified, first assignment
+  ///   • seminar_examiner_unavailable — an examiner rejected, reassign
+  ///   • defence_need_examiner        — same, for defence
+  ///   • defence_examiner_unavailable — same, for defence
+  void _onHodNotificationOpened(Map<String, dynamic> data) {
+    final type = data['type']?.toString();
+    if (type == null || !mounted) return;
+
+    final String tab;
+    if (type == 'seminar_need_examiner' ||
+        type == 'seminar_examiner_unavailable') {
+      tab = 'seminar_hasil';
+    } else if (type == 'defence_need_examiner' ||
+        type == 'defence_examiner_unavailable') {
+      tab = 'sidang_ta';
+    } else {
+      return;
+    }
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => AssignExaminerScreen(
+          user: widget.user,
+          initialTab: tab,
+        ),
+      ),
+    );
   }
 
   void _switchTab(int index, {int initialTab = 0}) {
