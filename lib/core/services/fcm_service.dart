@@ -102,9 +102,12 @@ class FcmService {
     final pending = _pendingOpenData;
     if (pending != null) {
       _pendingOpenData = null;
-      // Defer one frame so the listener's host widget has finished mounting
-      // before any Navigator.push it triggers.
-      WidgetsBinding.instance.addPostFrameCallback((_) => listener(pending));
+      // Defer past the pushReplacement entry animation (≈300 ms) so that the
+      // shell's Navigator.push is not issued while the transition is still
+      // running — Flutter can silently drop a push made mid-transition.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        Future.delayed(const Duration(milliseconds: 400), () => listener(pending));
+      });
     }
   }
 
