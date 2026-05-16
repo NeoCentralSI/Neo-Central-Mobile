@@ -181,6 +181,74 @@ class SeminarApiService {
     return _unwrapMap(res);
   }
 
+  // ═══════════════════════════════════════════════════════════════
+  // STUDENT-FACING ENDPOINTS
+  // ═══════════════════════════════════════════════════════════════
+
+  /// GET /me/overview — registration checklist, milestones, current seminar.
+  Future<Map<String, dynamic>> getStudentOverview() async {
+    final res = await _api.get('/thesis-seminars/me/overview');
+    return _unwrapMap(res);
+  }
+
+  /// GET /me/attendance — student's seminar attendance history.
+  Future<Map<String, dynamic>> getStudentAttendanceHistory() async {
+    final res = await _api.get('/thesis-seminars/me/attendance');
+    return _unwrapMap(res);
+  }
+
+  /// GET /me/history — student's previous failed/cancelled seminar attempts.
+  Future<List<Map<String, dynamic>>> getStudentSeminarHistory() async {
+    final res = await _api.get('/thesis-seminars/me/history');
+    return _unwrapList(res);
+  }
+
+  /// GET /announcements — all announced seminars (for browsing as audience).
+  Future<List<Map<String, dynamic>>> getStudentAnnouncements() async {
+    final res = await _api.get('/thesis-seminars/announcements');
+    return _unwrapList(res);
+  }
+
+  /// GET /documents/types — list of expected seminar document types.
+  Future<List<Map<String, dynamic>>> getSeminarDocumentTypes() async {
+    final res = await _api.get('/thesis-seminars/documents/types');
+    return _unwrapList(res);
+  }
+
+  /// POST /:id/documents — multipart upload by student.
+  /// [documentTypeName] identifies which document slot to fill.
+  Future<Map<String, dynamic>> uploadStudentDocument(
+    String seminarId, {
+    required String filePath,
+    required String fileName,
+    required String documentTypeName,
+  }) async {
+    final res = await _api.postMultipart(
+      '/thesis-seminars/$seminarId/documents',
+      fields: {'documentTypeName': documentTypeName},
+      filePath: filePath,
+      fileName: fileName,
+      fileField: 'file',
+    );
+    return _unwrapMap(res);
+  }
+
+  /// POST /:id/audience-register — student registers as audience for another's seminar.
+  Future<Map<String, dynamic>> registerAsAudience(String seminarId) async {
+    final res = await _api.post(
+      '/thesis-seminars/$seminarId/audience-register',
+    );
+    return _unwrapMap(res);
+  }
+
+  /// DELETE /:id/audience-register — student unregisters from audience.
+  Future<Map<String, dynamic>> unregisterFromAudience(String seminarId) async {
+    final res = await _api.delete(
+      '/thesis-seminars/$seminarId/audience-register',
+    );
+    return _unwrapMap(res);
+  }
+
   // ─── Helpers ────────────────────────────────────────────────────
 
   // Backend returns either a bare list or `{ data: [...] }`.
