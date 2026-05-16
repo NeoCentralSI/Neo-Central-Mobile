@@ -155,8 +155,9 @@ class _SeminarDetailScreenState extends State<SeminarDetailScreen>
       ),
     ];
 
+    // Penilaian visible to: presenter, supervisor, examiner, and HoD.
     final showAssessment = (ongoing || finalized) &&
-        (isSupervisor || isExaminer || isPresenter || finalized);
+        (isPresenter || isSupervisor || isExaminer || isHod);
     if (showAssessment) {
       tabs.add(_TabSpec(
         label: 'Penilaian',
@@ -169,9 +170,8 @@ class _SeminarDetailScreenState extends State<SeminarDetailScreen>
       ));
     }
 
-    // Peserta visible to: presenter, supervisor, examiner, and HoD.
-    final showAudience = (ongoing || finalized) &&
-        (isPresenter || isSupervisor || isExaminer || isHod);
+    // Peserta visible to anyone when ongoing/finalized (audience list is public).
+    final showAudience = ongoing || finalized;
     if (showAudience) {
       tabs.add(_TabSpec(
         label: 'Peserta',
@@ -371,12 +371,12 @@ class _SeminarDetailScreenState extends State<SeminarDetailScreen>
             const SizedBox(height: 8),
             TabBar(
               controller: _tabController,
-              isScrollable: true,
               indicatorColor: Colors.white,
               indicatorWeight: 3,
               labelColor: Colors.white,
               unselectedLabelColor: Colors.white.withValues(alpha: 0.75),
               labelStyle: const TextStyle(fontWeight: FontWeight.w700),
+              labelPadding: const EdgeInsets.symmetric(horizontal: 4),
               tabs: [for (final t in tabs) Tab(text: t.label)],
             ),
           ] else

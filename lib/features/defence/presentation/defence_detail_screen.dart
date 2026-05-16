@@ -338,12 +338,12 @@ class _DefenceDetailScreenState extends State<DefenceDetailScreen>
             const SizedBox(height: 8),
             TabBar(
               controller: _tabController,
-              isScrollable: true,
               indicatorColor: Colors.white,
               indicatorWeight: 3,
               labelColor: Colors.white,
               unselectedLabelColor: Colors.white.withValues(alpha: 0.75),
               labelStyle: const TextStyle(fontWeight: FontWeight.w700),
+              labelPadding: const EdgeInsets.symmetric(horizontal: 4),
               tabs: [for (final t in tabs) Tab(text: t.label)],
             ),
           ] else
