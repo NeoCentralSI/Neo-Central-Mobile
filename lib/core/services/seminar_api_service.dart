@@ -233,8 +233,12 @@ class SeminarApiService {
     return _unwrapList(res);
   }
 
-  /// GET /announcements — all announced seminars (for browsing as audience).
-  Future<List<Map<String, dynamic>>> getStudentAnnouncements() async {
+  /// GET /announcements — public list of announced seminars.
+  ///
+  /// Endpoint is now ALL_ROLES on the backend; students get audience context
+  /// (isOwn / isRegistered / isPresent), other roles get the same payload
+  /// with those flags set to `false` and an empty `audiences` view.
+  Future<List<Map<String, dynamic>>> getSeminarAnnouncements() async {
     final res = await _api.get('/thesis-seminars/announcements');
     return _unwrapList(res);
   }

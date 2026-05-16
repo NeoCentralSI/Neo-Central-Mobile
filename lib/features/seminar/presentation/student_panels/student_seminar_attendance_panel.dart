@@ -257,36 +257,41 @@ class _AttendanceCard extends StatelessWidget {
   const _AttendanceCard({required this.row, required this.onTap});
 
   (String, BadgeVariant) _statusOf() {
+    // Approved by supervisor → strictly "Hadir".
     if (row['isPresent'] == true) {
       return ('Hadir', BadgeVariant.success);
     }
-    final dateStr = row['date']?.toString();
-    final endStr = row['seminarEndTime']?.toString();
-    DateTime? deadline;
-    try {
-      if (dateStr != null && dateStr.isNotEmpty) {
-        final d = DateTime.parse(dateStr);
-        if (endStr != null && endStr.isNotEmpty) {
-          final t = DateTime.parse(endStr).toUtc();
-          deadline = DateTime(d.year, d.month, d.day, t.hour, t.minute);
-        } else {
-          deadline = DateTime(d.year, d.month, d.day, 23, 59);
-        }
-      }
-    } catch (_) {}
+    // Otherwise, if the seminar's result is finalised and either no end-time
+    // deadline is available or the deadline has passed, the student missed
+    // the verification window → "Tidak Hadir". Anything before that or with
+    // an in-flight result is "Menunggu Verifikasi".
     final status = (row['seminarStatus'] ?? '').toString();
-    final finalized = const ['passed', 'passed_with_revision', 'failed']
+    final isFinalized = const ['passed', 'passed_with_revision', 'failed']
             .contains(status) ||
         (row['seminarResultFinalizedAt'] ?? '').toString().isNotEmpty;
-    final now = DateTime.now();
 
-    if (deadline == null || now.isBefore(deadline)) {
-      return ('Menunggu Verifikasi', BadgeVariant.warning);
-    }
-    if (finalized && !now.isBefore(deadline)) {
+    final deadline = _seminarEndDateTime();
+    final now = DateTime.now();
+    if (isFinalized && (deadline == null || !now.isBefore(deadline))) {
       return ('Tidak Hadir', BadgeVariant.destructive);
     }
     return ('Menunggu Verifikasi', BadgeVariant.warning);
+  }
+
+  DateTime? _seminarEndDateTime() {
+    final dateStr = row['date']?.toString();
+    if (dateStr == null || dateStr.isEmpty) return null;
+    try {
+      final d = DateTime.parse(dateStr).toLocal();
+      final endStr = row['seminarEndTime']?.toString();
+      if (endStr != null && endStr.isNotEmpty) {
+        final t = DateTime.parse(endStr).toUtc();
+        return DateTime(d.year, d.month, d.day, t.hour, t.minute);
+      }
+      return DateTime(d.year, d.month, d.day, 23, 59, 59);
+    } catch (_) {
+      return null;
+    }
   }
 
   @override

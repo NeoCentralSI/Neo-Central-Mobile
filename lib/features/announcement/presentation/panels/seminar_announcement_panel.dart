@@ -11,18 +11,17 @@ import '../../../seminar/presentation/seminar_detail_screen.dart'
 
 /// Pengumuman Seminar Hasil panel.
 ///
-/// Student: list of announced seminars (past registration deadline) with
-/// search, register / cancel registration, and tap-to-open detail.
-/// Lecturer / HoD: backend endpoint is MAHASISWA-only, so we render a
-/// friendly notice instead of issuing the request.
+/// Backend endpoint is now public (ALL_ROLES), so everyone sees the same
+/// board. Audience self-registration (Daftar / Batalkan) is gated on
+/// [canManageAudience] — only true for students.
 class SeminarAnnouncementPanel extends StatefulWidget {
   final UserModel? user;
-  final bool isStudent;
+  final bool canManageAudience;
   final void Function(String seminarId) onOpenSeminar;
 
   const SeminarAnnouncementPanel({
     super.key,
-    required this.isStudent,
+    required this.canManageAudience,
     required this.onOpenSeminar,
     this.user,
   });
@@ -49,7 +48,7 @@ class _SeminarAnnouncementPanelState extends State<SeminarAnnouncementPanel>
   @override
   void initState() {
     super.initState();
-    if (widget.isStudent) _fetch();
+    _fetch();
   }
 
   @override
@@ -65,7 +64,7 @@ class _SeminarAnnouncementPanelState extends State<SeminarAnnouncementPanel>
       _error = null;
     });
     try {
-      final res = await _api.getStudentAnnouncements();
+      final res = await _api.getSeminarAnnouncements();
       if (!mounted) return;
       setState(() {
         _items = res;
@@ -152,39 +151,6 @@ class _SeminarAnnouncementPanelState extends State<SeminarAnnouncementPanel>
   Widget build(BuildContext context) {
     super.build(context);
 
-    if (!widget.isStudent) {
-      return Padding(
-        padding: const EdgeInsets.all(AppSpacing.pagePadding),
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                Icons.lock_outline,
-                size: 56,
-                color: AppColors.textTertiary.withValues(alpha: 0.6),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'Pendaftaran Seminar Khusus Mahasiswa',
-                style: AppTextStyles.h4,
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 6),
-              Text(
-                'Pengumuman pendaftaran seminar hasil hanya tersedia untuk '
-                'akun mahasiswa. Anda tetap dapat melihat detail seminar '
-                'melalui menu Seminar Hasil.',
-                style: AppTextStyles.bodySmall
-                    .copyWith(color: AppColors.textSecondary),
-                textAlign: TextAlign.center,
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -219,6 +185,7 @@ class _SeminarAnnouncementPanelState extends State<SeminarAnnouncementPanel>
                       return _DateGroup(
                         date: entry.date,
                         items: entry.items,
+                        canManageAudience: widget.canManageAudience,
                         onTap: (s) =>
                             widget.onOpenSeminar(s['id'].toString()),
                         onRegister: _confirmRegister,
@@ -366,6 +333,7 @@ class _DateGroupEntry {
 class _DateGroup extends StatelessWidget {
   final String date;
   final List<Map<String, dynamic>> items;
+  final bool canManageAudience;
   final void Function(Map<String, dynamic>) onTap;
   final void Function(Map<String, dynamic>) onRegister;
   final void Function(Map<String, dynamic>) onCancel;
@@ -375,6 +343,7 @@ class _DateGroup extends StatelessWidget {
   const _DateGroup({
     required this.date,
     required this.items,
+    required this.canManageAudience,
     required this.onTap,
     required this.onRegister,
     required this.onCancel,
@@ -432,6 +401,7 @@ class _DateGroup extends StatelessWidget {
                     Container(height: 1, color: AppColors.divider),
                   _SeminarCard(
                     seminar: items[i],
+                    canManageAudience: canManageAudience,
                     onTap: () => onTap(items[i]),
                     onRegister: () => onRegister(items[i]),
                     onCancel: () => onCancel(items[i]),
@@ -470,6 +440,7 @@ class _DateGroup extends StatelessWidget {
 
 class _SeminarCard extends StatelessWidget {
   final Map<String, dynamic> seminar;
+  final bool canManageAudience;
   final VoidCallback onTap;
   final VoidCallback onRegister;
   final VoidCallback onCancel;
@@ -478,6 +449,7 @@ class _SeminarCard extends StatelessWidget {
 
   const _SeminarCard({
     required this.seminar,
+    required this.canManageAudience,
     required this.onTap,
     required this.onRegister,
     required this.onCancel,
@@ -492,8 +464,12 @@ class _SeminarCard extends StatelessWidget {
     final isPast = seminar['isPast'] == true;
     final isRegistered = seminar['isRegistered'] == true;
     final isPresent = seminar['isPresent'] == true;
+    // Either the status is in a final bucket, or the supervisor finalized
+    // the result (resultFinalizedAt set) — students who never got verified
+    // when the result is finalized should read as "Tidak Hadir".
     final isFinalizedResult = const ['passed', 'passed_with_revision', 'failed']
-        .contains(status);
+            .contains(status) ||
+        (seminar['resultFinalizedAt'] ?? '').toString().isNotEmpty;
 
     final examiners = ((seminar['examiners'] as List?) ?? const [])
         .whereType<Map>()
@@ -526,10 +502,16 @@ class _SeminarCard extends StatelessWidget {
       isFinalizedResult: isFinalizedResult,
     );
 
-    final showActionRegister =
-        !isOwn && status == 'scheduled' && !isPast && !isRegistered;
-    final showActionCancel =
-        !isOwn && status == 'scheduled' && !isPast && isRegistered;
+    final showActionRegister = canManageAudience &&
+        !isOwn &&
+        status == 'scheduled' &&
+        !isPast &&
+        !isRegistered;
+    final showActionCancel = canManageAudience &&
+        !isOwn &&
+        status == 'scheduled' &&
+        !isPast &&
+        isRegistered;
 
     return InkWell(
       onTap: onTap,
@@ -628,7 +610,8 @@ class _SeminarCard extends StatelessWidget {
             Row(
               children: [
                 Expanded(
-                  child: !(isOwn && !isPast && !isRegistered)
+                  child: canManageAudience &&
+                          !(isOwn && !isPast && !isRegistered)
                       ? Container(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 8, vertical: 4),
@@ -713,7 +696,10 @@ class _SeminarCard extends StatelessWidget {
                       ),
                     ),
                   )
-                else if (isPast && !isRegistered && !isOwn)
+                else if (canManageAudience &&
+                    isPast &&
+                    !isRegistered &&
+                    !isOwn)
                   Text(
                     'Selesai',
                     style: AppTextStyles.caption.copyWith(

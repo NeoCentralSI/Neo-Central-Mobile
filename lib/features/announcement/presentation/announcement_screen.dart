@@ -14,8 +14,9 @@ import 'panels/yudisium_announcement_panel.dart';
 ///
 /// Two tabs (mirroring the web `ThesisSeminarAnnouncement.tsx` /
 /// `YudisiumAnnouncement.tsx`):
-///   • Seminar Hasil — student can register / cancel registration; lecturer
-///                     sees a friendly notice (endpoint is MAHASISWA-only).
+///   • Seminar Hasil — public list of announced seminars; only students can
+///                     register / cancel registration (other roles see the
+///                     same board in read-only mode).
 ///   • Yudisium      — public list of yudisium events with their participants.
 class AnnouncementScreen extends StatefulWidget {
   final UserModel? user;
@@ -43,7 +44,7 @@ class _AnnouncementScreenState extends State<AnnouncementScreen>
     super.dispose();
   }
 
-  bool get _isStudent => widget.user?.appRole == UserRole.student;
+  bool get _canManageAudience => widget.user?.appRole == UserRole.student;
 
   void _openSeminarDetail(String seminarId) {
     Navigator.of(context).push(MaterialPageRoute(
@@ -68,7 +69,7 @@ class _AnnouncementScreenState extends State<AnnouncementScreen>
                 children: [
                   SeminarAnnouncementPanel(
                     user: widget.user,
-                    isStudent: _isStudent,
+                    canManageAudience: _canManageAudience,
                     onOpenSeminar: _openSeminarDetail,
                   ),
                   YudisiumAnnouncementPanel(user: widget.user),
