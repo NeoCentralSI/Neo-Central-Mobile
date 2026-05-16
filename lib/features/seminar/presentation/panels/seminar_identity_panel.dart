@@ -17,9 +17,24 @@ class SeminarIdentityPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final student = (detail['student'] as Map?) ?? const {};
     final thesis = (detail['thesis'] as Map?) ?? const {};
-    final supervisors = ((detail['supervisors'] as List?) ?? const [])
+    // Supervisors may sit at the top level (lecturer-facing detail) OR inside
+    // thesis.supervisors (student-facing detail). Normalize both shapes: each
+    // entry exposes 'role' + a name field (some shapes use 'name', others
+    // 'lecturerName').
+    final rawSupervisors = (detail['supervisors'] as List?) ??
+        (thesis['supervisors'] as List?) ??
+        const [];
+    final supervisors = rawSupervisors
         .whereType<Map>()
-        .map((m) => Map<String, dynamic>.from(m))
+        .map((m) {
+          final src = Map<String, dynamic>.from(m);
+          return {
+            'role': (src['role'] ?? '').toString(),
+            'name':
+                (src['name'] ?? src['lecturerName'] ?? '-').toString(),
+            'lecturerId': src['lecturerId'],
+          };
+        })
         .toList()
       ..sort((a, b) =>
           (a['role'] ?? '').toString().compareTo((b['role'] ?? '').toString()));

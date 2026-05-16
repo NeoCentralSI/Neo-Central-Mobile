@@ -116,24 +116,10 @@ class _StudentSeminarScreenState extends State<StudentSeminarScreen>
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      'Seminar Hasil',
-                      style: AppTextStyles.h1
-                          .copyWith(color: Colors.white, fontSize: 20),
-                    ),
-                    Text(
-                      'Pantau status, unggah dokumen, lihat kehadiran',
-                      style: AppTextStyles.caption.copyWith(
-                        color: Colors.white.withValues(alpha: 0.85),
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
+                child: Text(
+                  'Seminar Hasil',
+                  style: AppTextStyles.h1
+                      .copyWith(color: Colors.white, fontSize: 20),
                 ),
               ),
             ],

@@ -111,11 +111,10 @@ class _StudentSeminarOverviewPanelState
 
     if (picked == null || picked.path == null) return;
 
-    final seminarId = _overview['seminar']?['id']?.toString();
-    if (seminarId == null) {
-      _toast('Seminar belum terdaftar.', isError: true);
-      return;
-    }
+    // Use existing seminar ID if available, otherwise sentinel "active" so the
+    // backend auto-creates the seminar on first upload (matches web flow).
+    final seminarId =
+        _overview['seminar']?['id']?.toString() ?? 'active';
 
     setState(() => _uploadingDocType = docTypeName);
     try {
@@ -730,10 +729,6 @@ class _ChecklistCard extends StatelessWidget {
     final pembimbing = checklist['pembimbing'] is Map
         ? Map<String, dynamic>.from(checklist['pembimbing'] as Map)
         : const <String, dynamic>{};
-    final supervisors = ((pembimbing['supervisors'] as List?) ?? const [])
-        .whereType<Map>()
-        .map((m) => Map<String, dynamic>.from(m))
-        .toList();
 
     return AppCard(
       padding: const EdgeInsets.all(16),
@@ -766,7 +761,6 @@ class _ChecklistCard extends StatelessWidget {
           _ChecklistRow(
             label: (pembimbing['label'] ?? '-').toString(),
             met: pembimbing['met'] == true,
-            supervisors: supervisors,
           ),
         ],
       ),
@@ -779,14 +773,12 @@ class _ChecklistRow extends StatelessWidget {
   final bool met;
   final int? current;
   final int? required;
-  final List<Map<String, dynamic>>? supervisors;
 
   const _ChecklistRow({
     required this.label,
     required this.met,
     this.current,
     this.required,
-    this.supervisors,
   });
 
   @override
@@ -812,83 +804,49 @@ class _ChecklistRow extends StatelessWidget {
               : AppColors.border,
         ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Row(
-            children: [
-              Container(
-                width: 22,
-                height: 22,
-                decoration: BoxDecoration(
-                  color: met ? AppColors.successDark : AppColors.surface,
-                  border: Border.all(
-                    color: met ? AppColors.successDark : AppColors.divider,
-                    width: 1.5,
-                  ),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  met ? Icons.check : Icons.schedule,
-                  size: 11,
-                  color: met ? Colors.white : AppColors.textTertiary,
-                ),
+          Container(
+            width: 22,
+            height: 22,
+            decoration: BoxDecoration(
+              color: met ? AppColors.successDark : AppColors.surface,
+              border: Border.all(
+                color: met ? AppColors.successDark : AppColors.divider,
+                width: 1.5,
               ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      label,
-                      style: AppTextStyles.bodySmall.copyWith(
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                    Text(
-                      statusText,
-                      style: AppTextStyles.caption.copyWith(
-                        color: met
-                            ? AppColors.successDark
-                            : AppColors.textSecondary,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              met ? Icons.check : Icons.schedule,
+              size: 11,
+              color: met ? Colors.white : AppColors.textTertiary,
+            ),
           ),
-          if (supervisors != null && supervisors!.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            for (final s in supervisors!)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 2),
-                child: Row(
-                  children: [
-                    Icon(
-                      s['ready'] == true
-                          ? Icons.check_circle
-                          : Icons.radio_button_unchecked,
-                      size: 14,
-                      color: s['ready'] == true
-                          ? AppColors.successDark
-                          : AppColors.textTertiary,
-                    ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        '${s['role'] ?? '-'} · ${s['name'] ?? '-'}',
-                        style: AppTextStyles.caption.copyWith(
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                    ),
-                  ],
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: AppTextStyles.bodySmall.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary,
+                  ),
                 ),
-              ),
-          ],
+                Text(
+                  statusText,
+                  style: AppTextStyles.caption.copyWith(
+                    color: met
+                        ? AppColors.successDark
+                        : AppColors.textSecondary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );

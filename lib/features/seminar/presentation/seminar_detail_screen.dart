@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_spacing.dart';
 import '../../../core/constants/app_text_styles.dart';
+import '../../../core/enums/user_role.dart';
 import '../../../core/models/auth_models.dart';
 import '../../../core/services/seminar_api_service.dart';
 import '../../../shared/widgets/shared_widgets.dart';
@@ -122,11 +123,29 @@ class _SeminarDetailScreenState extends State<SeminarDetailScreen>
     return examiners.whereType<Map>().any((e) => e['lecturerId'] == lecturerId);
   }
 
+  bool _isUserPresenter(Map<String, dynamic> d) {
+    final studentId = widget.user?.student?.id;
+    if (studentId == null) return false;
+    final detailStudent = d['student'];
+    if (detailStudent is Map && detailStudent['id'] == studentId) return true;
+    // Fallback by NIM match
+    final myNim = widget.user?.identityNumber;
+    if (myNim != null && detailStudent is Map && detailStudent['nim'] == myNim) {
+      return true;
+    }
+    return false;
+  }
+
+  bool get _isUserHod =>
+      widget.user?.appRole == UserRole.headOfDepartment;
+
   List<_TabSpec> _computeTabs(Map<String, dynamic> d) {
     final ongoing = _isOngoing(d);
     final finalized = _isFinalized(d);
     final isSupervisor = _isUserSupervisor(d);
     final isExaminer = _isUserExaminer(d);
+    final isPresenter = _isUserPresenter(d);
+    final isHod = _isUserHod;
     final status = (d['status'] ?? '').toString();
 
     final tabs = <_TabSpec>[
@@ -137,7 +156,7 @@ class _SeminarDetailScreenState extends State<SeminarDetailScreen>
     ];
 
     final showAssessment = (ongoing || finalized) &&
-        (isSupervisor || isExaminer || finalized);
+        (isSupervisor || isExaminer || isPresenter || finalized);
     if (showAssessment) {
       tabs.add(_TabSpec(
         label: 'Penilaian',
@@ -150,7 +169,9 @@ class _SeminarDetailScreenState extends State<SeminarDetailScreen>
       ));
     }
 
-    final showAudience = ongoing || finalized;
+    // Peserta visible to: presenter, supervisor, examiner, and HoD.
+    final showAudience = (ongoing || finalized) &&
+        (isPresenter || isSupervisor || isExaminer || isHod);
     if (showAudience) {
       tabs.add(_TabSpec(
         label: 'Peserta',
@@ -162,7 +183,9 @@ class _SeminarDetailScreenState extends State<SeminarDetailScreen>
       ));
     }
 
-    final showRevisions = isSupervisor && status == 'passed_with_revision';
+    // Revisi: supervisor approves; presenter creates/edits/submits.
+    final showRevisions =
+        (isSupervisor || isPresenter) && status == 'passed_with_revision';
     if (showRevisions) {
       tabs.add(_TabSpec(
         label: 'Revisi',

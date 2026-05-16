@@ -119,23 +119,6 @@ class _StudentSeminarAttendancePanelState
             radius: 14,
             child: Row(
               children: [
-                Container(
-                  width: 38,
-                  height: 38,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: met
-                        ? AppColors.successLight
-                        : AppColors.warningLight,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(
-                    met ? Icons.verified_outlined : Icons.timelapse,
-                    color: met ? AppColors.successDark : AppColors.warningDark,
-                    size: 18,
-                  ),
-                ),
-                const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,

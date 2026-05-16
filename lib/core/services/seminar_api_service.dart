@@ -165,6 +165,36 @@ class SeminarApiService {
     return _unwrapMap(res);
   }
 
+  /// POST /:id/revisions — student creates a new revision item.
+  Future<Map<String, dynamic>> createRevision(
+    String seminarId, {
+    required String seminarExaminerId,
+    required String description,
+    String? revisionAction,
+  }) async {
+    final res = await _api.post(
+      '/thesis-seminars/$seminarId/revisions',
+      body: {
+        'seminarExaminerId': seminarExaminerId,
+        'description': description.trim(),
+        if (revisionAction != null && revisionAction.trim().isNotEmpty)
+          'revisionAction': revisionAction.trim(),
+      },
+    );
+    return _unwrapMap(res);
+  }
+
+  /// DELETE /:id/revisions/:revisionId — student deletes an unsubmitted item.
+  Future<Map<String, dynamic>> deleteRevision(
+    String seminarId,
+    String revisionId,
+  ) async {
+    final res = await _api.delete(
+      '/thesis-seminars/$seminarId/revisions/$revisionId',
+    );
+    return _unwrapMap(res);
+  }
+
   /// POST /:id/revisions/finalize — supervisor finalises the revision board.
   Future<Map<String, dynamic>> finalizeRevisions(String seminarId) async {
     final res = await _api.post(
