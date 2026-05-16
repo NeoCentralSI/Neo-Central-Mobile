@@ -69,22 +69,59 @@ class _YudisiumAnnouncementPanelState
     }
   }
 
+  /// Mirrors the filter shape on the web `YudisiumAnnouncement.tsx`:
+  ///   • if the event name matches the query, keep all participants;
+  ///   • otherwise narrow participants down to those that match by
+  ///     studentName / studentNim / thesisTitle;
+  ///   • drop the event entirely when nothing matches.
+  /// Events are sorted by eventDate desc (newest first), matching the web.
   List<Map<String, dynamic>> get _filtered {
     final q = _searchCtrl.text.trim().toLowerCase();
-    if (q.isEmpty) return _items;
-    return _items.where((y) {
-      final name = (y['name'] ?? '').toString().toLowerCase();
-      if (name.contains(q)) return true;
+    final scoped = _items.map((y) {
       final participants = ((y['participants'] as List?) ?? const [])
           .whereType<Map>()
+          .map((m) => Map<String, dynamic>.from(m))
           .toList();
-      return participants.any((p) {
-        final pn = (p['studentName'] ?? '').toString().toLowerCase();
-        final nim = (p['studentNim'] ?? '').toString().toLowerCase();
-        final title = (p['thesisTitle'] ?? '').toString().toLowerCase();
-        return pn.contains(q) || nim.contains(q) || title.contains(q);
-      });
+      if (q.isEmpty) return {...y, 'participants': participants};
+
+      final eventMatches =
+          (y['name'] ?? '').toString().toLowerCase().contains(q);
+      final filteredParticipants = eventMatches
+          ? participants
+          : participants.where((p) {
+              final pn = (p['studentName'] ?? '').toString().toLowerCase();
+              final nim = (p['studentNim'] ?? '').toString().toLowerCase();
+              final title = (p['thesisTitle'] ?? '').toString().toLowerCase();
+              return pn.contains(q) || nim.contains(q) || title.contains(q);
+            }).toList();
+      return {...y, 'participants': filteredParticipants};
+    }).where((y) {
+      if (q.isEmpty) return true;
+      final hasParticipants =
+          ((y['participants'] as List?) ?? const []).isNotEmpty;
+      final eventMatches =
+          (y['name'] ?? '').toString().toLowerCase().contains(q);
+      return eventMatches || hasParticipants;
     }).toList();
+
+    scoped.sort((a, b) {
+      final at = _parseDate(a['eventDate']?.toString());
+      final bt = _parseDate(b['eventDate']?.toString());
+      if (at == null && bt == null) return 0;
+      if (at == null) return 1;
+      if (bt == null) return -1;
+      return bt.compareTo(at);
+    });
+    return scoped;
+  }
+
+  DateTime? _parseDate(String? iso) {
+    if (iso == null || iso.isEmpty) return null;
+    try {
+      return DateTime.parse(iso);
+    } catch (_) {
+      return null;
+    }
   }
 
   @override
@@ -204,7 +241,9 @@ class _EventCard extends StatefulWidget {
 }
 
 class _EventCardState extends State<_EventCard> {
+  static const _initialParticipantLimit = 10;
   bool _expanded = true;
+  bool _showAllParticipants = false;
 
   @override
   Widget build(BuildContext context) {
@@ -213,6 +252,10 @@ class _EventCardState extends State<_EventCard> {
         .whereType<Map>()
         .map((m) => Map<String, dynamic>.from(m))
         .toList();
+    final hasOverflow = participants.length > _initialParticipantLimit;
+    final visibleParticipants = !_showAllParticipants && hasOverflow
+        ? participants.take(_initialParticipantLimit).toList()
+        : participants;
     final room = item['room'] is Map
         ? Map<String, dynamic>.from(item['room'] as Map)
         : null;
@@ -295,15 +338,52 @@ class _EventCardState extends State<_EventCard> {
                   ),
                 ),
               )
-            else
-              for (var i = 0; i < participants.length; i++) ...[
+            else ...[
+              for (var i = 0; i < visibleParticipants.length; i++) ...[
                 if (i > 0)
                   Container(height: 1, color: AppColors.divider),
                 _ParticipantRow(
                   index: i + 1,
-                  participant: participants[i],
+                  participant: visibleParticipants[i],
                 ),
               ],
+              if (hasOverflow)
+                InkWell(
+                  onTap: () => setState(
+                      () => _showAllParticipants = !_showAllParticipants),
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      border:
+                          Border(top: BorderSide(color: AppColors.divider)),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          _showAllParticipants
+                              ? Icons.unfold_less
+                              : Icons.unfold_more,
+                          size: 14,
+                          color: AppColors.primaryDark,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          _showAllParticipants
+                              ? 'Sembunyikan ${participants.length - _initialParticipantLimit} peserta'
+                              : 'Lihat semua ${participants.length} peserta',
+                          style: AppTextStyles.caption.copyWith(
+                            color: AppColors.primaryDark,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
             if (notes.isNotEmpty)
               Container(
                 width: double.infinity,
