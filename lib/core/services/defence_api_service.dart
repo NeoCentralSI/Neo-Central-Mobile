@@ -117,10 +117,18 @@ class DefenceApiService {
     String defenceId,
     String revisionId, {
     required String action,
+    String? description,
+    String? revisionAction,
   }) async {
     await _api.patch(
       '/thesis-defences/$defenceId/revisions/$revisionId',
-      body: {'action': action},
+      body: {
+        'action': action,
+        if (description != null && description.trim().isNotEmpty)
+          'description': description.trim(),
+        if (revisionAction != null && revisionAction.trim().isNotEmpty)
+          'revisionAction': revisionAction.trim(),
+      },
     );
   }
 
@@ -130,6 +138,90 @@ class DefenceApiService {
 
   Future<void> unfinalizeDefenceRevisions(String defenceId) async {
     await _api.post('/thesis-defences/$defenceId/revisions/unfinalize', body: {});
+  }
+
+  // ── Student-facing endpoints ─────────────────────────────────
+
+  /// GET /me/overview — registration checklist, milestones, current defence.
+  Future<Map<String, dynamic>> getStudentDefenceOverview() async {
+    final res = await _api.get('/thesis-defences/me/overview');
+    return _unwrapMap(res);
+  }
+
+  /// GET /me/history — student's failed/cancelled defence attempts.
+  Future<List<Map<String, dynamic>>> getStudentDefenceHistory() async {
+    final res = await _api.get('/thesis-defences/me/history');
+    return _unwrapList(res);
+  }
+
+  /// GET /documents/types — list of expected defence document types.
+  Future<List<Map<String, dynamic>>> getDefenceDocumentTypes() async {
+    final res = await _api.get('/thesis-defences/documents/types');
+    return _unwrapList(res);
+  }
+
+  /// POST /:id/documents — multipart upload by student.
+  /// Pass `"active"` as [defenceId] when the defence has not been created yet
+  /// (backend will auto-create on first upload, matching the web flow).
+  Future<Map<String, dynamic>> uploadStudentDocument(
+    String defenceId, {
+    required String filePath,
+    required String fileName,
+    required String documentTypeName,
+  }) async {
+    final res = await _api.postMultipart(
+      '/thesis-defences/$defenceId/documents',
+      fields: {'documentTypeName': documentTypeName},
+      filePath: filePath,
+      fileName: fileName,
+      fileField: 'file',
+    );
+    if (res is Map<String, dynamic>) {
+      final data = res['data'];
+      if (data is Map) return Map<String, dynamic>.from(data);
+      return Map<String, dynamic>.from(res);
+    }
+    return const {};
+  }
+
+  /// POST /:id/revisions — student creates a new defence revision item.
+  Future<Map<String, dynamic>> createDefenceRevision(
+    String defenceId, {
+    required String defenceExaminerId,
+    required String description,
+    String? revisionAction,
+  }) async {
+    final res = await _api.post(
+      '/thesis-defences/$defenceId/revisions',
+      body: {
+        'defenceExaminerId': defenceExaminerId,
+        'description': description.trim(),
+        if (revisionAction != null && revisionAction.trim().isNotEmpty)
+          'revisionAction': revisionAction.trim(),
+      },
+    );
+    if (res is Map<String, dynamic>) {
+      final data = res['data'];
+      if (data is Map) return Map<String, dynamic>.from(data);
+      return Map<String, dynamic>.from(res);
+    }
+    return const {};
+  }
+
+  /// DELETE /:id/revisions/:revisionId — student deletes a revision item.
+  Future<Map<String, dynamic>> deleteDefenceRevision(
+    String defenceId,
+    String revisionId,
+  ) async {
+    final res = await _api.delete(
+      '/thesis-defences/$defenceId/revisions/$revisionId',
+    );
+    if (res is Map<String, dynamic>) {
+      final data = res['data'];
+      if (data is Map) return Map<String, dynamic>.from(data);
+      return Map<String, dynamic>.from(res);
+    }
+    return const {};
   }
 
   // ── Examiner assignment respond ──────────────────────────────

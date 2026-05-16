@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_spacing.dart';
 import '../../../core/constants/app_text_styles.dart';
+import '../../../core/enums/user_role.dart';
 import '../../../core/models/auth_models.dart';
 import '../../../core/services/defence_api_service.dart';
 import '../../../shared/widgets/shared_widgets.dart';
@@ -124,11 +125,32 @@ class _DefenceDetailScreenState extends State<DefenceDetailScreen>
         .any((e) => e['lecturerId'] == lecturerId);
   }
 
+  bool _isUserPresenter(Map<String, dynamic> d) {
+    // Defence detail returns `student: { name, nim }` (no `id`), so match by NIM.
+    final myNim = widget.user?.identityNumber;
+    final detailStudent = d['student'];
+    if (myNim != null && detailStudent is Map && detailStudent['nim'] == myNim) {
+      return true;
+    }
+    final studentId = widget.user?.student?.id;
+    if (studentId != null &&
+        detailStudent is Map &&
+        detailStudent['id'] == studentId) {
+      return true;
+    }
+    return false;
+  }
+
+  bool get _isUserHod =>
+      widget.user?.appRole == UserRole.headOfDepartment;
+
   List<_TabSpec> _computeTabs(Map<String, dynamic> d) {
     final ongoing = _isOngoing(d);
     final finalized = _isFinalized(d);
     final isSupervisor = _isUserSupervisor(d);
     final isExaminer = _isUserExaminer(d);
+    final isPresenter = _isUserPresenter(d);
+    final isHod = _isUserHod;
     final status = (d['status'] ?? '').toString();
 
     final tabs = <_TabSpec>[
@@ -138,8 +160,9 @@ class _DefenceDetailScreenState extends State<DefenceDetailScreen>
       ),
     ];
 
+    // Penilaian visible to presenter, supervisor, examiner, and HoD only.
     final showAssessment = (ongoing || finalized) &&
-        (isSupervisor || isExaminer || finalized);
+        (isPresenter || isSupervisor || isExaminer || isHod);
     if (showAssessment) {
       tabs.add(_TabSpec(
         label: 'Penilaian',
@@ -152,7 +175,9 @@ class _DefenceDetailScreenState extends State<DefenceDetailScreen>
       ));
     }
 
-    final showRevisions = isSupervisor && status == 'passed_with_revision';
+    // Revisi: supervisor approves; presenter creates / edits / submits.
+    final showRevisions =
+        (isSupervisor || isPresenter) && status == 'passed_with_revision';
     if (showRevisions) {
       tabs.add(_TabSpec(
         label: 'Revisi',
