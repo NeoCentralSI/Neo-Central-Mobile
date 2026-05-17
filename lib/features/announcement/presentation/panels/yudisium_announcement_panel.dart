@@ -74,27 +74,29 @@ class _YudisiumAnnouncementPanelState
   ///   • otherwise narrow participants down to those that match by
   ///     studentName / studentNim / thesisTitle;
   ///   • drop the event entirely when nothing matches.
-  /// Events are sorted by eventDate desc (newest first), matching the web.
+  ///
+  /// Within each event the participants are always sorted by `registeredAt`
+  /// ascending (earliest first) with `studentName` as the tie-breaker, so the
+  /// first registrant shows on top. Events themselves are sorted by
+  /// `eventDate` desc (newest first), matching the web.
   List<Map<String, dynamic>> get _filtered {
     final q = _searchCtrl.text.trim().toLowerCase();
     final scoped = _items.map((y) {
-      final participants = ((y['participants'] as List?) ?? const [])
+      final raw = ((y['participants'] as List?) ?? const [])
           .whereType<Map>()
           .map((m) => Map<String, dynamic>.from(m))
           .toList();
-      if (q.isEmpty) return {...y, 'participants': participants};
-
       final eventMatches =
-          (y['name'] ?? '').toString().toLowerCase().contains(q);
-      final filteredParticipants = eventMatches
-          ? participants
-          : participants.where((p) {
+          q.isEmpty || (y['name'] ?? '').toString().toLowerCase().contains(q);
+      final narrowed = (q.isEmpty || eventMatches)
+          ? raw
+          : raw.where((p) {
               final pn = (p['studentName'] ?? '').toString().toLowerCase();
               final nim = (p['studentNim'] ?? '').toString().toLowerCase();
               final title = (p['thesisTitle'] ?? '').toString().toLowerCase();
               return pn.contains(q) || nim.contains(q) || title.contains(q);
             }).toList();
-      return {...y, 'participants': filteredParticipants};
+      return {...y, 'participants': _sortParticipants(narrowed)};
     }).where((y) {
       if (q.isEmpty) return true;
       final hasParticipants =
@@ -113,6 +115,24 @@ class _YudisiumAnnouncementPanelState
       return bt.compareTo(at);
     });
     return scoped;
+  }
+
+  /// Sort by `registeredAt` ascending (earliest first), missing dates last;
+  /// fall back to `studentName` for stable order.
+  List<Map<String, dynamic>> _sortParticipants(
+      List<Map<String, dynamic>> participants) {
+    final copy = [...participants];
+    copy.sort((a, b) {
+      final at = _parseDate(a['registeredAt']?.toString());
+      final bt = _parseDate(b['registeredAt']?.toString());
+      if (at != null && bt != null && at != bt) return at.compareTo(bt);
+      if (at == null && bt != null) return 1;
+      if (at != null && bt == null) return -1;
+      final an = (a['studentName'] ?? '').toString();
+      final bn = (b['studentName'] ?? '').toString();
+      return an.compareTo(bn);
+    });
+    return copy;
   }
 
   DateTime? _parseDate(String? iso) {
@@ -545,8 +565,7 @@ class _ParticipantRow extends StatelessWidget {
                             color: AppColors.textSecondary,
                             fontStyle: FontStyle.italic,
                           ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
+                          softWrap: true,
                         ),
                       ),
                     ],
