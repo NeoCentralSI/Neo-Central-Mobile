@@ -61,14 +61,38 @@ class UserModel {
   };
 
   /// Resolve the primary app role from the roles array.
+  ///
+  /// Priority: admin > headOfDepartment > lecturer > student. Admin is checked
+  /// first because the backend may attach the Admin role to a user that also
+  /// carries a student row (legacy seed data); the mobile app must route those
+  /// users to the Admin shell, not the student shell.
   UserRole get appRole {
+    bool hasAdmin = false;
+    bool hasHod = false;
+    bool hasLecturer = false;
+    bool hasStudent = false;
+
     for (final r in roles) {
       final name = r.name.toLowerCase();
-      if (name == 'mahasiswa' || name == 'student') return UserRole.student;
-      if (name.contains('dosen') || name.contains('lecturer')) {
-        return UserRole.lecturer;
+      if (name == 'admin') {
+        hasAdmin = true;
+      } else if (name.contains('ketua') ||
+          name.contains('head_of_department') ||
+          name.contains('head of department') ||
+          name == 'hod') {
+        hasHod = true;
+      } else if (name.contains('dosen') || name.contains('lecturer')) {
+        hasLecturer = true;
+      } else if (name == 'mahasiswa' || name == 'student') {
+        hasStudent = true;
       }
     }
+
+    if (hasAdmin) return UserRole.admin;
+    if (hasHod) return UserRole.headOfDepartment;
+    if (hasLecturer) return UserRole.lecturer;
+    if (hasStudent) return UserRole.student;
+
     // Fallback: if student data present → student, else lecturer
     if (student != null) return UserRole.student;
     if (lecturer != null) return UserRole.lecturer;

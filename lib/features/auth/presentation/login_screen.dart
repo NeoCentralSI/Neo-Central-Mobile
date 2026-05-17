@@ -5,9 +5,11 @@ import '../../../core/constants/app_assets.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_spacing.dart';
 import '../../../core/constants/app_text_styles.dart';
+import '../../../core/enums/user_role.dart';
 import '../../../core/services/auth_service.dart';
 import '../../../core/services/fcm_service.dart';
 import '../../../core/utils/error_mapper.dart';
+import '../../admin/presentation/admin_shell.dart';
 import '../../shell/main_shell.dart';
 
 /// Login screen – Microsoft SSO only. Role is determined by the backend.
@@ -79,11 +81,14 @@ class _LoginScreenState extends State<LoginScreen>
 
       if (!mounted) return;
 
-      // Navigate to the correct shell based on role returned from backend
+      // Navigate to the correct shell based on role returned from backend.
+      // Admin role lands on a dedicated minimal shell (notifications + profile).
+      final role = result.user.appRole;
       Navigator.of(context).pushReplacement(
         PageRouteBuilder(
-          pageBuilder: (_, __, ___) =>
-              MainShell(userRole: result.user.appRole, user: result.user),
+          pageBuilder: (_, __, ___) => role == UserRole.admin
+              ? AdminShell(user: result.user)
+              : MainShell(userRole: role, user: result.user),
           transitionsBuilder: (_, animation, __, child) =>
               FadeTransition(opacity: animation, child: child),
           transitionDuration: const Duration(milliseconds: 400),

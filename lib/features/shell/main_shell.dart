@@ -2,7 +2,11 @@ import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/enums/user_role.dart';
 import '../../core/models/auth_models.dart';
+import '../../core/services/fcm_service.dart';
+import '../defence/presentation/lecturer_defence_screen.dart';
+import '../hod/presentation/assign_examiner_screen.dart';
 import '../profile/presentation/profile_screen.dart';
+import '../seminar/presentation/lecturer_seminar_screen.dart';
 
 // Import screens - lecturer
 import '../guidance/presentation/lecturer/guidance_requests_screen.dart';
@@ -28,6 +32,93 @@ class _MainShellState extends State<MainShell> {
   int _currentIndex = 0;
   int _initialSubTab = 0;
   int _approvalReloadKey = 0;
+  final _fcm = FcmService();
+
+  @override
+  void initState() {
+    super.initState();
+    if (_isLecturerLike) {
+      _fcm.addOpenListener(_onLecturerNotificationOpened);
+    }
+  }
+
+  @override
+  void dispose() {
+    if (_isLecturerLike) {
+      _fcm.removeOpenListener(_onLecturerNotificationOpened);
+    }
+    super.dispose();
+  }
+
+  /// Deep-link from FCM tap into the relevant lecturer/HoD screen + tab.
+  ///
+  /// Notification `type` values (see services/src/services/thesis-{seminar,
+  /// defence}/{doc,examiner}.service.js):
+  ///   • seminar_examiner_assigned    — any lecturer assigned as examiner
+  ///                                    → Seminar Hasil ▸ Menguji Mahasiswa
+  ///   • defence_examiner_assigned    — any lecturer assigned as examiner
+  ///                                    → Sidang TA ▸ Menguji Mahasiswa
+  ///   • seminar_need_examiner        — HoD only: doc verified, first assign
+  ///   • seminar_examiner_unavailable — HoD only: an examiner rejected
+  ///   • defence_need_examiner        — HoD only: defence variant
+  ///   • defence_examiner_unavailable — HoD only: defence variant
+  void _onLecturerNotificationOpened(Map<String, dynamic> data) {
+    final type = data['type']?.toString();
+    if (type == null) return;
+
+    // Defer navigation so it never races with an in-progress route transition
+    // (e.g. the pushReplacement from AuthGate is still animating on cold start,
+    // and Flutter will silently drop a push issued mid-transition).
+    Future.delayed(const Duration(milliseconds: 400), () {
+      if (!mounted) return;
+
+      if (type == 'seminar_examiner_assigned') {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => LecturerSeminarScreen(
+              user: widget.user,
+              initialTab: 'menguji_mahasiswa',
+            ),
+          ),
+        );
+        return;
+      }
+
+      if (type == 'defence_examiner_assigned') {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => LecturerDefenceScreen(
+              user: widget.user,
+              initialTab: 'menguji_mahasiswa',
+            ),
+          ),
+        );
+        return;
+      }
+
+      if (widget.userRole == UserRole.headOfDepartment) {
+        final String tab;
+        if (type == 'seminar_need_examiner' ||
+            type == 'seminar_examiner_unavailable') {
+          tab = 'seminar_hasil';
+        } else if (type == 'defence_need_examiner' ||
+            type == 'defence_examiner_unavailable') {
+          tab = 'sidang_ta';
+        } else {
+          return;
+        }
+
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => AssignExaminerScreen(
+              user: widget.user,
+              initialTab: tab,
+            ),
+          ),
+        );
+      }
+    });
+  }
 
   void _switchTab(int index, {int initialTab = 0}) {
     setState(() {
@@ -55,8 +146,15 @@ class _MainShellState extends State<MainShell> {
     ProfileScreen(user: widget.user),
   ];
 
-  List<Widget> get _pages =>
-      widget.userRole == UserRole.lecturer ? _lecturerPages : _studentPages;
+  /// Head of Department is "Lecturer+" on mobile (see docs/neocentral-mobile.md
+  /// §2) — render the lecturer page set, not student. Without this, HoD users
+  /// landing on MainShell from AuthGate/login (which passes the real
+  /// appRole) would hit StudentDashboardScreen → 403 from student-only APIs.
+  bool get _isLecturerLike =>
+      widget.userRole == UserRole.lecturer ||
+      widget.userRole == UserRole.headOfDepartment;
+
+  List<Widget> get _pages => _isLecturerLike ? _lecturerPages : _studentPages;
 
   List<NavigationDestination> get _lecturerDestinations => const [
     NavigationDestination(
@@ -106,7 +204,7 @@ class _MainShellState extends State<MainShell> {
 
   @override
   Widget build(BuildContext context) {
-    final destinations = widget.userRole == UserRole.lecturer
+    final destinations = _isLecturerLike
         ? _lecturerDestinations
         : _studentDestinations;
 
