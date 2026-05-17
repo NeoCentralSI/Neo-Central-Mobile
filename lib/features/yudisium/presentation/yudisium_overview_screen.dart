@@ -257,25 +257,34 @@ class _YudisiumOverviewScreenState extends State<YudisiumOverviewScreen> {
 
   // ─── Derived helpers ─────────────────────────────────────────────
 
-  /// Mirrors `deriveDisplayStatus` from the web component.
+  /// Mirrors the refreshed `deriveDisplayStatus` on the web — the status is
+  /// derived entirely from the event/registration dates, no longer from any
+  /// stored `status` column (which the backend has dropped in
+  /// `core.service.js#deriveDisplayStatus`).
+  ///
+  ///   • eventDate before today           → completed
+  ///   • eventDate on today               → ongoing
+  ///   • no registrationOpenDate, or
+  ///     now < registrationOpenDate       → draft
+  ///   • now > registrationCloseDate      → closed
+  ///   • otherwise                        → open
   String _deriveYudisiumDisplayStatus(Map<String, dynamic> y) {
-    final stored = (y['status'] ?? 'draft').toString();
     final now = DateTime.now();
-    final eventDate = _tryParse(y['eventDate']?.toString());
-    if (stored == 'completed') return 'completed';
-    if (stored == 'scheduled') {
-      if (eventDate != null) {
-        final today = DateTime(now.year, now.month, now.day);
-        final tomorrow = today.add(const Duration(days: 1));
-        if (!eventDate.isBefore(today) && eventDate.isBefore(tomorrow)) {
-          return 'ongoing';
-        }
-        if (eventDate.isBefore(today)) return 'completed';
-      }
-      return 'scheduled';
-    }
     final openDate = _tryParse(y['registrationOpenDate']?.toString());
     final closeDate = _tryParse(y['registrationCloseDate']?.toString());
+    final eventDate = _tryParse(y['eventDate']?.toString());
+
+    if (eventDate != null) {
+      final todayStart = DateTime(now.year, now.month, now.day);
+      final todayEnd = todayStart
+          .add(const Duration(days: 1))
+          .subtract(const Duration(milliseconds: 1));
+      if (eventDate.isBefore(todayStart)) return 'completed';
+      if (!eventDate.isBefore(todayStart) && !eventDate.isAfter(todayEnd)) {
+        return 'ongoing';
+      }
+    }
+
     if (openDate == null || now.isBefore(openDate)) return 'draft';
     if (closeDate != null && now.isAfter(closeDate)) return 'closed';
     return 'open';
