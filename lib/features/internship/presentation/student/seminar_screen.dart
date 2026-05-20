@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
+
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_spacing.dart';
 import '../../../../core/constants/app_text_styles.dart';
 import '../../../../core/models/auth_models.dart';
-import '../../../../core/services/internship_api_service.dart';
 import '../../../../core/services/api_client.dart';
+import '../../../../core/services/internship_api_service.dart';
 import '../../../../core/utils/formatters.dart' as fmt;
 import '../../../../core/widgets/app_drawer.dart';
 import '../../../notifications/presentation/notification_screen.dart';
@@ -24,7 +25,30 @@ class _InternshipSeminarScreenState extends State<InternshipSeminarScreen> {
   String? _error;
   Map<String, dynamic>? _internship;
   Map<String, dynamic>? _seminar;
+  List<dynamic> _allUpcomingSeminars = [];
   List<dynamic> _upcomingSeminars = [];
+  List<dynamic> _rooms = [];
+  List<dynamic> _eligibleStudents = [];
+  bool _isSubmitting = false;
+  StateSetter? _sheetSetState;
+
+  DateTime? _selectedDate;
+  TimeOfDay? _startTime;
+  TimeOfDay? _endTime;
+  String _selectedRoomId = '';
+  String _selectedModeratorId = '';
+  String _linkMeeting = '';
+  List<String> _selectedMemberIds = [];
+  String _moderatorSearch = '';
+  String _otherSeminarSearch = '';
+
+  void _refreshSheet(VoidCallback updateFields) {
+    updateFields();
+    if (mounted) {
+      setState(() {});
+    }
+    _sheetSetState?.call(() {});
+  }
 
   @override
   void initState() {
@@ -41,10 +65,14 @@ class _InternshipSeminarScreenState extends State<InternshipSeminarScreen> {
       final results = await Future.wait([
         _api.getLogbookOverview(),
         _api.getUpcomingSeminars(),
+        _api.getEligibleStudents(),
+        _api.getRooms(),
       ]);
 
       final overviewRes = results[0] as Map<String, dynamic>;
       final upcomingRes = results[1] as List<dynamic>;
+      final eligibleRes = results[2] as List<dynamic>;
+      final roomsRes = results[3] as List<dynamic>;
 
       if (overviewRes['success'] == true) {
         final data = overviewRes['data'];
@@ -54,10 +82,13 @@ class _InternshipSeminarScreenState extends State<InternshipSeminarScreen> {
         setState(() {
           _internship = internship;
           _seminar = seminars.isNotEmpty ? seminars[0] : null;
+          _allUpcomingSeminars = upcomingRes;
           // Filter out user's own seminar from upcoming list
           _upcomingSeminars = upcomingRes.where((s) {
             return s['internship']?['id'] != internship?['id'];
           }).toList();
+          _eligibleStudents = eligibleRes;
+          _rooms = roomsRes;
           _isLoading = false;
         });
       } else {
@@ -195,11 +226,7 @@ class _InternshipSeminarScreenState extends State<InternshipSeminarScreen> {
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
-              onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Fitur pendaftaran seminar sedang disiapkan')),
-                );
-              },
+              onPressed: _openRegisterSeminarSheet,
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primary,
                 foregroundColor: Colors.white,
@@ -350,6 +377,8 @@ class _InternshipSeminarScreenState extends State<InternshipSeminarScreen> {
   }
 
   Widget _buildOtherSeminars() {
+    final filteredSeminars = _filteredUpcomingSeminars;
+
     if (_upcomingSeminars.isEmpty) {
       return Center(
         child: Column(
@@ -358,6 +387,11 @@ class _InternshipSeminarScreenState extends State<InternshipSeminarScreen> {
             Icon(Icons.event_busy, size: 64, color: Colors.grey[400]),
             const SizedBox(height: 16),
             Text('Belum ada jadwal seminar lain', style: AppTextStyles.h4),
+            const SizedBox(height: 16),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: _buildRegisterCTA(),
+            ),
           ],
         ),
       );
@@ -366,13 +400,103 @@ class _InternshipSeminarScreenState extends State<InternshipSeminarScreen> {
     return RefreshIndicator(
       onRefresh: _loadData,
       color: AppColors.primary,
-      child: ListView.builder(
+      child: ListView(
         padding: const EdgeInsets.all(AppSpacing.pagePadding),
-        itemCount: _upcomingSeminars.length,
-        itemBuilder: (context, index) {
-          final seminar = _upcomingSeminars[index];
-          return _buildUpcomingSeminarCard(seminar);
-        },
+        children: [
+          _buildRegisterCTA(),
+          const SizedBox(height: 12),
+          TextField(
+            onChanged: (value) => setState(() => _otherSeminarSearch = value.trim()),
+            decoration: InputDecoration(
+              hintText: 'Cari nama atau NIM mahasiswa...',
+              prefixIcon: const Icon(Icons.search),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            ),
+          ),
+          const SizedBox(height: 16),
+          if (filteredSeminars.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 32),
+              child: Column(
+                children: [
+                  Icon(Icons.search_off, size: 56, color: Colors.grey[400]),
+                  const SizedBox(height: 12),
+                  Text('Seminar tidak ditemukan', style: AppTextStyles.h4),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Coba kata kunci lain.',
+                    style: AppTextStyles.caption.copyWith(color: AppColors.textSecondary),
+                  ),
+                ],
+              ),
+            )
+          else
+            ...filteredSeminars.map(
+              (seminar) => _buildUpcomingSeminarCard(seminar as Map<String, dynamic>),
+            ),
+        ],
+      ),
+    );
+  }
+
+  List<dynamic> get _filteredUpcomingSeminars {
+    final query = _otherSeminarSearch.trim().toLowerCase();
+    if (query.isEmpty) return _upcomingSeminars;
+    return _upcomingSeminars.where((seminar) {
+      final student = seminar['internship']?['student']?['user'];
+      final name = student?['fullName']?.toString().toLowerCase() ?? '';
+      final nim = student?['identityNumber']?.toString().toLowerCase() ?? '';
+      return name.contains(query) || nim.contains(query);
+    }).toList();
+  }
+
+  Widget _buildRegisterCTA() {
+    final canRegister = _internship != null && _canSubmitNewSeminar();
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.calendar_today, color: AppColors.primary),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Ajukan Jadwal Seminar', style: AppTextStyles.label.copyWith(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 4),
+                Text(
+                  canRegister
+                      ? 'Pilih tanggal, waktu, dan ruangan untuk pengajuan seminar.'
+                      : 'Anda sudah memiliki pengajuan seminar aktif.',
+                  style: AppTextStyles.caption.copyWith(color: AppColors.textSecondary),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          ElevatedButton(
+            onPressed: canRegister ? _openRegisterSeminarSheet : null,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            child: const Text('Ajukan'),
+          ),
+        ],
       ),
     );
   }
@@ -439,9 +563,10 @@ class _InternshipSeminarScreenState extends State<InternshipSeminarScreen> {
                 children: [
                   _buildCompactInfo(Icons.calendar_today, fmt.formatDateIndonesian(date)),
                   _buildCompactInfo(Icons.access_time, _formatTime(startTime)),
-                  _buildCompactInfo(Icons.location_on, room),
                 ],
               ),
+              const SizedBox(height: 8),
+              _buildCompactInfo(Icons.location_on, room, allowWrap: true),
             ],
           ),
         ),
@@ -449,15 +574,542 @@ class _InternshipSeminarScreenState extends State<InternshipSeminarScreen> {
     );
   }
 
-  Widget _buildCompactInfo(IconData icon, String text) {
+  Widget _buildCompactInfo(IconData icon, String text, {bool allowWrap = false}) {
     return Row(
-      mainAxisSize: MainAxisSize.min,
+      mainAxisSize: MainAxisSize.max,
       children: [
         Icon(icon, size: 14, color: AppColors.primary),
         const SizedBox(width: 4),
-        Text(text, style: AppTextStyles.caption),
+        if (allowWrap)
+          Expanded(
+            child: Text(
+              text,
+              style: AppTextStyles.caption,
+              softWrap: true,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          )
+        else
+          Text(text, style: AppTextStyles.caption),
       ],
     );
+  }
+
+  void _openRegisterSeminarSheet() {
+    if (_internship == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Pengajuan seminar hanya tersedia untuk mahasiswa KP aktif.')),
+      );
+      return;
+    }
+
+    if (!_canSubmitNewSeminar()) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Anda sudah memiliki pengajuan seminar aktif.')),
+      );
+      return;
+    }
+
+    setState(() {
+      _selectedDate = null;
+      _startTime = null;
+      _endTime = null;
+      _selectedRoomId = '';
+      _selectedModeratorId = '';
+      _linkMeeting = '';
+      _selectedMemberIds = [];
+      _moderatorSearch = '';
+    });
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) {
+          _sheetSetState = setModalState;
+          return Container(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(context).viewInsets.bottom,
+            ),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('Ajukan Jadwal Seminar', style: AppTextStyles.h4),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  _buildDateTimeSection(),
+                  const SizedBox(height: 16),
+                  _buildRoomDropdown(),
+                  const SizedBox(height: 16),
+                  _buildModeratorDropdown(),
+                  const SizedBox(height: 16),
+                  _buildLinkMeetingField(),
+                  if (_groupMembers.isNotEmpty) ...[
+                    const SizedBox(height: 20),
+                    _buildGroupMemberPicker(),
+                  ],
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: _isSubmitting ? null : _submitSeminarRegistration,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: Text(_isSubmitting ? 'Menyimpan...' : 'Kirim Pengajuan'),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    ).whenComplete(() {
+      _sheetSetState = null;
+    });
+  }
+
+  Widget _buildDateTimeSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Tanggal & Waktu', style: AppTextStyles.label),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: _buildPickerField(
+                label: 'Tanggal',
+                value: _selectedDate == null ? 'Pilih tanggal' : fmt.formatDateIndonesian(_selectedDate!),
+                onTap: _pickDate,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildPickerField(
+                label: 'Mulai',
+                value: _startTime == null ? 'HH:MM' : _formatTimeOfDay(_startTime!),
+                onTap: () => _pickTime(isStart: true),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        _buildPickerField(
+          label: 'Selesai',
+          value: _endTime == null ? 'HH:MM' : _formatTimeOfDay(_endTime!),
+          onTap: () => _pickTime(isStart: false),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPickerField({required String label, required String value, required VoidCallback onTap}) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+        decoration: BoxDecoration(
+          border: Border.all(color: AppColors.border),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label, style: AppTextStyles.caption.copyWith(color: AppColors.textSecondary)),
+            const SizedBox(height: 4),
+            Text(value, style: AppTextStyles.body.copyWith(fontWeight: FontWeight.bold)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRoomDropdown() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Ruangan', style: AppTextStyles.label),
+        const SizedBox(height: 8),
+        DropdownButtonFormField<String>(
+          key: ValueKey(_selectedRoomId),
+          initialValue: _selectedRoomId.isEmpty ? null : _selectedRoomId,
+          items: _rooms
+              .map((room) => DropdownMenuItem<String>(
+                    value: room['id']?.toString() ?? '',
+                    child: Text(room['name']?.toString() ?? '-'),
+                  ))
+              .toList(),
+          onChanged: (value) => _refreshSheet(() => _selectedRoomId = value ?? ''),
+          decoration: InputDecoration(
+            hintText: 'Pilih Ruangan',
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildModeratorDropdown() {
+    final selectedModerator = _eligibleStudents.firstWhere(
+      (student) => student['id']?.toString() == _selectedModeratorId,
+      orElse: () => null,
+    );
+    final query = _moderatorSearch.trim();
+    final matches = query.isEmpty
+        ? <dynamic>[]
+        : _eligibleStudents.where((student) {
+            final nim = student['identityNumber']?.toString() ?? '';
+            return nim == query;
+          }).toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Moderator (Mahasiswa)', style: AppTextStyles.label),
+        const SizedBox(height: 8),
+        if (selectedModerator != null)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              border: Border.all(color: AppColors.border),
+              borderRadius: BorderRadius.circular(12),
+              color: AppColors.surfaceSecondary,
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        selectedModerator['fullName']?.toString() ?? '-',
+                        style: AppTextStyles.bodySmall.copyWith(fontWeight: FontWeight.bold),
+                      ),
+                      Text(
+                        selectedModerator['identityNumber']?.toString() ?? '-',
+                        style: AppTextStyles.caption.copyWith(color: AppColors.textSecondary),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close, size: 18),
+                  onPressed: () => _refreshSheet(() {
+                    _selectedModeratorId = '';
+                    _moderatorSearch = '';
+                  }),
+                ),
+              ],
+            ),
+          )
+        else
+          TextField(
+            onChanged: (value) => _refreshSheet(() => _moderatorSearch = value.trim()),
+            decoration: InputDecoration(
+              hintText: 'Ketik NIM (harus sama persis)',
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            ),
+          ),
+        if (selectedModerator == null && query.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          if (matches.isNotEmpty)
+            Container(
+              decoration: BoxDecoration(
+                border: Border.all(color: AppColors.border),
+                borderRadius: BorderRadius.circular(12),
+                color: Colors.white,
+              ),
+              child: Column(
+                children: matches.map((student) {
+                  final name = student['fullName']?.toString() ?? '-';
+                  final nim = student['identityNumber']?.toString() ?? '-';
+                  return InkWell(
+                    onTap: () => _refreshSheet(() {
+                      _selectedModeratorId = student['id']?.toString() ?? '';
+                      _moderatorSearch = '';
+                    }),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(name, style: AppTextStyles.bodySmall.copyWith(fontWeight: FontWeight.bold)),
+                                Text(nim, style: AppTextStyles.caption.copyWith(color: AppColors.textSecondary)),
+                              ],
+                            ),
+                          ),
+                          const Icon(Icons.check_circle_outline, size: 18, color: AppColors.primary),
+                        ],
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            )
+          else
+            Text('Mahasiswa tidak ditemukan.', style: AppTextStyles.caption.copyWith(color: AppColors.textSecondary)),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildLinkMeetingField() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Link Meeting (Opsional)', style: AppTextStyles.label),
+        const SizedBox(height: 8),
+        TextField(
+          onChanged: (value) => _linkMeeting = value.trim(),
+          decoration: InputDecoration(
+            hintText: 'https://meet.google.com/...',
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildGroupMemberPicker() {
+    final eligibleMembers = _eligibleGroupMembers;
+    final ineligibleMembers = _ineligibleGroupMembers;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceSecondary,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Sertakan Anggota Kelompok', style: AppTextStyles.label),
+          const SizedBox(height: 12),
+          if (eligibleMembers.isEmpty)
+            Text(
+              'Anggota kelompok Anda tidak dapat disertakan karena dosen pembimbing berbeda.',
+              style: AppTextStyles.caption.copyWith(color: AppColors.textSecondary),
+            )
+          else
+            Column(
+              children: eligibleMembers.map((member) {
+                final id = member['id']?.toString() ?? '';
+                final name = member['student']?['user']?['fullName'] ?? '-';
+                final nim = member['student']?['user']?['identityNumber'] ?? '-';
+                final isSelected = _selectedMemberIds.contains(id);
+                return CheckboxListTile(
+                  value: isSelected,
+                  onChanged: (checked) {
+                    _refreshSheet(() {
+                      if (checked == true) {
+                        _selectedMemberIds.add(id);
+                      } else {
+                        _selectedMemberIds.remove(id);
+                      }
+                    });
+                  },
+                  title: Text(name, style: AppTextStyles.bodySmall.copyWith(fontWeight: FontWeight.bold)),
+                  subtitle: Text(nim, style: AppTextStyles.caption),
+                  controlAffinity: ListTileControlAffinity.leading,
+                  contentPadding: EdgeInsets.zero,
+                );
+              }).toList(),
+            ),
+          if (ineligibleMembers.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              '${ineligibleMembers.length} anggota lainnya tidak dapat disertakan karena dosen pembimbing berbeda.',
+              style: AppTextStyles.caption.copyWith(color: AppColors.textSecondary),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  List<dynamic> get _groupMembers {
+    final proposalInternships = _internship?['proposal']?['internships'] as List? ?? [];
+    return proposalInternships.where((m) => m['id'] != _internship?['id']).toList();
+  }
+
+  List<dynamic> get _eligibleGroupMembers {
+    final supervisorId = _internship?['supervisorId'];
+    return _groupMembers.where((m) => m['supervisorId'] == supervisorId).toList();
+  }
+
+  List<dynamic> get _ineligibleGroupMembers {
+    final supervisorId = _internship?['supervisorId'];
+    return _groupMembers.where((m) => m['supervisorId'] != supervisorId).toList();
+  }
+
+  bool _canSubmitNewSeminar() {
+    final status = _seminar?['status'];
+    if (status == null) return true;
+    return !['REQUESTED', 'APPROVED', 'COMPLETED'].contains(status);
+  }
+
+  Future<void> _pickDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate ?? DateTime.now(),
+      firstDate: DateTime.now(),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+    );
+    if (picked != null) {
+      _refreshSheet(() => _selectedDate = picked);
+    }
+  }
+
+  Future<void> _pickTime({required bool isStart}) async {
+    final initial = isStart ? (_startTime ?? const TimeOfDay(hour: 8, minute: 0)) : (_endTime ?? const TimeOfDay(hour: 10, minute: 0));
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: initial,
+    );
+    if (picked != null) {
+      _refreshSheet(() {
+        if (isStart) {
+          _startTime = picked;
+        } else {
+          _endTime = picked;
+        }
+      });
+    }
+  }
+
+  String _formatTimeOfDay(TimeOfDay time) {
+    return '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+  }
+
+  bool _isWeekday(DateTime date) {
+    return date.weekday != DateTime.saturday && date.weekday != DateTime.sunday;
+  }
+
+  Future<void> _submitSeminarRegistration() async {
+    if (_selectedDate == null || _startTime == null || _endTime == null || _selectedRoomId.isEmpty || _selectedModeratorId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Semua field wajib harus diisi.')),
+      );
+      return;
+    }
+
+    if (!_isWeekday(_selectedDate!)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Seminar hanya dapat dijadwalkan pada hari kerja (Senin-Jumat).')),
+      );
+      return;
+    }
+
+    final startStr = _formatTimeOfDay(_startTime!);
+    final endStr = _formatTimeOfDay(_endTime!);
+    if (startStr.compareTo(endStr) >= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Waktu mulai harus lebih awal dari waktu selesai.')),
+      );
+      return;
+    }
+
+    final start = DateTime.parse('1970-01-01T$startStr:00Z');
+    final end = DateTime.parse('1970-01-01T$endStr:00Z');
+    final dateStr = _selectedDate!.toIso8601String().split('T')[0];
+
+    final conflict = _allUpcomingSeminars.firstWhere(
+      (s) {
+        final sDate = DateTime.tryParse(s['seminarDate']?.toString() ?? '')?.toIso8601String().split('T')[0];
+        if (sDate != dateStr) return false;
+        final sStart = DateTime.tryParse(s['startTime']?.toString() ?? '');
+        final sEnd = DateTime.tryParse(s['endTime']?.toString() ?? '');
+        if (sStart == null || sEnd == null) return false;
+        final isOverlapping = start.isBefore(sEnd) && end.isAfter(sStart);
+        if (!isOverlapping) return false;
+        if (s['room']?['id']?.toString() == _selectedRoomId) return true;
+        if (s['moderatorStudentId']?.toString() == _selectedModeratorId) return true;
+        return false;
+      },
+      orElse: () => null,
+    );
+
+    if (conflict != null) {
+      if (conflict['room']?['id']?.toString() == _selectedRoomId) {
+        final name = conflict['room']?['name'] ?? '-';
+        final student = conflict['internship']?['student']?['user']?['fullName'] ?? 'mahasiswa lain';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Ruangan $name sudah dipesan oleh $student pada waktu tersebut.')),
+        );
+      } else {
+        final moderator = conflict['moderatorStudent']?['user']?['fullName'] ?? 'mahasiswa lain';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Mahasiswa $moderator sudah terjadwal menjadi moderator pada waktu tersebut.')),
+        );
+      }
+      return;
+    }
+
+    _refreshSheet(() => _isSubmitting = true);
+    try {
+      final payload = {
+        'seminarDate': dateStr,
+        'startTime': startStr,
+        'endTime': endStr,
+        'roomId': _selectedRoomId,
+        'linkMeeting': _linkMeeting,
+        'moderatorStudentId': _selectedModeratorId,
+        if (_selectedMemberIds.isNotEmpty) 'memberInternshipIds': _selectedMemberIds,
+      };
+
+      await _api.registerSeminar(payload);
+      if (!mounted) return;
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _selectedMemberIds.isNotEmpty
+                ? 'Pengajuan seminar untuk Anda dan ${_selectedMemberIds.length} anggota kelompok berhasil dikirim.'
+                : 'Pengajuan seminar berhasil dikirim.'
+          ),
+          backgroundColor: AppColors.success,
+        ),
+      );
+      _loadData();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Gagal mengajukan seminar: $e'), backgroundColor: AppColors.destructive),
+      );
+    } finally {
+      _refreshSheet(() => _isSubmitting = false);
+    }
   }
 
   String _formatTime(dynamic time) {

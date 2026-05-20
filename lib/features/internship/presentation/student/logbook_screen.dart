@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
+
 import '../../../../core/constants/app_colors.dart';
-import '../../../../core/constants/app_spacing.dart';
 import '../../../../core/constants/app_text_styles.dart';
 import '../../../../core/models/auth_models.dart';
 import '../../../../core/services/internship_api_service.dart';
+import '../../../../core/utils/formatters.dart' as fmt;
 import '../../../../core/widgets/app_drawer.dart';
 import '../../../notifications/presentation/notification_screen.dart';
-import '../../../../core/utils/formatters.dart' as fmt;
 
 class InternshipLogbookScreen extends StatefulWidget {
   final UserModel? user;
@@ -44,7 +44,13 @@ class _InternshipLogbookScreenState extends State<InternshipLogbookScreen> {
           final internship = data['internship'];
           if (internship != null) {
             final status = internship['status'];
-            _isLogbookLocked = status == 'COMPLETED' || status == 'REPORTING';
+            final isLockedFlag = internship['isLogbookLocked'] == true;
+            final fieldAssessmentStatus = internship['fieldAssessmentStatus'];
+            _isLogbookLocked =
+                status == 'COMPLETED' ||
+                status == 'REPORTING' ||
+                fieldAssessmentStatus == 'COMPLETED' ||
+                isLockedFlag;
           }
           _isLoading = false;
         });
@@ -60,6 +66,13 @@ class _InternshipLogbookScreenState extends State<InternshipLogbookScreen> {
   }
 
   Future<void> _updateEntry(String id, String description) async {
+    if (_isLogbookLocked) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Logbook sudah dikunci dan tidak dapat diedit lagi.')),
+      );
+      return;
+    }
     try {
       await _api.updateLogbook(id, description);
       _loadData(); // Refresh list
@@ -86,72 +99,86 @@ class _InternshipLogbookScreenState extends State<InternshipLogbookScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom,
-        ),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) {
+          final trimmed = controller.text.trim();
+          final isValid = trimmed.length >= 10;
+          final errorText = trimmed.isEmpty
+              ? null
+              : (isValid ? null : 'Deskripsi aktivitas minimal 10 karakter.');
+
+          return Container(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(context).viewInsets.bottom,
+            ),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Isi Logbook', style: AppTextStyles.h4),
-                  IconButton(
-                    icon: const Icon(Icons.close),
-                    onPressed: () => Navigator.pop(context),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('Isi Logbook', style: AppTextStyles.h4),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                    ],
                   ),
+                  const SizedBox(height: 8),
+                  Text(
+                    fmt.formatDateIndonesian(date),
+                    style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary),
+                  ),
+                  const SizedBox(height: 20),
+                  TextField(
+                    controller: controller,
+                    maxLines: 5,
+                    onChanged: (_) => setModalState(() {}),
+                    decoration: InputDecoration(
+                      hintText: 'Tuliskan aktivitas Anda hari ini...',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(color: AppColors.border),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(color: Colors.amber, width: 2),
+                      ),
+                      errorText: errorText,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: isValid && !_isLogbookLocked
+                          ? () {
+                              Navigator.pop(context);
+                              _updateEntry(entry['id'].toString(), controller.text.trim());
+                            }
+                          : null,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.amber,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: const Text('Simpan Perubahan'),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
                 ],
               ),
-              const SizedBox(height: 8),
-              Text(
-                fmt.formatDateIndonesian(date),
-                style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary),
-              ),
-              const SizedBox(height: 20),
-              TextField(
-                controller: controller,
-                maxLines: 5,
-                decoration: InputDecoration(
-                  hintText: 'Tuliskan aktivitas Anda hari ini...',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: AppColors.border),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: Colors.amber, width: 2),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.pop(context);
-                    _updateEntry(entry['id'].toString(), controller.text.trim());
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.amber,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                  child: const Text('Simpan Perubahan'),
-                ),
-              ),
-              const SizedBox(height: 12),
-            ],
-          ),
-        ),
+            ),
+          );
+        },
       ),
     );
   }

@@ -206,8 +206,7 @@ class _InternshipLecturerDashboardState extends State<InternshipLecturerDashboar
   Widget _buildSummaryCard() {
     final totalBimbingan = _students.length;
     final selesaiSeminar = _students.where((s) => s['status'] == 'COMPLETED' || s['status'] == 'FINISHED').length;
-    // Assuming 'finalReport' or 'reportFile' indicates final fix report upload
-    final laporanFinal = _students.where((s) => s['finalReport'] != null || s['status'] == 'COMPLETED').length;
+    final laporanAkhir = _students.where((s) => s['report']?['status'] == 'APPROVED' || s['status'] == 'COMPLETED').length;
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -228,7 +227,7 @@ class _InternshipLecturerDashboardState extends State<InternshipLecturerDashboar
           _buildVerticalDivider(),
           _buildSummaryItem('Selesai\nSeminar', selesaiSeminar.toString(), Colors.green),
           _buildVerticalDivider(),
-          _buildSummaryItem('Laporan\nFinal Fix', laporanFinal.toString(), Colors.blue),
+          _buildSummaryItem('Laporan\nAkhir', laporanAkhir.toString(), Colors.blue),
         ],
       ),
     );

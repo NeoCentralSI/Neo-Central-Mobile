@@ -126,6 +126,27 @@ class InternshipApiService {
     return res as Map<String, dynamic>;
   }
 
+  /// GET /insternship/registration/eligible-students
+  /// Returns a list of eligible students for seminar moderator selection.
+  Future<List<dynamic>> getEligibleStudents() async {
+    final res = await _api.get('$_base/registration/eligible-students');
+    if (res is Map && res.containsKey('data')) {
+      return res['data'] as List;
+    }
+    return [];
+  }
+
+  /// GET /adminfeatures/rooms
+  /// Returns rooms for seminar scheduling.
+  Future<List<dynamic>> getRooms({int page = 1, int limit = 500, String search = ''}) async {
+    final query = 'page=$page&limit=$limit&search=$search';
+    final res = await _api.get('/adminfeatures/rooms?$query');
+    if (res is Map && res.containsKey('data')) {
+      return res['data'] as List;
+    }
+    return [];
+  }
+
   // ── Lecturer Facing ─────────────────────────────────────────
 
   /// GET /insternship/activity/guidance/lecturer/students
@@ -153,6 +174,7 @@ class InternshipApiService {
   /// POST /insternship/activity/guidance/lecturer/students/:internshipId/week/:weekNumber/evaluate
   Future<Map<String, dynamic>> submitLecturerEvaluation(String internshipId, int weekNumber, Map<String, dynamic> evaluations) async {
     final res = await _api.post('$_base/activity/guidance/lecturer/students/$internshipId/week/$weekNumber/evaluate', body: {
+      'status': 'APPROVED',
       'evaluations': evaluations,
     });
     return res as Map<String, dynamic>;

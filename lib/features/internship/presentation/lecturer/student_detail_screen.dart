@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_spacing.dart';
 import '../../../../core/constants/app_text_styles.dart';
@@ -487,7 +488,7 @@ class _InternshipStudentGuidanceDetailScreenState extends State<InternshipStuden
       if (!mounted) return;
       Navigator.pop(context); // Close loading
 
-      final data = res;
+      final data = res['data'] ?? res;
       final studentAnswers = data['studentAnswers'] as List? ?? [];
       final lecturerEvaluation = data['lecturerEvaluation'] as List? ?? [];
       final sessionStatus = data['sessionStatus'];
@@ -562,56 +563,76 @@ class _InternshipStudentGuidanceDetailScreenState extends State<InternshipStuden
                         // Lecturer Section
                         Text('Evaluasi Dosen', style: AppTextStyles.label.copyWith(color: AppColors.primary)),
                         const SizedBox(height: 12),
-                        ...lecturerEvaluation.map((e) {
-                          final criteriaId = e['criteriaId'];
-                          final inputType = e['inputType']; // TEXT or SELECT
-                          
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 20),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(e['criteriaName'] ?? '-', style: AppTextStyles.body.copyWith(fontWeight: FontWeight.bold)),
-                                const SizedBox(height: 8),
-                                if (inputType == 'SELECT')
-                                  Wrap(
-                                    spacing: 8,
-                                    children: (e['options'] as List? ?? []).map((opt) {
-                                      final isSelected = valueSelections[criteriaId] == opt['optionText'];
-                                      return ChoiceChip(
-                                        label: Text(opt['optionText']),
-                                        selected: isSelected,
-                                        onSelected: sessionStatus == 'APPROVED' ? null : (selected) {
-                                          if (selected) {
-                                            setModalState(() {
-                                              valueSelections[criteriaId] = opt['optionText'];
-                                            });
-                                          }
-                                        },
-                                      );
-                                    }).toList(),
-                                  )
-                                else
-                                  TextField(
-                                    controller: textControllers[criteriaId],
-                                    maxLines: 3,
-                                    enabled: sessionStatus != 'APPROVED',
-                                    decoration: InputDecoration(
-                                      hintText: 'Masukkan feedback...',
-                                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        if (sessionStatus == 'SUBMITTED' || sessionStatus == 'LATE' || sessionStatus == 'APPROVED')
+                          ...lecturerEvaluation.map((e) {
+                            final criteriaId = e['criteriaId'];
+                            final inputType = e['inputType']; // TEXT or EVALUATION
+                            
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 20),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(e['criteriaName'] ?? '-', style: AppTextStyles.body.copyWith(fontWeight: FontWeight.bold)),
+                                  const SizedBox(height: 8),
+                                  if (inputType == 'EVALUATION' || inputType == 'SELECT')
+                                    Wrap(
+                                      spacing: 8,
+                                      children: (e['options'] as List? ?? []).map((opt) {
+                                        final isSelected = valueSelections[criteriaId] == opt['optionText'];
+                                        return ChoiceChip(
+                                          label: Text(opt['optionText']),
+                                          selected: isSelected,
+                                          onSelected: (selected) {
+                                            if (selected) {
+                                              setModalState(() {
+                                                valueSelections[criteriaId] = opt['optionText'];
+                                              });
+                                            }
+                                          },
+                                        );
+                                      }).toList(),
+                                    )
+                                  else
+                                    TextField(
+                                      controller: textControllers[criteriaId],
+                                      maxLines: 3,
+                                      decoration: InputDecoration(
+                                        hintText: 'Masukkan feedback...',
+                                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                                      ),
                                     ),
-                                  ),
+                                ],
+                              ),
+                            );
+                          })
+                        else
+                          Container(
+                            padding: const EdgeInsets.symmetric(vertical: 32),
+                            alignment: Alignment.center,
+                            child: Column(
+                              children: [
+                                Icon(Icons.timer_outlined, size: 48, color: Colors.grey.withOpacity(0.5)),
+                                const SizedBox(height: 12),
+                                const Text(
+                                  'Menunggu Mahasiswa',
+                                  style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey),
+                                ),
+                                const SizedBox(height: 4),
+                                const Text(
+                                  'Mahasiswa belum mengisi laporan bimbingan.',
+                                  style: TextStyle(color: Colors.grey, fontSize: 12),
+                                ),
                               ],
                             ),
-                          );
-                        }),
+                          ),
                       ],
                     ),
                   ),
                 ),
                 
                 // Footer
-                if (sessionStatus != 'APPROVED')
+                if (sessionStatus == 'SUBMITTED' || sessionStatus == 'LATE' || sessionStatus == 'APPROVED')
                   Padding(
                     padding: const EdgeInsets.all(20),
                     child: SizedBox(
