@@ -13,7 +13,8 @@ class InternshipGuidanceScreen extends StatefulWidget {
   const InternshipGuidanceScreen({super.key, this.user});
 
   @override
-  State<InternshipGuidanceScreen> createState() => _InternshipGuidanceScreenState();
+  State<InternshipGuidanceScreen> createState() =>
+      _InternshipGuidanceScreenState();
 }
 
 class _InternshipGuidanceScreenState extends State<InternshipGuidanceScreen> {
@@ -69,17 +70,22 @@ class _InternshipGuidanceScreenState extends State<InternshipGuidanceScreen> {
         ),
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+          ? const Center(
+              child: CircularProgressIndicator(color: AppColors.primary),
+            )
           : _error != null
-              ? _buildErrorState()
-              : _buildTimeline(),
+          ? _buildErrorState()
+          : _buildTimeline(),
       floatingActionButton: FloatingActionButton(
         onPressed: () => Navigator.push(
           context,
           MaterialPageRoute(builder: (_) => const NotificationScreen()),
         ),
         backgroundColor: Colors.amber,
-        child: const Icon(Icons.notifications_active_outlined, color: Colors.white),
+        child: const Icon(
+          Icons.notifications_active_outlined,
+          color: Colors.white,
+        ),
       ),
     );
   }
@@ -89,12 +95,13 @@ class _InternshipGuidanceScreenState extends State<InternshipGuidanceScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.error_outline, size: 64, color: AppColors.destructive),
-          const SizedBox(height: 16),
-          Text(
-            'Terjadi Kesalahan',
-            style: AppTextStyles.h3,
+          const Icon(
+            Icons.error_outline,
+            size: 64,
+            color: AppColors.destructive,
           ),
+          const SizedBox(height: 16),
+          Text('Terjadi Kesalahan', style: AppTextStyles.h3),
           const SizedBox(height: 8),
           Text(
             _error ?? 'Gagal memuat data',
@@ -117,7 +124,7 @@ class _InternshipGuidanceScreenState extends State<InternshipGuidanceScreen> {
 
   Widget _buildTimeline() {
     final timeline = _guidanceData['timeline'] as List? ?? [];
-    
+
     if (timeline.isEmpty) {
       return Center(
         child: Column(
@@ -130,7 +137,9 @@ class _InternshipGuidanceScreenState extends State<InternshipGuidanceScreen> {
             Text(
               'Hubungi admin jika jadwal bimbingan belum muncul.',
               textAlign: TextAlign.center,
-              style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary),
+              style: AppTextStyles.bodySmall.copyWith(
+                color: AppColors.textSecondary,
+              ),
             ),
           ],
         ),
@@ -154,8 +163,11 @@ class _InternshipGuidanceScreenState extends State<InternshipGuidanceScreen> {
   Widget _buildWeekCard(Map<String, dynamic> week) {
     final weekNumber = week['weekNumber'];
     final status = week['status'] as String;
-    final startDate = DateTime.tryParse(week['startDate']?.toString() ?? '') ?? DateTime.now();
-    final endDate = DateTime.tryParse(week['endDate']?.toString() ?? '') ?? DateTime.now();
+    final startDate =
+        DateTime.tryParse(week['startDate']?.toString() ?? '') ??
+        DateTime.now();
+    final endDate =
+        DateTime.tryParse(week['endDate']?.toString() ?? '') ?? DateTime.now();
 
     return Container(
       margin: const EdgeInsets.only(bottom: 20),
@@ -175,13 +187,12 @@ class _InternshipGuidanceScreenState extends State<InternshipGuidanceScreen> {
         child: ExpansionTile(
           tilePadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
           leading: _buildWeekIndicator(weekNumber, status),
-          title: Text(
-            'Minggu Ke-$weekNumber',
-            style: AppTextStyles.h4,
-          ),
+          title: Text('Minggu Ke-$weekNumber', style: AppTextStyles.h4),
           subtitle: Text(
             '${fmt.formatDateIndonesian(startDate)} - ${fmt.formatDateIndonesian(endDate)}',
-            style: AppTextStyles.caption.copyWith(color: AppColors.textSecondary),
+            style: AppTextStyles.caption.copyWith(
+              color: AppColors.textSecondary,
+            ),
           ),
           children: [
             Padding(
@@ -203,16 +214,22 @@ class _InternshipGuidanceScreenState extends State<InternshipGuidanceScreen> {
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.primary,
                           foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                         ),
                       ),
                     )
-                  else if (status == 'SUBMITTED' || status == 'APPROVED' || status == 'LATE')
+                  else if (status == 'SUBMITTED' ||
+                      status == 'APPROVED' ||
+                      status == 'LATE')
                     _buildGuidanceDetail(week)
                   else
                     Text(
                       'Bimbingan belum dibuka untuk minggu ini.',
-                      style: AppTextStyles.bodySmall.copyWith(fontStyle: FontStyle.italic),
+                      style: AppTextStyles.bodySmall.copyWith(
+                        fontStyle: FontStyle.italic,
+                      ),
                     ),
                 ],
               ),
@@ -289,7 +306,10 @@ class _InternshipGuidanceScreenState extends State<InternshipGuidanceScreen> {
       ),
       child: Text(
         label,
-        style: AppTextStyles.caption.copyWith(color: color, fontWeight: FontWeight.bold),
+        style: AppTextStyles.caption.copyWith(
+          color: color,
+          fontWeight: FontWeight.bold,
+        ),
       ),
     );
   }
@@ -302,51 +322,83 @@ class _InternshipGuidanceScreenState extends State<InternshipGuidanceScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (questions.isNotEmpty) ...[
-          Text('Jawaban Mahasiswa:', style: AppTextStyles.label.copyWith(fontWeight: FontWeight.bold)),
+          Text(
+            'Jawaban Mahasiswa:',
+            style: AppTextStyles.label.copyWith(fontWeight: FontWeight.bold),
+          ),
           const SizedBox(height: 8),
-          ...questions.map((q) => Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(q['questionText'] ?? '', style: AppTextStyles.bodySmall.copyWith(fontWeight: FontWeight.bold)),
-                const SizedBox(height: 4),
-                Text(q['answer'] ?? '-', style: AppTextStyles.bodySmall),
-              ],
+          ...questions.map(
+            (q) => Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    q['questionText'] ?? '',
+                    style: AppTextStyles.bodySmall.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(q['answer'] ?? '-', style: AppTextStyles.bodySmall),
+                ],
+              ),
             ),
-          )),
+          ),
         ],
         if (evaluations.isNotEmpty) ...[
           const Divider(height: 32),
-          Text('Evaluasi Dosen:', style: AppTextStyles.label.copyWith(fontWeight: FontWeight.bold)),
+          Text(
+            'Evaluasi Dosen:',
+            style: AppTextStyles.label.copyWith(fontWeight: FontWeight.bold),
+          ),
           const SizedBox(height: 8),
-          ...evaluations.map((e) => Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(e['criteriaName'] ?? '', style: AppTextStyles.bodySmall.copyWith(fontWeight: FontWeight.bold)),
-                const SizedBox(height: 4),
-                if (e['inputType'] == 'EVALUATION')
-                  _buildEvaluationStars(e['evaluationValue'])
-                else
-                  Text(e['answerText'] ?? '-', style: AppTextStyles.bodySmall),
-              ],
+          ...evaluations.map(
+            (e) => Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    e['criteriaName'] ?? '',
+                    style: AppTextStyles.bodySmall.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  if (e['inputType'] == 'EVALUATION')
+                    _buildEvaluationAnswer(e['evaluationValue'])
+                  else
+                    Text(
+                      e['answerText'] ?? '-',
+                      style: AppTextStyles.bodySmall,
+                    ),
+                ],
+              ),
             ),
-          )),
+          ),
         ],
       ],
     );
   }
 
-  Widget _buildEvaluationStars(dynamic value) {
-    final int score = int.tryParse(value?.toString() ?? '0') ?? 0;
-    return Row(
-      children: List.generate(5, (index) => Icon(
-        index < score ? Icons.star : Icons.star_border,
-        color: Colors.amber,
-        size: 16,
-      )),
+  Widget _buildEvaluationAnswer(dynamic value) {
+    final answer = value?.toString().trim();
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: AppColors.primary.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.18)),
+      ),
+      child: Text(
+        answer == null || answer.isEmpty ? '-' : answer,
+        style: AppTextStyles.bodySmall.copyWith(
+          color: AppColors.primary,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
     );
   }
 
@@ -354,7 +406,7 @@ class _InternshipGuidanceScreenState extends State<InternshipGuidanceScreen> {
     final questions = week['questions'] as List? ?? [];
     final weekNumber = week['weekNumber'];
     final controllers = <String, TextEditingController>{};
-    
+
     for (var q in questions) {
       controllers[q['id']] = TextEditingController(text: q['answer'] ?? '');
     }
@@ -398,14 +450,19 @@ class _InternshipGuidanceScreenState extends State<InternshipGuidanceScreen> {
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(q['questionText'] ?? '', style: AppTextStyles.label),
+                        Text(
+                          q['questionText'] ?? '',
+                          style: AppTextStyles.label,
+                        ),
                         const SizedBox(height: 8),
                         TextField(
                           controller: controllers[q['id']],
                           maxLines: 3,
                           decoration: InputDecoration(
                             hintText: 'Tulis jawaban Anda...',
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
                           ),
                         ),
                       ],
@@ -418,7 +475,9 @@ class _InternshipGuidanceScreenState extends State<InternshipGuidanceScreen> {
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: () {
-                    final answers = controllers.map((key, value) => MapEntry(key, value.text.trim()));
+                    final answers = controllers.map(
+                      (key, value) => MapEntry(key, value.text.trim()),
+                    );
                     Navigator.pop(context);
                     _submitGuidance(weekNumber, answers);
                   },
@@ -426,7 +485,9 @@ class _InternshipGuidanceScreenState extends State<InternshipGuidanceScreen> {
                     backgroundColor: AppColors.primary,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
                   child: const Text('Kirim Laporan'),
                 ),
@@ -439,18 +500,27 @@ class _InternshipGuidanceScreenState extends State<InternshipGuidanceScreen> {
     );
   }
 
-  Future<void> _submitGuidance(int weekNumber, Map<String, String> answers) async {
+  Future<void> _submitGuidance(
+    int weekNumber,
+    Map<String, String> answers,
+  ) async {
     setState(() => _isLoading = true);
     try {
       await _api.submitStudentGuidance(weekNumber, answers);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Bimbingan berhasil dikirim'), backgroundColor: AppColors.success),
+        const SnackBar(
+          content: Text('Bimbingan berhasil dikirim'),
+          backgroundColor: AppColors.success,
+        ),
       );
       _loadData();
     } catch (e) {
       setState(() => _isLoading = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Gagal mengirim bimbingan: $e'), backgroundColor: AppColors.destructive),
+        SnackBar(
+          content: Text('Gagal mengirim bimbingan: $e'),
+          backgroundColor: AppColors.destructive,
+        ),
       );
     }
   }

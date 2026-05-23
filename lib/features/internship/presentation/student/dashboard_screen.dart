@@ -14,14 +14,15 @@ class InternshipDashboardScreen extends StatefulWidget {
   const InternshipDashboardScreen({super.key, this.user, this.onSwitchTab});
 
   @override
-  State<InternshipDashboardScreen> createState() => _InternshipDashboardScreenState();
+  State<InternshipDashboardScreen> createState() =>
+      _InternshipDashboardScreenState();
 }
 
 class _InternshipDashboardScreenState extends State<InternshipDashboardScreen> {
   final _api = InternshipApiService();
   bool _isLoading = true;
   String? _error;
-  
+
   Map<String, dynamic>? _internship;
   List<dynamic> _logbooks = [];
 
@@ -63,9 +64,7 @@ class _InternshipDashboardScreenState extends State<InternshipDashboardScreen> {
     final firstName = userName.split(' ').first;
 
     if (_isLoading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     if (_error != null) {
@@ -146,6 +145,8 @@ class _InternshipDashboardScreenState extends State<InternshipDashboardScreen> {
                     const SizedBox(height: 24),
                     _buildProgressSection(),
                     const SizedBox(height: 24),
+                    _buildFinalScoreSection(),
+                    const SizedBox(height: 24),
                     _buildSupervisorSection(),
                   ],
                 ),
@@ -160,7 +161,10 @@ class _InternshipDashboardScreenState extends State<InternshipDashboardScreen> {
           MaterialPageRoute(builder: (_) => const NotificationScreen()),
         ),
         backgroundColor: Colors.amber,
-        child: const Icon(Icons.notifications_active_outlined, color: Colors.white),
+        child: const Icon(
+          Icons.notifications_active_outlined,
+          color: Colors.white,
+        ),
       ),
     );
   }
@@ -179,10 +183,7 @@ class _InternshipDashboardScreenState extends State<InternshipDashboardScreen> {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            AppColors.primaryLight,
-            AppColors.primary,
-          ],
+          colors: [AppColors.primaryLight, AppColors.primary],
         ),
         borderRadius: BorderRadius.vertical(bottom: Radius.circular(32)),
       ),
@@ -304,22 +305,38 @@ class _InternshipDashboardScreenState extends State<InternshipDashboardScreen> {
 
   Widget _buildStatusCard() {
     final proposal = _internship!['proposal'] as Map<String, dynamic>?;
-    final companyName = proposal?['targetCompany']?['companyName'] ?? 
-                        proposal?['companyName'] ?? 
-                        _internship!['companyName'] ?? 
-                        'Perusahaan';
-    
+    final companyName =
+        proposal?['targetCompany']?['companyName'] ??
+        proposal?['companyName'] ??
+        _internship!['companyName'] ??
+        'Perusahaan';
+
     // Format dates
     String dateRange = '-';
-    final startDateStr = _internship!['actualStartDate'] ?? proposal?['startDate'];
+    final startDateStr =
+        _internship!['actualStartDate'] ?? proposal?['startDate'];
     final endDateStr = _internship!['actualEndDate'] ?? proposal?['endDate'];
 
     if (startDateStr != null && endDateStr != null) {
       try {
         final start = DateTime.parse(startDateStr.toString());
         final end = DateTime.parse(endDateStr.toString());
-        final months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
-        dateRange = 'Periode: ${months[start.month-1]} ${start.year} - ${months[end.month-1]} ${end.year}';
+        final months = [
+          'Jan',
+          'Feb',
+          'Mar',
+          'Apr',
+          'Mei',
+          'Jun',
+          'Jul',
+          'Agu',
+          'Sep',
+          'Okt',
+          'Nov',
+          'Des',
+        ];
+        dateRange =
+            'Periode: ${months[start.month - 1]} ${start.year} - ${months[end.month - 1]} ${end.year}';
       } catch (_) {}
     }
 
@@ -351,15 +368,15 @@ class _InternshipDashboardScreenState extends State<InternshipDashboardScreen> {
                       style: AppTextStyles.h3.copyWith(fontSize: 18),
                     ),
                     const SizedBox(height: 4),
-                    Text(
-                      dateRange,
-                      style: AppTextStyles.bodySmall,
-                    ),
+                    Text(dateRange, style: AppTextStyles.bodySmall),
                   ],
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
                 decoration: BoxDecoration(
                   color: const Color(0xFFFFF7ED),
                   borderRadius: BorderRadius.circular(12),
@@ -383,9 +400,15 @@ class _InternshipDashboardScreenState extends State<InternshipDashboardScreen> {
 
   Widget _buildProgressSection() {
     final totalLogbooks = _logbooks.length;
-    final filledLogbooks = _logbooks.where((l) => l['activityDescription'] != null && l['activityDescription'].toString().isNotEmpty).length;
+    final filledLogbooks = _logbooks
+        .where(
+          (l) =>
+              l['activityDescription'] != null &&
+              l['activityDescription'].toString().isNotEmpty,
+        )
+        .length;
     final progress = totalLogbooks > 0 ? filledLogbooks / totalLogbooks : 0.0;
-    
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -399,7 +422,10 @@ class _InternshipDashboardScreenState extends State<InternshipDashboardScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('Progres Logbook', style: AppTextStyles.h4.copyWith(fontSize: 14)),
+              Text(
+                'Progres Logbook',
+                style: AppTextStyles.h4.copyWith(fontSize: 14),
+              ),
               Text(
                 '$filledLogbooks/$totalLogbooks Hari',
                 style: AppTextStyles.label.copyWith(color: AppColors.primary),
@@ -413,7 +439,9 @@ class _InternshipDashboardScreenState extends State<InternshipDashboardScreen> {
               value: progress,
               minHeight: 10,
               backgroundColor: AppColors.primary.withValues(alpha: 0.1),
-              valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primary),
+              valueColor: const AlwaysStoppedAnimation<Color>(
+                AppColors.primary,
+              ),
             ),
           ),
           const SizedBox(height: 12),
@@ -426,10 +454,193 @@ class _InternshipDashboardScreenState extends State<InternshipDashboardScreen> {
     );
   }
 
+  Widget _buildFinalScoreSection() {
+    final score = _parseScore(_internship!['finalNumericScore']);
+    final grade = (_internship!['finalGrade'] ?? '-').toString();
+    final lecturerStatus = (_internship!['lecturerAssessmentStatus'] ?? '')
+        .toString();
+    final fieldStatus = (_internship!['fieldAssessmentStatus'] ?? '')
+        .toString();
+    final hasFinalScore = score != null && grade != '-' && grade.isNotEmpty;
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: AppColors.border.withValues(alpha: 0.5)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Nilai Akhir',
+                style: AppTextStyles.h4.copyWith(fontSize: 14),
+              ),
+              Icon(
+                hasFinalScore
+                    ? Icons.verified_rounded
+                    : Icons.hourglass_bottom_rounded,
+                color: hasFinalScore ? AppColors.success : AppColors.warning,
+                size: 22,
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          if (hasFinalScore)
+            Row(
+              children: [
+                Container(
+                  width: 82,
+                  height: 82,
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: AppColors.primary.withValues(alpha: 0.2),
+                      width: 2,
+                    ),
+                  ),
+                  child: Center(
+                    child: Text(
+                      grade,
+                      style: AppTextStyles.h1.copyWith(
+                        color: AppColors.primary,
+                        fontSize: 30,
+                        height: 1,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 18),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Skor Numerik',
+                        style: AppTextStyles.label.copyWith(
+                          color: AppColors.textTertiary,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        score.toStringAsFixed(2),
+                        style: AppTextStyles.h2.copyWith(
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Gabungan penilaian dosen pembimbing dan pembimbing lapangan.',
+                        style: AppTextStyles.bodySmall,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            )
+          else
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceSecondary,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.info_outline,
+                    color: AppColors.warning,
+                    size: 22,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Nilai akhir belum tersedia. Nilai akan muncul setelah seluruh penilaian selesai diproses.',
+                      style: AppTextStyles.bodySmall,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          const SizedBox(height: 16),
+          _buildAssessmentStatusRow(
+            label: 'Dosen Pembimbing',
+            status: lecturerStatus,
+            icon: Icons.school_rounded,
+          ),
+          const SizedBox(height: 10),
+          _buildAssessmentStatusRow(
+            label: 'Pembimbing Lapangan',
+            status: fieldStatus,
+            icon: Icons.business_center_rounded,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAssessmentStatusRow({
+    required String label,
+    required String status,
+    required IconData icon,
+  }) {
+    final completed = status == 'COMPLETED';
+    final color = completed ? AppColors.success : AppColors.warning;
+
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(icon, color: color, size: 18),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            label,
+            style: AppTextStyles.bodySmall.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(999),
+          ),
+          child: Text(
+            completed ? 'Selesai' : 'Belum Selesai',
+            style: AppTextStyles.label.copyWith(
+              color: color,
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  double? _parseScore(dynamic value) {
+    if (value == null) return null;
+    if (value is num) return value.toDouble();
+    return double.tryParse(value.toString());
+  }
+
   Widget _buildSupervisorSection() {
     final supervisor = _internship!['supervisor'] as Map<String, dynamic>?;
-    final lecturerName = supervisor != null && supervisor['user'] != null 
-        ? supervisor['user']['fullName'] ?? '-' 
+    final lecturerName = supervisor != null && supervisor['user'] != null
+        ? supervisor['user']['fullName'] ?? '-'
         : '-';
     final fieldName = _internship!['fieldSupervisorName'] ?? '-';
 
