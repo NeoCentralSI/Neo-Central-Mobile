@@ -21,6 +21,7 @@ class _InternshipGuidanceScreenState extends State<InternshipGuidanceScreen> {
   final InternshipApiService _api = InternshipApiService();
   bool _isLoading = true;
   String? _error;
+  bool _hasActiveInternship = false;
   Map<String, dynamic> _guidanceData = {};
 
   @override
@@ -33,12 +34,17 @@ class _InternshipGuidanceScreenState extends State<InternshipGuidanceScreen> {
     setState(() {
       _isLoading = true;
       _error = null;
+      _hasActiveInternship = false;
     });
     try {
       final res = await _api.getGuidanceTimeline();
       if (res['success'] == true) {
+        final data = res['data'] ?? {};
+        final internshipId = data['internshipId'];
         setState(() {
-          _guidanceData = res['data'] ?? {};
+          _hasActiveInternship =
+              internshipId != null && internshipId.toString().isNotEmpty;
+          _guidanceData = _hasActiveInternship ? data : {};
           _isLoading = false;
         });
       } else {
@@ -75,6 +81,8 @@ class _InternshipGuidanceScreenState extends State<InternshipGuidanceScreen> {
             )
           : _error != null
           ? _buildErrorState()
+          : !_hasActiveInternship
+          ? _buildNoActiveInternshipState()
           : _buildTimeline(),
       floatingActionButton: FloatingActionButton(
         onPressed: () => Navigator.push(
@@ -90,10 +98,34 @@ class _InternshipGuidanceScreenState extends State<InternshipGuidanceScreen> {
     );
   }
 
+  Widget _buildNoActiveInternshipState() {
+    return _buildRefreshableState(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.forum_outlined, size: 64, color: Colors.grey[400]),
+            const SizedBox(height: 16),
+            Text('Belum Ada KP Aktif', style: AppTextStyles.h4),
+            const SizedBox(height: 8),
+            Text(
+              'Bimbingan KP akan tersedia setelah ada KP baru yang berstatus berjalan.',
+              textAlign: TextAlign.center,
+              style: AppTextStyles.bodySmall.copyWith(
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildErrorState() {
-    return Center(
+    return _buildRefreshableState(
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
         children: [
           const Icon(
             Icons.error_outline,
@@ -126,9 +158,9 @@ class _InternshipGuidanceScreenState extends State<InternshipGuidanceScreen> {
     final timeline = _guidanceData['timeline'] as List? ?? [];
 
     if (timeline.isEmpty) {
-      return Center(
+      return _buildRefreshableState(
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
             Icon(Icons.event_note, size: 64, color: Colors.grey[400]),
             const SizedBox(height: 16),
@@ -150,11 +182,30 @@ class _InternshipGuidanceScreenState extends State<InternshipGuidanceScreen> {
       onRefresh: _loadData,
       color: AppColors.primary,
       child: ListView.builder(
+        physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(AppSpacing.pagePadding),
         itemCount: timeline.length,
         itemBuilder: (context, index) {
           final week = timeline[index];
           return _buildWeekCard(week);
+        },
+      ),
+    );
+  }
+
+  Widget _buildRefreshableState({required Widget child}) {
+    return RefreshIndicator(
+      onRefresh: _loadData,
+      color: AppColors.primary,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          return SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: constraints.maxHeight),
+              child: Center(child: child),
+            ),
+          );
         },
       ),
     );
@@ -507,6 +558,7 @@ class _InternshipGuidanceScreenState extends State<InternshipGuidanceScreen> {
     setState(() => _isLoading = true);
     try {
       await _api.submitStudentGuidance(weekNumber, answers);
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Bimbingan berhasil dikirim'),
@@ -515,6 +567,7 @@ class _InternshipGuidanceScreenState extends State<InternshipGuidanceScreen> {
       );
       _loadData();
     } catch (e) {
+      if (!mounted) return;
       setState(() => _isLoading = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(

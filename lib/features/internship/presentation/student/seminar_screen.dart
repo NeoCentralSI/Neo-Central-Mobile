@@ -16,7 +16,8 @@ class InternshipSeminarScreen extends StatefulWidget {
   const InternshipSeminarScreen({super.key, this.user});
 
   @override
-  State<InternshipSeminarScreen> createState() => _InternshipSeminarScreenState();
+  State<InternshipSeminarScreen> createState() =>
+      _InternshipSeminarScreenState();
 }
 
 class _InternshipSeminarScreenState extends State<InternshipSeminarScreen> {
@@ -62,23 +63,35 @@ class _InternshipSeminarScreenState extends State<InternshipSeminarScreen> {
       _error = null;
     });
     try {
-      final results = await Future.wait([
-        _api.getLogbookOverview(),
-        _api.getUpcomingSeminars(),
-        _api.getEligibleStudents(),
-        _api.getRooms(),
-      ]);
-
-      final overviewRes = results[0] as Map<String, dynamic>;
-      final upcomingRes = results[1] as List<dynamic>;
-      final eligibleRes = results[2] as List<dynamic>;
-      final roomsRes = results[3] as List<dynamic>;
-
+      final overviewRes = await _api.getLogbookOverview();
       if (overviewRes['success'] == true) {
         final data = overviewRes['data'];
         final internship = data['internship'];
+
+        if (internship == null) {
+          setState(() {
+            _internship = null;
+            _seminar = null;
+            _allUpcomingSeminars = [];
+            _upcomingSeminars = [];
+            _eligibleStudents = [];
+            _rooms = [];
+            _isLoading = false;
+          });
+          return;
+        }
+
+        final results = await Future.wait([
+          _api.getUpcomingSeminars(),
+          _api.getEligibleStudents(),
+          _api.getRooms(),
+        ]);
+
+        final upcomingRes = results[0];
+        final eligibleRes = results[1];
+        final roomsRes = results[2];
         final seminars = internship?['seminars'] as List? ?? [];
-        
+
         setState(() {
           _internship = internship;
           _seminar = seminars.isNotEmpty ? seminars[0] : null;
@@ -124,63 +137,102 @@ class _InternshipSeminarScreenState extends State<InternshipSeminarScreen> {
               onPressed: () => Scaffold.of(context).openDrawer(),
             ),
           ),
-          bottom: TabBar(
-            indicatorColor: Colors.white,
-            indicatorWeight: 3,
-            labelColor: Colors.white,
-            unselectedLabelColor: Colors.white.withValues(alpha: 0.7),
-            labelStyle: const TextStyle(fontWeight: FontWeight.bold),
-            unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.normal),
-            tabs: const [
-              Tab(text: 'Seminar Saya'),
-              Tab(text: 'Seminar Lain'),
-            ],
-          ),
+          bottom: !_isLoading && _error == null && _internship == null
+              ? null
+              : TabBar(
+                  indicatorColor: Colors.white,
+                  indicatorWeight: 3,
+                  labelColor: Colors.white,
+                  unselectedLabelColor: Colors.white.withValues(alpha: 0.7),
+                  labelStyle: const TextStyle(fontWeight: FontWeight.bold),
+                  unselectedLabelStyle: const TextStyle(
+                    fontWeight: FontWeight.normal,
+                  ),
+                  tabs: const [
+                    Tab(text: 'Seminar Saya'),
+                    Tab(text: 'Seminar Lain'),
+                  ],
+                ),
         ),
         body: _isLoading
-            ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+            ? const Center(
+                child: CircularProgressIndicator(color: AppColors.primary),
+              )
             : _error != null
-                ? _buildErrorState()
-                : TabBarView(
-                    children: [
-                      RefreshIndicator(
-                        onRefresh: _loadData,
-                        color: AppColors.primary,
-                        child: SingleChildScrollView(
-                          physics: const AlwaysScrollableScrollPhysics(),
-                          padding: const EdgeInsets.all(AppSpacing.pagePadding),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              if (_seminar == null)
-                                _buildNoSeminarState()
-                              else
-                                _buildSeminarDetails(),
-                            ],
-                          ),
-                        ),
+            ? _buildErrorState()
+            : _internship == null
+            ? _buildNoActiveInternshipState()
+            : TabBarView(
+                children: [
+                  RefreshIndicator(
+                    onRefresh: _loadData,
+                    color: AppColors.primary,
+                    child: SingleChildScrollView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.all(AppSpacing.pagePadding),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (_seminar == null)
+                            _buildNoSeminarState()
+                          else
+                            _buildSeminarDetails(),
+                        ],
                       ),
-                      _buildOtherSeminars(),
-                    ],
+                    ),
                   ),
+                  _buildOtherSeminars(),
+                ],
+              ),
         floatingActionButton: FloatingActionButton(
           onPressed: () => Navigator.push(
             context,
             MaterialPageRoute(builder: (_) => const NotificationScreen()),
           ),
           backgroundColor: Colors.amber,
-          child: const Icon(Icons.notifications_active_outlined, color: Colors.white),
+          child: const Icon(
+            Icons.notifications_active_outlined,
+            color: Colors.white,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNoActiveInternshipState() {
+    return _buildRefreshableState(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.groups_outlined, size: 64, color: Colors.grey[400]),
+            const SizedBox(height: 16),
+            Text('Belum Ada KP Aktif', style: AppTextStyles.h4),
+            const SizedBox(height: 8),
+            Text(
+              'Data seminar KP akan tampil setelah ada KP baru yang berstatus berjalan.',
+              textAlign: TextAlign.center,
+              style: AppTextStyles.bodySmall.copyWith(
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 
   Widget _buildErrorState() {
-    return Center(
+    return _buildRefreshableState(
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.error_outline, size: 64, color: AppColors.destructive),
+          const Icon(
+            Icons.error_outline,
+            size: 64,
+            color: AppColors.destructive,
+          ),
           const SizedBox(height: 16),
           Text('Terjadi Kesalahan', style: AppTextStyles.h3),
           const SizedBox(height: 8),
@@ -188,6 +240,24 @@ class _InternshipSeminarScreenState extends State<InternshipSeminarScreen> {
           const SizedBox(height: 24),
           ElevatedButton(onPressed: _loadData, child: const Text('Coba Lagi')),
         ],
+      ),
+    );
+  }
+
+  Widget _buildRefreshableState({required Widget child}) {
+    return RefreshIndicator(
+      onRefresh: _loadData,
+      color: AppColors.primary,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          return SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: constraints.maxHeight),
+              child: Center(child: child),
+            ),
+          );
+        },
       ),
     );
   }
@@ -219,7 +289,9 @@ class _InternshipSeminarScreenState extends State<InternshipSeminarScreen> {
           const SizedBox(height: 12),
           Text(
             'Anda dapat mengajukan seminar setelah menyelesaikan KP dan mendapatkan persetujuan dari dosen pembimbing.',
-            style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary),
+            style: AppTextStyles.bodySmall.copyWith(
+              color: AppColors.textSecondary,
+            ),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 24),
@@ -230,7 +302,9 @@ class _InternshipSeminarScreenState extends State<InternshipSeminarScreen> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primary,
                 foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
               child: const Text('Daftar Seminar'),
             ),
@@ -242,12 +316,15 @@ class _InternshipSeminarScreenState extends State<InternshipSeminarScreen> {
 
   Widget _buildSeminarDetails() {
     final status = _seminar!['status'] as String;
-    final date = DateTime.tryParse(_seminar!['seminarDate']?.toString() ?? '') ?? DateTime.now();
+    final date =
+        DateTime.tryParse(_seminar!['seminarDate']?.toString() ?? '') ??
+        DateTime.now();
     final startTime = _seminar!['startTime'];
     final endTime = _seminar!['endTime'];
     final room = _seminar!['room']?['name'] ?? 'TBA';
     final link = _seminar!['linkMeeting'];
-    final moderator = _seminar!['moderatorStudent']?['user']?['fullName'] ?? 'TBA';
+    final moderator =
+        _seminar!['moderatorStudent']?['user']?['fullName'] ?? 'TBA';
     final notes = _seminar!['supervisorNotes'];
 
     return Column(
@@ -257,13 +334,21 @@ class _InternshipSeminarScreenState extends State<InternshipSeminarScreen> {
         const SizedBox(height: 24),
         Text('Informasi Seminar', style: AppTextStyles.h4),
         const SizedBox(height: 16),
-        _buildDetailItem(Icons.calendar_today, 'Tanggal', fmt.formatDateIndonesian(date)),
-        _buildDetailItem(Icons.access_time, 'Waktu', '${_formatTime(startTime)} - ${_formatTime(endTime)} WIB'),
+        _buildDetailItem(
+          Icons.calendar_today,
+          'Tanggal',
+          fmt.formatDateIndonesian(date),
+        ),
+        _buildDetailItem(
+          Icons.access_time,
+          'Waktu',
+          '${_formatTime(startTime)} - ${_formatTime(endTime)} WIB',
+        ),
         _buildDetailItem(Icons.location_on, 'Ruangan', room),
         if (link != null && link.isNotEmpty)
           _buildDetailItem(Icons.link, 'Link Meeting', link, isLink: true),
         _buildDetailItem(Icons.person, 'Moderator', moderator),
-        
+
         if (notes != null && notes.isNotEmpty) ...[
           const SizedBox(height: 24),
           Text('Catatan Pembimbing', style: AppTextStyles.h4),
@@ -274,11 +359,15 @@ class _InternshipSeminarScreenState extends State<InternshipSeminarScreen> {
             decoration: BoxDecoration(
               color: AppColors.warningLight.withValues(alpha: 0.3),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.warning.withValues(alpha: 0.3)),
+              border: Border.all(
+                color: AppColors.warning.withValues(alpha: 0.3),
+              ),
             ),
             child: Text(
               notes,
-              style: AppTextStyles.bodySmall.copyWith(fontStyle: FontStyle.italic),
+              style: AppTextStyles.bodySmall.copyWith(
+                fontStyle: FontStyle.italic,
+              ),
             ),
           ),
         ],
@@ -326,12 +415,11 @@ class _InternshipSeminarScreenState extends State<InternshipSeminarScreen> {
               children: [
                 Text(
                   'Status Pengajuan',
-                  style: AppTextStyles.caption.copyWith(color: AppColors.textSecondary),
+                  style: AppTextStyles.caption.copyWith(
+                    color: AppColors.textSecondary,
+                  ),
                 ),
-                Text(
-                  label,
-                  style: AppTextStyles.h3.copyWith(color: color),
-                ),
+                Text(label, style: AppTextStyles.h3.copyWith(color: color)),
               ],
             ),
           ),
@@ -340,7 +428,12 @@ class _InternshipSeminarScreenState extends State<InternshipSeminarScreen> {
     );
   }
 
-  Widget _buildDetailItem(IconData icon, String label, String value, {bool isLink = false}) {
+  Widget _buildDetailItem(
+    IconData icon,
+    String label,
+    String value, {
+    bool isLink = false,
+  }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: Row(
@@ -359,7 +452,12 @@ class _InternshipSeminarScreenState extends State<InternshipSeminarScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(label, style: AppTextStyles.caption.copyWith(color: AppColors.textSecondary)),
+                Text(
+                  label,
+                  style: AppTextStyles.caption.copyWith(
+                    color: AppColors.textSecondary,
+                  ),
+                ),
                 Text(
                   value,
                   style: AppTextStyles.body.copyWith(
@@ -380,9 +478,9 @@ class _InternshipSeminarScreenState extends State<InternshipSeminarScreen> {
     final filteredSeminars = _filteredUpcomingSeminars;
 
     if (_upcomingSeminars.isEmpty) {
-      return Center(
+      return _buildRefreshableState(
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
             Icon(Icons.event_busy, size: 64, color: Colors.grey[400]),
             const SizedBox(height: 16),
@@ -401,17 +499,24 @@ class _InternshipSeminarScreenState extends State<InternshipSeminarScreen> {
       onRefresh: _loadData,
       color: AppColors.primary,
       child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(AppSpacing.pagePadding),
         children: [
           _buildRegisterCTA(),
           const SizedBox(height: 12),
           TextField(
-            onChanged: (value) => setState(() => _otherSeminarSearch = value.trim()),
+            onChanged: (value) =>
+                setState(() => _otherSeminarSearch = value.trim()),
             decoration: InputDecoration(
               hintText: 'Cari nama atau NIM mahasiswa...',
               prefixIcon: const Icon(Icons.search),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 12,
+              ),
             ),
           ),
           const SizedBox(height: 16),
@@ -426,14 +531,17 @@ class _InternshipSeminarScreenState extends State<InternshipSeminarScreen> {
                   const SizedBox(height: 6),
                   Text(
                     'Coba kata kunci lain.',
-                    style: AppTextStyles.caption.copyWith(color: AppColors.textSecondary),
+                    style: AppTextStyles.caption.copyWith(
+                      color: AppColors.textSecondary,
+                    ),
                   ),
                 ],
               ),
             )
           else
             ...filteredSeminars.map(
-              (seminar) => _buildUpcomingSeminarCard(seminar as Map<String, dynamic>),
+              (seminar) =>
+                  _buildUpcomingSeminarCard(seminar as Map<String, dynamic>),
             ),
         ],
       ),
@@ -475,13 +583,20 @@ class _InternshipSeminarScreenState extends State<InternshipSeminarScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Ajukan Jadwal Seminar', style: AppTextStyles.label.copyWith(fontWeight: FontWeight.bold)),
+                Text(
+                  'Ajukan Jadwal Seminar',
+                  style: AppTextStyles.label.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
                 const SizedBox(height: 4),
                 Text(
                   canRegister
                       ? 'Pilih tanggal, waktu, dan ruangan untuk pengajuan seminar.'
                       : 'Anda sudah memiliki pengajuan seminar aktif.',
-                  style: AppTextStyles.caption.copyWith(color: AppColors.textSecondary),
+                  style: AppTextStyles.caption.copyWith(
+                    color: AppColors.textSecondary,
+                  ),
                 ),
               ],
             ),
@@ -492,7 +607,9 @@ class _InternshipSeminarScreenState extends State<InternshipSeminarScreen> {
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primary,
               foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
             ),
             child: const Text('Ajukan'),
           ),
@@ -502,9 +619,14 @@ class _InternshipSeminarScreenState extends State<InternshipSeminarScreen> {
   }
 
   Widget _buildUpcomingSeminarCard(Map<String, dynamic> seminar) {
-    final studentName = seminar['internship']?['student']?['user']?['fullName'] ?? 'Mahasiswa';
-    final companyName = seminar['internship']?['proposal']?['targetCompany']?['companyName'] ?? '-';
-    final date = DateTime.tryParse(seminar['seminarDate']?.toString() ?? '') ?? DateTime.now();
+    final studentName =
+        seminar['internship']?['student']?['user']?['fullName'] ?? 'Mahasiswa';
+    final companyName =
+        seminar['internship']?['proposal']?['targetCompany']?['companyName'] ??
+        '-';
+    final date =
+        DateTime.tryParse(seminar['seminarDate']?.toString() ?? '') ??
+        DateTime.now();
     final startTime = seminar['startTime'];
     final room = seminar['room']?['name'] ?? 'TBA';
 
@@ -550,8 +672,18 @@ class _InternshipSeminarScreenState extends State<InternshipSeminarScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(studentName, style: AppTextStyles.label.copyWith(fontWeight: FontWeight.bold)),
-                        Text(companyName, style: AppTextStyles.caption.copyWith(color: AppColors.textSecondary)),
+                        Text(
+                          studentName,
+                          style: AppTextStyles.label.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        Text(
+                          companyName,
+                          style: AppTextStyles.caption.copyWith(
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -561,7 +693,10 @@ class _InternshipSeminarScreenState extends State<InternshipSeminarScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  _buildCompactInfo(Icons.calendar_today, fmt.formatDateIndonesian(date)),
+                  _buildCompactInfo(
+                    Icons.calendar_today,
+                    fmt.formatDateIndonesian(date),
+                  ),
                   _buildCompactInfo(Icons.access_time, _formatTime(startTime)),
                 ],
               ),
@@ -574,7 +709,11 @@ class _InternshipSeminarScreenState extends State<InternshipSeminarScreen> {
     );
   }
 
-  Widget _buildCompactInfo(IconData icon, String text, {bool allowWrap = false}) {
+  Widget _buildCompactInfo(
+    IconData icon,
+    String text, {
+    bool allowWrap = false,
+  }) {
     return Row(
       mainAxisSize: MainAxisSize.max,
       children: [
@@ -599,14 +738,20 @@ class _InternshipSeminarScreenState extends State<InternshipSeminarScreen> {
   void _openRegisterSeminarSheet() {
     if (_internship == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Pengajuan seminar hanya tersedia untuk mahasiswa KP aktif.')),
+        const SnackBar(
+          content: Text(
+            'Pengajuan seminar hanya tersedia untuk mahasiswa KP aktif.',
+          ),
+        ),
       );
       return;
     }
 
     if (!_canSubmitNewSeminar()) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Anda sudah memiliki pengajuan seminar aktif.')),
+        const SnackBar(
+          content: Text('Anda sudah memiliki pengajuan seminar aktif.'),
+        ),
       );
       return;
     }
@@ -669,14 +814,20 @@ class _InternshipSeminarScreenState extends State<InternshipSeminarScreen> {
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
-                      onPressed: _isSubmitting ? null : _submitSeminarRegistration,
+                      onPressed: _isSubmitting
+                          ? null
+                          : _submitSeminarRegistration,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.primary,
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
-                      child: Text(_isSubmitting ? 'Menyimpan...' : 'Kirim Pengajuan'),
+                      child: Text(
+                        _isSubmitting ? 'Menyimpan...' : 'Kirim Pengajuan',
+                      ),
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -702,7 +853,9 @@ class _InternshipSeminarScreenState extends State<InternshipSeminarScreen> {
             Expanded(
               child: _buildPickerField(
                 label: 'Tanggal',
-                value: _selectedDate == null ? 'Pilih tanggal' : fmt.formatDateIndonesian(_selectedDate!),
+                value: _selectedDate == null
+                    ? 'Pilih tanggal'
+                    : fmt.formatDateIndonesian(_selectedDate!),
                 onTap: _pickDate,
               ),
             ),
@@ -710,7 +863,9 @@ class _InternshipSeminarScreenState extends State<InternshipSeminarScreen> {
             Expanded(
               child: _buildPickerField(
                 label: 'Mulai',
-                value: _startTime == null ? 'HH:MM' : _formatTimeOfDay(_startTime!),
+                value: _startTime == null
+                    ? 'HH:MM'
+                    : _formatTimeOfDay(_startTime!),
                 onTap: () => _pickTime(isStart: true),
               ),
             ),
@@ -726,7 +881,11 @@ class _InternshipSeminarScreenState extends State<InternshipSeminarScreen> {
     );
   }
 
-  Widget _buildPickerField({required String label, required String value, required VoidCallback onTap}) {
+  Widget _buildPickerField({
+    required String label,
+    required String value,
+    required VoidCallback onTap,
+  }) {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
@@ -739,9 +898,17 @@ class _InternshipSeminarScreenState extends State<InternshipSeminarScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(label, style: AppTextStyles.caption.copyWith(color: AppColors.textSecondary)),
+            Text(
+              label,
+              style: AppTextStyles.caption.copyWith(
+                color: AppColors.textSecondary,
+              ),
+            ),
             const SizedBox(height: 4),
-            Text(value, style: AppTextStyles.body.copyWith(fontWeight: FontWeight.bold)),
+            Text(
+              value,
+              style: AppTextStyles.body.copyWith(fontWeight: FontWeight.bold),
+            ),
           ],
         ),
       ),
@@ -758,16 +925,22 @@ class _InternshipSeminarScreenState extends State<InternshipSeminarScreen> {
           key: ValueKey(_selectedRoomId),
           initialValue: _selectedRoomId.isEmpty ? null : _selectedRoomId,
           items: _rooms
-              .map((room) => DropdownMenuItem<String>(
-                    value: room['id']?.toString() ?? '',
-                    child: Text(room['name']?.toString() ?? '-'),
-                  ))
+              .map(
+                (room) => DropdownMenuItem<String>(
+                  value: room['id']?.toString() ?? '',
+                  child: Text(room['name']?.toString() ?? '-'),
+                ),
+              )
               .toList(),
-          onChanged: (value) => _refreshSheet(() => _selectedRoomId = value ?? ''),
+          onChanged: (value) =>
+              _refreshSheet(() => _selectedRoomId = value ?? ''),
           decoration: InputDecoration(
             hintText: 'Pilih Ruangan',
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 12,
+            ),
           ),
         ),
       ],
@@ -808,11 +981,15 @@ class _InternshipSeminarScreenState extends State<InternshipSeminarScreen> {
                     children: [
                       Text(
                         selectedModerator['fullName']?.toString() ?? '-',
-                        style: AppTextStyles.bodySmall.copyWith(fontWeight: FontWeight.bold),
+                        style: AppTextStyles.bodySmall.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                       Text(
                         selectedModerator['identityNumber']?.toString() ?? '-',
-                        style: AppTextStyles.caption.copyWith(color: AppColors.textSecondary),
+                        style: AppTextStyles.caption.copyWith(
+                          color: AppColors.textSecondary,
+                        ),
                       ),
                     ],
                   ),
@@ -829,11 +1006,17 @@ class _InternshipSeminarScreenState extends State<InternshipSeminarScreen> {
           )
         else
           TextField(
-            onChanged: (value) => _refreshSheet(() => _moderatorSearch = value.trim()),
+            onChanged: (value) =>
+                _refreshSheet(() => _moderatorSearch = value.trim()),
             decoration: InputDecoration(
               hintText: 'Ketik NIM (harus sama persis)',
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 12,
+              ),
             ),
           ),
         if (selectedModerator == null && query.isNotEmpty) ...[
@@ -855,19 +1038,36 @@ class _InternshipSeminarScreenState extends State<InternshipSeminarScreen> {
                       _moderatorSearch = '';
                     }),
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
                       child: Row(
                         children: [
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(name, style: AppTextStyles.bodySmall.copyWith(fontWeight: FontWeight.bold)),
-                                Text(nim, style: AppTextStyles.caption.copyWith(color: AppColors.textSecondary)),
+                                Text(
+                                  name,
+                                  style: AppTextStyles.bodySmall.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                Text(
+                                  nim,
+                                  style: AppTextStyles.caption.copyWith(
+                                    color: AppColors.textSecondary,
+                                  ),
+                                ),
                               ],
                             ),
                           ),
-                          const Icon(Icons.check_circle_outline, size: 18, color: AppColors.primary),
+                          const Icon(
+                            Icons.check_circle_outline,
+                            size: 18,
+                            color: AppColors.primary,
+                          ),
                         ],
                       ),
                     ),
@@ -876,7 +1076,12 @@ class _InternshipSeminarScreenState extends State<InternshipSeminarScreen> {
               ),
             )
           else
-            Text('Mahasiswa tidak ditemukan.', style: AppTextStyles.caption.copyWith(color: AppColors.textSecondary)),
+            Text(
+              'Mahasiswa tidak ditemukan.',
+              style: AppTextStyles.caption.copyWith(
+                color: AppColors.textSecondary,
+              ),
+            ),
         ],
       ],
     );
@@ -893,7 +1098,10 @@ class _InternshipSeminarScreenState extends State<InternshipSeminarScreen> {
           decoration: InputDecoration(
             hintText: 'https://meet.google.com/...',
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 12,
+            ),
           ),
         ),
       ],
@@ -903,6 +1111,7 @@ class _InternshipSeminarScreenState extends State<InternshipSeminarScreen> {
   Widget _buildGroupMemberPicker() {
     final eligibleMembers = _eligibleGroupMembers;
     final ineligibleMembers = _ineligibleGroupMembers;
+    final alreadyScheduledMembers = _alreadyScheduledGroupMembers;
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -918,15 +1127,20 @@ class _InternshipSeminarScreenState extends State<InternshipSeminarScreen> {
           const SizedBox(height: 12),
           if (eligibleMembers.isEmpty)
             Text(
-              'Anggota kelompok Anda tidak dapat disertakan karena dosen pembimbing berbeda.',
-              style: AppTextStyles.caption.copyWith(color: AppColors.textSecondary),
+              alreadyScheduledMembers.isNotEmpty
+                  ? 'Anggota kelompok dengan dosen pembimbing yang sama sudah memiliki pengajuan seminar aktif.'
+                  : 'Anggota kelompok Anda tidak dapat disertakan karena dosen pembimbing berbeda.',
+              style: AppTextStyles.caption.copyWith(
+                color: AppColors.textSecondary,
+              ),
             )
           else
             Column(
               children: eligibleMembers.map((member) {
                 final id = member['id']?.toString() ?? '';
                 final name = member['student']?['user']?['fullName'] ?? '-';
-                final nim = member['student']?['user']?['identityNumber'] ?? '-';
+                final nim =
+                    member['student']?['user']?['identityNumber'] ?? '-';
                 final isSelected = _selectedMemberIds.contains(id);
                 return CheckboxListTile(
                   value: isSelected,
@@ -939,18 +1153,34 @@ class _InternshipSeminarScreenState extends State<InternshipSeminarScreen> {
                       }
                     });
                   },
-                  title: Text(name, style: AppTextStyles.bodySmall.copyWith(fontWeight: FontWeight.bold)),
+                  title: Text(
+                    name,
+                    style: AppTextStyles.bodySmall.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                   subtitle: Text(nim, style: AppTextStyles.caption),
                   controlAffinity: ListTileControlAffinity.leading,
                   contentPadding: EdgeInsets.zero,
                 );
               }).toList(),
             ),
+          if (alreadyScheduledMembers.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              '${alreadyScheduledMembers.length} anggota dengan dosen pembimbing yang sama sudah memiliki pengajuan seminar aktif.',
+              style: AppTextStyles.caption.copyWith(
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ],
           if (ineligibleMembers.isNotEmpty) ...[
             const SizedBox(height: 8),
             Text(
               '${ineligibleMembers.length} anggota lainnya tidak dapat disertakan karena dosen pembimbing berbeda.',
-              style: AppTextStyles.caption.copyWith(color: AppColors.textSecondary),
+              style: AppTextStyles.caption.copyWith(
+                color: AppColors.textSecondary,
+              ),
             ),
           ],
         ],
@@ -959,18 +1189,41 @@ class _InternshipSeminarScreenState extends State<InternshipSeminarScreen> {
   }
 
   List<dynamic> get _groupMembers {
-    final proposalInternships = _internship?['proposal']?['internships'] as List? ?? [];
-    return proposalInternships.where((m) => m['id'] != _internship?['id']).toList();
+    final proposalInternships =
+        _internship?['proposal']?['internships'] as List? ?? [];
+    return proposalInternships
+        .where((m) => m['id'] != _internship?['id'])
+        .toList();
   }
 
   List<dynamic> get _eligibleGroupMembers {
     final supervisorId = _internship?['supervisorId'];
-    return _groupMembers.where((m) => m['supervisorId'] == supervisorId).toList();
+    return _groupMembers
+        .where(
+          (m) => m['supervisorId'] == supervisorId && !_hasActiveSeminar(m),
+        )
+        .toList();
+  }
+
+  List<dynamic> get _alreadyScheduledGroupMembers {
+    final supervisorId = _internship?['supervisorId'];
+    return _groupMembers
+        .where((m) => m['supervisorId'] == supervisorId && _hasActiveSeminar(m))
+        .toList();
   }
 
   List<dynamic> get _ineligibleGroupMembers {
     final supervisorId = _internship?['supervisorId'];
-    return _groupMembers.where((m) => m['supervisorId'] != supervisorId).toList();
+    return _groupMembers
+        .where((m) => m['supervisorId'] != supervisorId)
+        .toList();
+  }
+
+  bool _hasActiveSeminar(dynamic member) {
+    final seminars = member['seminars'] as List? ?? [];
+    return seminars.any(
+      (seminar) => ['REQUESTED', 'APPROVED'].contains(seminar['status']),
+    );
   }
 
   bool _canSubmitNewSeminar() {
@@ -992,11 +1245,10 @@ class _InternshipSeminarScreenState extends State<InternshipSeminarScreen> {
   }
 
   Future<void> _pickTime({required bool isStart}) async {
-    final initial = isStart ? (_startTime ?? const TimeOfDay(hour: 8, minute: 0)) : (_endTime ?? const TimeOfDay(hour: 10, minute: 0));
-    final picked = await showTimePicker(
-      context: context,
-      initialTime: initial,
-    );
+    final initial = isStart
+        ? (_startTime ?? const TimeOfDay(hour: 8, minute: 0))
+        : (_endTime ?? const TimeOfDay(hour: 10, minute: 0));
+    final picked = await showTimePicker(context: context, initialTime: initial);
     if (picked != null) {
       _refreshSheet(() {
         if (isStart) {
@@ -1017,7 +1269,11 @@ class _InternshipSeminarScreenState extends State<InternshipSeminarScreen> {
   }
 
   Future<void> _submitSeminarRegistration() async {
-    if (_selectedDate == null || _startTime == null || _endTime == null || _selectedRoomId.isEmpty || _selectedModeratorId.isEmpty) {
+    if (_selectedDate == null ||
+        _startTime == null ||
+        _endTime == null ||
+        _selectedRoomId.isEmpty ||
+        _selectedModeratorId.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Semua field wajib harus diisi.')),
       );
@@ -1026,7 +1282,11 @@ class _InternshipSeminarScreenState extends State<InternshipSeminarScreen> {
 
     if (!_isWeekday(_selectedDate!)) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Seminar hanya dapat dijadwalkan pada hari kerja (Senin-Jumat).')),
+        const SnackBar(
+          content: Text(
+            'Seminar hanya dapat dijadwalkan pada hari kerja (Senin-Jumat).',
+          ),
+        ),
       );
       return;
     }
@@ -1035,7 +1295,9 @@ class _InternshipSeminarScreenState extends State<InternshipSeminarScreen> {
     final endStr = _formatTimeOfDay(_endTime!);
     if (startStr.compareTo(endStr) >= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Waktu mulai harus lebih awal dari waktu selesai.')),
+        const SnackBar(
+          content: Text('Waktu mulai harus lebih awal dari waktu selesai.'),
+        ),
       );
       return;
     }
@@ -1044,33 +1306,46 @@ class _InternshipSeminarScreenState extends State<InternshipSeminarScreen> {
     final end = DateTime.parse('1970-01-01T$endStr:00Z');
     final dateStr = _selectedDate!.toIso8601String().split('T')[0];
 
-    final conflict = _allUpcomingSeminars.firstWhere(
-      (s) {
-        final sDate = DateTime.tryParse(s['seminarDate']?.toString() ?? '')?.toIso8601String().split('T')[0];
-        if (sDate != dateStr) return false;
-        final sStart = DateTime.tryParse(s['startTime']?.toString() ?? '');
-        final sEnd = DateTime.tryParse(s['endTime']?.toString() ?? '');
-        if (sStart == null || sEnd == null) return false;
-        final isOverlapping = start.isBefore(sEnd) && end.isAfter(sStart);
-        if (!isOverlapping) return false;
-        if (s['room']?['id']?.toString() == _selectedRoomId) return true;
-        if (s['moderatorStudentId']?.toString() == _selectedModeratorId) return true;
-        return false;
-      },
-      orElse: () => null,
-    );
+    final conflict = _allUpcomingSeminars.firstWhere((s) {
+      final sDate = DateTime.tryParse(
+        s['seminarDate']?.toString() ?? '',
+      )?.toIso8601String().split('T')[0];
+      if (sDate != dateStr) return false;
+      final sStart = DateTime.tryParse(s['startTime']?.toString() ?? '');
+      final sEnd = DateTime.tryParse(s['endTime']?.toString() ?? '');
+      if (sStart == null || sEnd == null) return false;
+      final isOverlapping = start.isBefore(sEnd) && end.isAfter(sStart);
+      if (!isOverlapping) return false;
+      if (s['room']?['id']?.toString() == _selectedRoomId) return true;
+      if (s['moderatorStudentId']?.toString() == _selectedModeratorId) {
+        return true;
+      }
+      return false;
+    }, orElse: () => null);
 
     if (conflict != null) {
       if (conflict['room']?['id']?.toString() == _selectedRoomId) {
         final name = conflict['room']?['name'] ?? '-';
-        final student = conflict['internship']?['student']?['user']?['fullName'] ?? 'mahasiswa lain';
+        final student =
+            conflict['internship']?['student']?['user']?['fullName'] ??
+            'mahasiswa lain';
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Ruangan $name sudah dipesan oleh $student pada waktu tersebut.')),
+          SnackBar(
+            content: Text(
+              'Ruangan $name sudah dipesan oleh $student pada waktu tersebut.',
+            ),
+          ),
         );
       } else {
-        final moderator = conflict['moderatorStudent']?['user']?['fullName'] ?? 'mahasiswa lain';
+        final moderator =
+            conflict['moderatorStudent']?['user']?['fullName'] ??
+            'mahasiswa lain';
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Mahasiswa $moderator sudah terjadwal menjadi moderator pada waktu tersebut.')),
+          SnackBar(
+            content: Text(
+              'Mahasiswa $moderator sudah terjadwal menjadi moderator pada waktu tersebut.',
+            ),
+          ),
         );
       }
       return;
@@ -1078,6 +1353,13 @@ class _InternshipSeminarScreenState extends State<InternshipSeminarScreen> {
 
     _refreshSheet(() => _isSubmitting = true);
     try {
+      final eligibleIds = _eligibleGroupMembers
+          .map((member) => member['id']?.toString() ?? '')
+          .where((id) => id.isNotEmpty)
+          .toSet();
+      final memberInternshipIds = _selectedMemberIds
+          .where((id) => eligibleIds.contains(id))
+          .toList();
       final payload = {
         'seminarDate': dateStr,
         'startTime': startStr,
@@ -1085,7 +1367,8 @@ class _InternshipSeminarScreenState extends State<InternshipSeminarScreen> {
         'roomId': _selectedRoomId,
         'linkMeeting': _linkMeeting,
         'moderatorStudentId': _selectedModeratorId,
-        if (_selectedMemberIds.isNotEmpty) 'memberInternshipIds': _selectedMemberIds,
+        if (memberInternshipIds.isNotEmpty)
+          'memberInternshipIds': memberInternshipIds,
       };
 
       await _api.registerSeminar(payload);
@@ -1094,9 +1377,9 @@ class _InternshipSeminarScreenState extends State<InternshipSeminarScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            _selectedMemberIds.isNotEmpty
-                ? 'Pengajuan seminar untuk Anda dan ${_selectedMemberIds.length} anggota kelompok berhasil dikirim.'
-                : 'Pengajuan seminar berhasil dikirim.'
+            memberInternshipIds.isNotEmpty
+                ? 'Pengajuan seminar untuk Anda dan ${memberInternshipIds.length} anggota kelompok berhasil dikirim.'
+                : 'Pengajuan seminar berhasil dikirim.',
           ),
           backgroundColor: AppColors.success,
         ),
@@ -1105,7 +1388,10 @@ class _InternshipSeminarScreenState extends State<InternshipSeminarScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Gagal mengajukan seminar: $e'), backgroundColor: AppColors.destructive),
+        SnackBar(
+          content: Text('Gagal mengajukan seminar: $e'),
+          backgroundColor: AppColors.destructive,
+        ),
       );
     } finally {
       _refreshSheet(() => _isSubmitting = false);
@@ -1125,4 +1411,3 @@ class _InternshipSeminarScreenState extends State<InternshipSeminarScreen> {
     }
   }
 }
-
