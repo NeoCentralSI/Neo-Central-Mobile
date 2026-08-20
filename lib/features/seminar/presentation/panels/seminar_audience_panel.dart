@@ -6,15 +6,11 @@ import '../../../../core/constants/app_text_styles.dart';
 import '../../../../core/models/auth_models.dart';
 import '../../../../core/services/seminar_api_service.dart';
 import '../../../../shared/widgets/shared_widgets.dart';
+import '../../data/models/seminar_models.dart';
 
-/// Peserta panel — audience list with supervisor approve/unapprove actions.
-///
-/// Mobile scope:
-///   • Supervisor: can approve / unapprove audience presence.
-///   • Examiner / HoD: read-only list.
 class SeminarAudiencePanel extends StatefulWidget {
   final String seminarId;
-  final Map<String, dynamic> detail;
+  final SeminarDetail detail;
   final UserModel? user;
 
   const SeminarAudiencePanel({
@@ -31,115 +27,108 @@ class SeminarAudiencePanel extends StatefulWidget {
 class _SeminarAudiencePanelState extends State<SeminarAudiencePanel>
     with AutomaticKeepAliveClientMixin {
   final _api = SeminarApiService();
-  final _searchCtrl = TextEditingController();
-
+  final _searchController = TextEditingController();
+  List<SeminarAudience> _audiences = const [];
   bool _isLoading = true;
   String? _error;
-  List<Map<String, dynamic>> _items = const [];
   String? _busyStudentId;
 
   @override
   bool get wantKeepAlive => true;
 
+  bool get _isSupervisor {
+    final lecturerId = widget.user?.lecturer?.id;
+    return lecturerId != null &&
+        widget.detail.supervisors.any((item) => item.lecturerId == lecturerId);
+  }
+
+  List<SeminarAudience> get _filtered {
+    final query = _searchController.text.trim().toLowerCase();
+    if (query.isEmpty) return _audiences;
+    return _audiences
+        .where(
+          (item) =>
+              item.studentName.toLowerCase().contains(query) ||
+              item.nim.toLowerCase().contains(query),
+        )
+        .toList(growable: false);
+  }
+
   @override
   void initState() {
     super.initState();
-    _fetch();
+    _load();
   }
 
   @override
   void dispose() {
-    _searchCtrl.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
-  bool get _isSupervisor {
-    final lecturerId = widget.user?.lecturer?.id;
-    if (lecturerId == null) return false;
-    final supervisors = (widget.detail['supervisors'] as List?) ?? const [];
-    return supervisors
-        .whereType<Map>()
-        .any((s) => s['lecturerId'] == lecturerId);
-  }
-
-  Future<void> _fetch() async {
+  Future<void> _load() async {
     setState(() {
       _isLoading = true;
       _error = null;
     });
     try {
-      final raw = await _api.getAudiences(widget.seminarId);
+      final result = await _api.getAudiences(widget.seminarId);
       if (!mounted) return;
-      setState(() {
-        _items = raw
-            .map((m) => {
-                  'studentId': m['studentId'] ?? m['student']?['id'],
-                  'studentName':
-                      m['fullName'] ?? m['studentName'] ?? '-',
-                  'nim': m['nim'] ?? '-',
-                  'registeredAt': m['registeredAt'],
-                  'approvedAt': m['approvedAt'],
-                  'approvedByName': m['approvedByName'],
-                })
-            .toList();
-        _isLoading = false;
-      });
-    } catch (e) {
+      setState(() => _audiences = result);
+    } catch (exception) {
       if (!mounted) return;
-      setState(() {
-        _error = e.toString();
-        _isLoading = false;
-      });
+      setState(() => _error = exception.toString());
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  Future<void> _toggleApproval(Map<String, dynamic> row) async {
-    final studentId = row['studentId']?.toString();
-    if (studentId == null) return;
-    final isApproved = row['approvedAt'] != null;
+  Future<void> _togglePresence(SeminarAudience audience) async {
+    final studentId = audience.studentId;
+    if (studentId == null) {
+      _showMessage(
+        'ID mahasiswa peserta tidak tersedia.',
+        AppColors.destructive,
+      );
+      return;
+    }
     setState(() => _busyStudentId = studentId);
     try {
       await _api.updateAudience(
         widget.seminarId,
         studentId,
-        action: isApproved ? 'unapprove' : 'approve',
+        action: audience.isPresent
+            ? AudienceAction.unapprove
+            : AudienceAction.approve,
       );
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            isApproved
-                ? 'Persetujuan kehadiran dibatalkan.'
-                : 'Kehadiran peserta disetujui.',
-          ),
-          backgroundColor:
-              isApproved ? AppColors.textPrimary : AppColors.successDark,
-          behavior: SnackBarBehavior.floating,
-        ),
+      _showMessage(
+        audience.isPresent
+            ? 'Status hadir peserta dibatalkan.'
+            : 'Kehadiran peserta berhasil diverifikasi.',
+        audience.isPresent ? AppColors.textPrimary : AppColors.successDark,
       );
-      await _fetch();
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Gagal memperbarui kehadiran: $e'),
-          backgroundColor: AppColors.destructive,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      await _load();
+    } catch (exception) {
+      if (mounted) {
+        _showMessage(
+          'Gagal memperbarui kehadiran: $exception',
+          AppColors.destructive,
+        );
+      }
     } finally {
       if (mounted) setState(() => _busyStudentId = null);
     }
   }
 
-  List<Map<String, dynamic>> get _filtered {
-    final q = _searchCtrl.text.trim().toLowerCase();
-    if (q.isEmpty) return _items;
-    return _items.where((row) {
-      final name = (row['studentName'] ?? '').toString().toLowerCase();
-      final nim = (row['nim'] ?? '').toString().toLowerCase();
-      return name.contains(q) || nim.contains(q);
-    }).toList();
+  void _showMessage(String message, Color color) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: color,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   @override
@@ -147,103 +136,76 @@ class _SeminarAudiencePanelState extends State<SeminarAudiencePanel>
     super.build(context);
     return Column(
       children: [
-        _buildHeader(),
-        Expanded(child: _buildBody()),
-      ],
-    );
-  }
-
-  Widget _buildHeader() {
-    final total = _items.length;
-    final approved = _items.where((r) => r['approvedAt'] != null).length;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        AppSpacing.pagePadding,
-        AppSpacing.base,
-        AppSpacing.pagePadding,
-        AppSpacing.sm,
-      ),
-      child: Column(
-        children: [
-          Row(
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.pagePadding,
+            AppSpacing.base,
+            AppSpacing.pagePadding,
+            AppSpacing.sm,
+          ),
+          child: Row(
             children: [
               Expanded(
                 child: TextField(
-                  controller: _searchCtrl,
+                  controller: _searchController,
                   onChanged: (_) => setState(() {}),
                   decoration: InputDecoration(
                     hintText: 'Cari peserta…',
                     prefixIcon: const Icon(Icons.search, size: 20),
                     filled: true,
                     fillColor: AppColors.surface,
-                    contentPadding: const EdgeInsets.symmetric(
-                        vertical: 0, horizontal: 14),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(14),
-                      borderSide: BorderSide(color: AppColors.border),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(14),
-                      borderSide: BorderSide(color: AppColors.border),
                     ),
                   ),
                 ),
               ),
               const SizedBox(width: 8),
               AppBadge(
-                label: '$approved / $total hadir',
+                label:
+                    '${_audiences.where((item) => item.isPresent).length} / ${_audiences.length} hadir',
                 variant: BadgeVariant.outline,
               ),
             ],
           ),
-        ],
-      ),
+        ),
+        Expanded(child: _body()),
+      ],
     );
   }
 
-  Widget _buildBody() {
-    if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
+  Widget _body() {
+    if (_isLoading) return const Center(child: CircularProgressIndicator());
     if (_error != null) {
-      return _ErrorView(message: _error!, onRetry: _fetch);
+      return _ErrorView(message: _error!, onRetry: _load);
     }
     final data = _filtered;
     if (data.isEmpty) {
       return RefreshIndicator(
-        onRefresh: _fetch,
-        color: AppColors.primary,
+        onRefresh: _load,
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
           children: [
             const SizedBox(height: 80),
-            Icon(
+            const Icon(
               Icons.groups_outlined,
               size: 56,
-              color: AppColors.textTertiary.withValues(alpha: 0.6),
+              color: AppColors.textTertiary,
             ),
             const SizedBox(height: 12),
-            Center(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.pagePadding),
-                child: Text(
-                  _items.isEmpty
-                      ? 'Belum ada peserta yang mendaftar.'
-                      : 'Tidak ada hasil yang cocok.',
-                  style: AppTextStyles.bodySmall
-                      .copyWith(color: AppColors.textSecondary),
-                  textAlign: TextAlign.center,
-                ),
-              ),
+            Text(
+              _audiences.isEmpty
+                  ? 'Belum ada peserta yang mendaftar.'
+                  : 'Tidak ada hasil yang cocok.',
+              style: AppTextStyles.bodySmall,
+              textAlign: TextAlign.center,
             ),
           ],
         ),
       );
     }
     return RefreshIndicator(
-      onRefresh: _fetch,
-      color: AppColors.primary,
+      onRefresh: _load,
       child: ListView.separated(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(
@@ -253,14 +215,17 @@ class _SeminarAudiencePanelState extends State<SeminarAudiencePanel>
           AppSpacing.lg,
         ),
         itemCount: data.length,
-        separatorBuilder: (_, __) => const SizedBox(height: 8),
-        itemBuilder: (_, i) => _AudienceCard(
-          index: i + 1,
-          row: data[i],
-          showApproveAction: _isSupervisor,
-          isBusy: _busyStudentId == data[i]['studentId'],
-          onToggle: () => _toggleApproval(data[i]),
-        ),
+        separatorBuilder: (_, _) => const SizedBox(height: 8),
+        itemBuilder: (_, index) {
+          final audience = data[index];
+          return _AudienceCard(
+            index: index + 1,
+            audience: audience,
+            canVerify: _isSupervisor && audience.studentId != null,
+            isBusy: _busyStudentId == audience.studentId,
+            onToggle: () => _togglePresence(audience),
+          );
+        },
       ),
     );
   }
@@ -268,26 +233,21 @@ class _SeminarAudiencePanelState extends State<SeminarAudiencePanel>
 
 class _AudienceCard extends StatelessWidget {
   final int index;
-  final Map<String, dynamic> row;
-  final bool showApproveAction;
+  final SeminarAudience audience;
+  final bool canVerify;
   final bool isBusy;
   final VoidCallback onToggle;
 
   const _AudienceCard({
     required this.index,
-    required this.row,
-    required this.showApproveAction,
+    required this.audience,
+    required this.canVerify,
     required this.isBusy,
     required this.onToggle,
   });
 
   @override
   Widget build(BuildContext context) {
-    final name = (row['studentName'] ?? '-').toString();
-    final nim = (row['nim'] ?? '-').toString();
-    final isApproved = row['approvedAt'] != null;
-    final approvedByName = row['approvedByName']?.toString();
-
     return AppCard(
       padding: const EdgeInsets.all(12),
       radius: 14,
@@ -303,49 +263,49 @@ class _AudienceCard extends StatelessWidget {
               borderRadius: BorderRadius.circular(8),
               border: Border.all(color: AppColors.border),
             ),
-            child: Text(
-              '$index',
-              style: AppTextStyles.caption.copyWith(
-                fontWeight: FontWeight.w700,
-                color: AppColors.textSecondary,
-              ),
-            ),
+            child: Text('$index', style: AppTextStyles.caption),
           ),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(name, style: AppTextStyles.label),
-                const SizedBox(height: 2),
-                Text(
-                  nim,
-                  style: AppTextStyles.caption
-                      .copyWith(color: AppColors.textSecondary),
-                ),
-                if (isApproved && approvedByName != null) ...[
-                  const SizedBox(height: 4),
+                Text(audience.studentName, style: AppTextStyles.label),
+                Text(audience.nim, style: AppTextStyles.caption),
+                if (audience.approvedByName != null)
                   Text(
-                    'Disetujui oleh $approvedByName',
-                    style: AppTextStyles.caption
-                        .copyWith(color: AppColors.successDark),
+                    'Diverifikasi oleh ${audience.approvedByName}',
+                    style: AppTextStyles.caption.copyWith(
+                      color: AppColors.successDark,
+                    ),
                   ),
-                ],
               ],
             ),
           ),
           const SizedBox(width: 8),
-          if (showApproveAction)
-            _ToggleButton(
-              isApproved: isApproved,
-              isBusy: isBusy,
-              onPressed: onToggle,
+          if (canVerify)
+            OutlinedButton.icon(
+              onPressed: isBusy ? null : onToggle,
+              icon: isBusy
+                  ? const SizedBox(
+                      width: 12,
+                      height: 12,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Icon(
+                      audience.isPresent
+                          ? Icons.close_rounded
+                          : Icons.check_rounded,
+                      size: 14,
+                    ),
+              label: Text(audience.isPresent ? 'Batalkan' : 'Hadir'),
             )
           else
             AppBadge(
-              label: isApproved ? 'Hadir' : 'Belum',
-              variant:
-                  isApproved ? BadgeVariant.success : BadgeVariant.secondary,
+              label: audience.isPresent ? 'Hadir' : 'Belum',
+              variant: audience.isPresent
+                  ? BadgeVariant.success
+                  : BadgeVariant.secondary,
             ),
         ],
       ),
@@ -353,57 +313,10 @@ class _AudienceCard extends StatelessWidget {
   }
 }
 
-class _ToggleButton extends StatelessWidget {
-  final bool isApproved;
-  final bool isBusy;
-  final VoidCallback onPressed;
-
-  const _ToggleButton({
-    required this.isApproved,
-    required this.isBusy,
-    required this.onPressed,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final color =
-        isApproved ? AppColors.destructive : AppColors.successDark;
-    return SizedBox(
-      height: 32,
-      child: OutlinedButton.icon(
-        onPressed: isBusy ? null : onPressed,
-        icon: isBusy
-            ? SizedBox(
-                width: 12,
-                height: 12,
-                child: CircularProgressIndicator(strokeWidth: 2, color: color),
-              )
-            : Icon(
-                isApproved ? Icons.close_rounded : Icons.check_rounded,
-                size: 14,
-                color: color,
-              ),
-        label: Text(
-          isApproved ? 'Batal' : 'Setujui',
-          style: AppTextStyles.caption
-              .copyWith(color: color, fontWeight: FontWeight.w600),
-        ),
-        style: OutlinedButton.styleFrom(
-          foregroundColor: color,
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-          side: BorderSide(color: color.withValues(alpha: 0.5)),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _ErrorView extends StatelessWidget {
   final String message;
-  final VoidCallback onRetry;
+  final Future<void> Function() onRetry;
+
   const _ErrorView({required this.message, required this.onRetry});
 
   @override
@@ -412,21 +325,16 @@ class _ErrorView extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.all(AppSpacing.pagePadding),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.error_outline,
-                size: 48, color: AppColors.destructive),
-            const SizedBox(height: 12),
-            Text('Gagal memuat data',
-                style: AppTextStyles.h4, textAlign: TextAlign.center),
-            const SizedBox(height: 6),
-            Text(
-              message,
-              style: AppTextStyles.bodySmall
-                  .copyWith(color: AppColors.textSecondary),
-              textAlign: TextAlign.center,
+            const Icon(
+              Icons.error_outline,
+              size: 48,
+              color: AppColors.destructive,
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 10),
+            Text(message, style: AppTextStyles.bodySmall),
+            const SizedBox(height: 12),
             OutlinedButton.icon(
               onPressed: onRetry,
               icon: const Icon(Icons.refresh),

@@ -9,6 +9,8 @@ import '../../../core/widgets/app_drawer.dart';
 import '../../../shared/widgets/shared_widgets.dart';
 import '../../defence/presentation/defence_detail_screen.dart';
 import '../../seminar/presentation/seminar_detail_screen.dart';
+import '../../thesis_shared/data/models/examiner_assignment_models.dart';
+import '../../thesis_shared/data/models/thesis_people_models.dart';
 import 'assign_examiner_form_screen.dart';
 
 /// Tetapkan Penguji — Head of Department screen.
@@ -105,8 +107,7 @@ class _AssignExaminerScreenState extends State<AssignExaminerScreen>
                     shape: BoxShape.circle,
                   ),
                   child: IconButton(
-                    icon: const Icon(Icons.menu,
-                        color: Colors.white, size: 24),
+                    icon: const Icon(Icons.menu, color: Colors.white, size: 24),
                     onPressed: () => Scaffold.of(ctx).openDrawer(),
                   ),
                 ),
@@ -115,8 +116,10 @@ class _AssignExaminerScreenState extends State<AssignExaminerScreen>
               Expanded(
                 child: Text(
                   'Tetapkan Penguji',
-                  style: AppTextStyles.h1
-                      .copyWith(color: Colors.white, fontSize: 20),
+                  style: AppTextStyles.h1.copyWith(
+                    color: Colors.white,
+                    fontSize: 20,
+                  ),
                 ),
               ),
             ],
@@ -161,7 +164,7 @@ class _AssignmentListTabState extends State<_AssignmentListTab>
 
   bool _isLoading = true;
   String? _error;
-  List<Map<String, dynamic>> _items = const [];
+  List<ExaminerAssignmentResource> _items = const [];
   String _statusFilter = '';
 
   @override
@@ -202,71 +205,54 @@ class _AssignmentListTabState extends State<_AssignmentListTab>
     }
   }
 
-  List<Map<String, dynamic>> get _filtered {
+  List<ExaminerAssignmentResource> get _filtered {
     final q = _searchCtrl.text.trim().toLowerCase();
     return _items.where((it) {
       if (_statusFilter.isNotEmpty &&
-          it['assignmentStatus']?.toString() != _statusFilter) {
+          it.assignmentStatus.value != _statusFilter) {
         return false;
       }
       if (q.isEmpty) return true;
-      final name = (it['studentName'] ?? '').toString().toLowerCase();
-      final nim = (it['studentNim'] ?? '').toString().toLowerCase();
-      final title = (it['thesisTitle'] ?? '').toString().toLowerCase();
-      return name.contains(q) || nim.contains(q) || title.contains(q);
+      return it.studentName.toLowerCase().contains(q) ||
+          it.studentNim.toLowerCase().contains(q) ||
+          it.thesisTitle.toLowerCase().contains(q);
     }).toList();
   }
 
-  Future<void> _openForm(Map<String, dynamic> item) async {
+  Future<void> _openForm(ExaminerAssignmentResource item) async {
     final result = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
         builder: (_) => AssignExaminerFormScreen(
           kind: widget.kind,
-          parentId: item['id'].toString(),
-          studentName: (item['studentName'] ?? '-').toString(),
-          studentNim: (item['studentNim'] ?? '-').toString(),
-          thesisTitle: (item['thesisTitle'] ?? '-').toString(),
-          existingExaminers: (item['examiners'] as List?)
-                  ?.whereType<Map>()
-                  .map((e) => Map<String, dynamic>.from(e))
-                  .toList() ??
-              const [],
-          rejectedExaminers: (item['rejectedExaminers'] as List?)
-                  ?.whereType<Map>()
-                  .map((e) => Map<String, dynamic>.from(e))
-                  .toList() ??
-              const [],
+          parentId: item.id,
+          studentName: item.studentName,
+          studentNim: item.studentNim,
+          thesisTitle: item.thesisTitle,
+          existingExaminers: item.examiners,
+          rejectedExaminers: item.rejectedExaminers,
         ),
       ),
     );
     if (result == true) _fetch();
   }
 
-  Future<void> _openSeminarDetail(Map<String, dynamic> item) async {
+  Future<void> _openSeminarDetail(ExaminerAssignmentResource item) async {
     if (widget.kind != 'seminar') return;
-    final id = item['id']?.toString();
-    if (id == null) return;
     await Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => SeminarDetailScreen(
-          seminarId: id,
-          user: widget.user,
-        ),
+        builder: (_) =>
+            SeminarDetailScreen(seminarId: item.id, user: widget.user),
       ),
     );
     if (mounted) _fetch();
   }
 
-  Future<void> _openDefenceDetail(Map<String, dynamic> item) async {
+  Future<void> _openDefenceDetail(ExaminerAssignmentResource item) async {
     if (widget.kind != 'defence') return;
-    final id = item['id']?.toString();
-    if (id == null) return;
     await Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => DefenceDetailScreen(
-          defenceId: id,
-          user: widget.user,
-        ),
+        builder: (_) =>
+            DefenceDetailScreen(defenceId: item.id, user: widget.user),
       ),
     );
     if (mounted) _fetch();
@@ -301,8 +287,10 @@ class _AssignmentListTabState extends State<_AssignmentListTab>
               prefixIcon: const Icon(Icons.search, size: 20),
               filled: true,
               fillColor: AppColors.surface,
-              contentPadding:
-                  const EdgeInsets.symmetric(vertical: 0, horizontal: 14),
+              contentPadding: const EdgeInsets.symmetric(
+                vertical: 0,
+                horizontal: 14,
+              ),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(14),
                 borderSide: BorderSide(color: AppColors.border),
@@ -364,16 +352,23 @@ class _AssignmentListTabState extends State<_AssignmentListTab>
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.error_outline,
-                  size: 48, color: AppColors.destructive),
+              const Icon(
+                Icons.error_outline,
+                size: 48,
+                color: AppColors.destructive,
+              ),
               const SizedBox(height: 12),
-              Text('Gagal memuat data',
-                  style: AppTextStyles.h4, textAlign: TextAlign.center),
+              Text(
+                'Gagal memuat data',
+                style: AppTextStyles.h4,
+                textAlign: TextAlign.center,
+              ),
               const SizedBox(height: 6),
               Text(
                 _error!,
-                style: AppTextStyles.bodySmall
-                    .copyWith(color: AppColors.textSecondary),
+                style: AppTextStyles.bodySmall.copyWith(
+                  color: AppColors.textSecondary,
+                ),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 16),
@@ -406,10 +401,11 @@ class _AssignmentListTabState extends State<_AssignmentListTab>
               child: Text(
                 _items.isEmpty
                     ? 'Belum ada ${widget.kind == 'seminar' ? 'seminar' : 'sidang'} '
-                        'yang perlu ditetapkan penguji.'
+                          'yang perlu ditetapkan penguji.'
                     : 'Tidak ada hasil yang cocok.',
-                style: AppTextStyles.bodySmall
-                    .copyWith(color: AppColors.textSecondary),
+                style: AppTextStyles.bodySmall.copyWith(
+                  color: AppColors.textSecondary,
+                ),
                 textAlign: TextAlign.center,
               ),
             ),
@@ -447,7 +443,7 @@ class _AssignmentListTabState extends State<_AssignmentListTab>
 // ════════════════════════════════════════════════════════════════
 
 class _AssignmentCard extends StatelessWidget {
-  final Map<String, dynamic> item;
+  final ExaminerAssignmentResource item;
   final VoidCallback onAction;
   final VoidCallback? onTap;
 
@@ -459,10 +455,7 @@ class _AssignmentCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final status = (item['assignmentStatus'] ?? 'unassigned').toString();
-    final examiners = (item['examiners'] as List?) ?? const [];
-    final supervisors = (item['supervisors'] as List?) ?? const [];
-    final actionLabel = _actionLabel(status);
+    final actionLabel = _actionLabel(item.assignmentStatus);
     final actionEnabled = actionLabel != null;
 
     return AppCard(
@@ -480,14 +473,14 @@ class _AssignmentCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      (item['studentName'] ?? '-').toString(),
+                      item.studentName,
                       style: AppTextStyles.label,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      (item['studentNim'] ?? '-').toString(),
+                      item.studentNim,
                       style: AppTextStyles.caption.copyWith(
                         color: AppColors.textSecondary,
                       ),
@@ -495,12 +488,12 @@ class _AssignmentCard extends StatelessWidget {
                   ],
                 ),
               ),
-              _StatusBadge(status: status),
+              _StatusBadge(status: item.assignmentStatus),
             ],
           ),
           const SizedBox(height: 8),
           Text(
-            (item['thesisTitle'] ?? '-').toString(),
+            item.thesisTitle,
             style: AppTextStyles.bodySmall.copyWith(
               color: AppColors.textPrimary,
               fontWeight: FontWeight.w600,
@@ -509,18 +502,15 @@ class _AssignmentCard extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
           ),
           const SizedBox(height: 12),
-          if (supervisors.isNotEmpty) ...[
+          if (item.supervisors.isNotEmpty) ...[
             _PeopleSection(
               icon: Icons.supervisor_account_outlined,
               label: 'Pembimbing',
-              names: supervisors
-                  .whereType<Map>()
-                  .map((s) => (s['name'] ?? '-').toString())
-                  .toList(),
+              names: item.supervisors.map((person) => person.name).toList(),
             ),
             const SizedBox(height: 8),
           ],
-          _ExaminersSection(examiners: examiners),
+          _ExaminersSection(examiners: item.examiners),
           if (actionEnabled) ...[
             const SizedBox(height: 12),
             SizedBox(
@@ -547,17 +537,17 @@ class _AssignmentCard extends StatelessWidget {
     );
   }
 
-  String? _actionLabel(String status) {
+  String? _actionLabel(ExaminerAssignmentStatus status) {
     switch (status) {
-      case 'unassigned':
-      case 'rejected':
+      case ExaminerAssignmentStatus.unassigned:
+      case ExaminerAssignmentStatus.rejected:
         return 'Tetapkan Penguji';
-      case 'partially_rejected':
+      case ExaminerAssignmentStatus.partiallyRejected:
         return 'Ganti Penguji';
-      case 'pending':
-      case 'confirmed':
+      case ExaminerAssignmentStatus.pending:
+      case ExaminerAssignmentStatus.confirmed:
         return 'Ubah Penguji';
-      default:
+      case ExaminerAssignmentStatus.finished:
         return null;
     }
   }
@@ -610,7 +600,7 @@ class _PeopleSection extends StatelessWidget {
 }
 
 class _ExaminersSection extends StatelessWidget {
-  final List examiners;
+  final List<ExaminerAssignment> examiners;
   const _ExaminersSection({required this.examiners});
 
   @override
@@ -618,8 +608,11 @@ class _ExaminersSection extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Icon(Icons.gavel_outlined,
-            size: 16, color: AppColors.textTertiary),
+        const Icon(
+          Icons.gavel_outlined,
+          size: 16,
+          color: AppColors.textTertiary,
+        ),
         const SizedBox(width: 6),
         Expanded(
           child: Column(
@@ -642,10 +635,7 @@ class _ExaminersSection extends StatelessWidget {
                   ),
                 ),
               for (var i = 0; i < examiners.length; i++)
-                _ExaminerRow(
-                  index: i + 1,
-                  examiner: Map<String, dynamic>.from(examiners[i] as Map),
-                ),
+                _ExaminerRow(index: i + 1, examiner: examiners[i]),
             ],
           ),
         ),
@@ -656,26 +646,25 @@ class _ExaminersSection extends StatelessWidget {
 
 class _ExaminerRow extends StatelessWidget {
   final int index;
-  final Map<String, dynamic> examiner;
+  final ExaminerAssignment examiner;
   const _ExaminerRow({required this.index, required this.examiner});
 
   @override
   Widget build(BuildContext context) {
-    final name = (examiner['lecturerName'] ?? '-').toString();
-    final status = (examiner['availabilityStatus'] ?? 'pending').toString();
+    final name = examiner.lecturerName ?? '-';
 
     IconData icon;
     Color color;
-    switch (status) {
-      case 'available':
+    switch (examiner.availabilityStatus) {
+      case ExaminerAvailabilityStatus.available:
         icon = Icons.check_circle;
         color = AppColors.success;
         break;
-      case 'unavailable':
+      case ExaminerAvailabilityStatus.unavailable:
         icon = Icons.cancel;
         color = AppColors.destructive;
         break;
-      default:
+      case ExaminerAvailabilityStatus.pending:
         icon = Icons.schedule;
         color = AppColors.warning;
     }
@@ -703,7 +692,7 @@ class _ExaminerRow extends StatelessWidget {
 }
 
 class _StatusBadge extends StatelessWidget {
-  final String status;
+  final ExaminerAssignmentStatus status;
   const _StatusBadge({required this.status});
 
   @override
@@ -713,38 +702,35 @@ class _StatusBadge extends StatelessWidget {
     return AppBadge(label: label, variant: variant);
   }
 
-  static String _statusLabel(String s) {
-    switch (s) {
-      case 'unassigned':
+  static String _statusLabel(ExaminerAssignmentStatus status) {
+    switch (status) {
+      case ExaminerAssignmentStatus.unassigned:
         return 'Belum Ditetapkan';
-      case 'pending':
+      case ExaminerAssignmentStatus.pending:
         return 'Menunggu';
-      case 'rejected':
+      case ExaminerAssignmentStatus.rejected:
         return 'Ditolak';
-      case 'partially_rejected':
+      case ExaminerAssignmentStatus.partiallyRejected:
         return 'Sebagian Ditolak';
-      case 'confirmed':
+      case ExaminerAssignmentStatus.confirmed:
         return 'Ditetapkan';
-      case 'finished':
+      case ExaminerAssignmentStatus.finished:
         return 'Selesai';
-      default:
-        return s;
     }
   }
 
-  static BadgeVariant _statusVariant(String s) {
-    switch (s) {
-      case 'unassigned':
-      case 'partially_rejected':
+  static BadgeVariant _statusVariant(ExaminerAssignmentStatus status) {
+    switch (status) {
+      case ExaminerAssignmentStatus.unassigned:
+      case ExaminerAssignmentStatus.partiallyRejected:
         return BadgeVariant.warning;
-      case 'pending':
+      case ExaminerAssignmentStatus.pending:
         return BadgeVariant.primary;
-      case 'rejected':
+      case ExaminerAssignmentStatus.rejected:
         return BadgeVariant.destructive;
-      case 'confirmed':
+      case ExaminerAssignmentStatus.confirmed:
         return BadgeVariant.success;
-      case 'finished':
-      default:
+      case ExaminerAssignmentStatus.finished:
         return BadgeVariant.secondary;
     }
   }

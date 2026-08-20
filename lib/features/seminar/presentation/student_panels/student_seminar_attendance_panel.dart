@@ -4,21 +4,21 @@ import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_spacing.dart';
 import '../../../../core/constants/app_text_styles.dart';
 import '../../../../core/models/auth_models.dart';
-import '../../../../core/services/seminar_api_service.dart';
+import '../../../../core/utils/formatters.dart';
 import '../../../../shared/widgets/shared_widgets.dart';
+import '../../data/models/seminar_models.dart';
+import '../controllers/student_seminar_controller.dart';
 
-/// Riwayat Kehadiran panel — student's audience attendance history.
-///
-/// Header: summary badge (attended/required + met badge).
-/// Body: search box + list of attendance records with status badge per row.
 class StudentSeminarAttendancePanel extends StatefulWidget {
   final UserModel? user;
   final void Function(String seminarId) onSeminarTap;
+  final int refreshSignal;
 
   const StudentSeminarAttendancePanel({
     super.key,
     required this.onSeminarTap,
     this.user,
+    this.refreshSignal = 0,
   });
 
   @override
@@ -29,13 +29,8 @@ class StudentSeminarAttendancePanel extends StatefulWidget {
 class _StudentSeminarAttendancePanelState
     extends State<StudentSeminarAttendancePanel>
     with AutomaticKeepAliveClientMixin {
-  final _api = SeminarApiService();
-  final _searchCtrl = TextEditingController();
-
-  bool _isLoading = true;
-  String? _error;
-  Map<String, dynamic> _summary = const {};
-  List<Map<String, dynamic>> _records = const [];
+  late final SeminarAttendanceController _controller;
+  final _searchController = TextEditingController();
 
   @override
   bool get wantKeepAlive => true;
@@ -43,74 +38,105 @@ class _StudentSeminarAttendancePanelState
   @override
   void initState() {
     super.initState();
-    _fetch();
+    _controller = SeminarAttendanceController()..addListener(_onChanged);
+    _controller.load();
+  }
+
+  @override
+  void didUpdateWidget(covariant StudentSeminarAttendancePanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.refreshSignal != widget.refreshSignal) {
+      _controller.load();
+    }
   }
 
   @override
   void dispose() {
-    _searchCtrl.dispose();
+    _controller
+      ..removeListener(_onChanged)
+      ..dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
-  Future<void> _fetch() async {
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
-    try {
-      final res = await _api.getStudentAttendanceHistory();
-      if (!mounted) return;
-      setState(() {
-        _summary = res['summary'] is Map
-            ? Map<String, dynamic>.from(res['summary'] as Map)
-            : const {};
-        _records = ((res['records'] as List?) ?? const [])
-            .whereType<Map>()
-            .map((m) => Map<String, dynamic>.from(m))
-            .toList();
-        _isLoading = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _error = e.toString();
-        _isLoading = false;
-      });
-    }
+  void _onChanged() {
+    if (mounted) setState(() {});
   }
 
-  List<Map<String, dynamic>> get _filtered {
-    final q = _searchCtrl.text.trim().toLowerCase();
-    if (q.isEmpty) return _records;
-    return _records.where((r) {
-      final name = (r['presenterName'] ?? '').toString().toLowerCase();
-      final title = (r['thesisTitle'] ?? '').toString().toLowerCase();
-      final nim = (r['presenterNim'] ?? '').toString().toLowerCase();
-      return name.contains(q) || title.contains(q) || nim.contains(q);
-    }).toList();
+  List<AttendanceRecord> get _filteredRecords {
+    final records = _controller.data?.records ?? const <AttendanceRecord>[];
+    final query = _searchController.text.trim().toLowerCase();
+    if (query.isEmpty) return records;
+    return records
+        .where((record) {
+          return record.presenterName.toLowerCase().contains(query) ||
+              (record.presenterNim ?? '').toLowerCase().contains(query) ||
+              record.thesisTitle.toLowerCase().contains(query);
+        })
+        .toList(growable: false);
   }
 
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    return Column(
-      children: [
-        _buildHeader(),
-        Expanded(child: _buildBody()),
-      ],
+    final data = _controller.data;
+    if (_controller.isLoading && data == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_controller.error != null && data == null) {
+      return _ErrorView(message: _controller.error!, onRetry: _controller.load);
+    }
+    if (data == null) return const SizedBox.shrink();
+
+    final records = _filteredRecords;
+    return RefreshIndicator(
+      onRefresh: _controller.load,
+      color: AppColors.primary,
+      child: CustomScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        slivers: [
+          SliverToBoxAdapter(child: _buildHeader(data.summary)),
+          if (records.isEmpty)
+            SliverFillRemaining(
+              hasScrollBody: false,
+              child: _EmptyState(
+                message: data.records.isEmpty
+                    ? 'Belum ada riwayat kehadiran seminar.'
+                    : 'Tidak ada hasil yang cocok.',
+              ),
+            )
+          else
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.pagePadding,
+                AppSpacing.sm,
+                AppSpacing.pagePadding,
+                AppSpacing.lg,
+              ),
+              sliver: SliverList.separated(
+                itemCount: records.length,
+                separatorBuilder: (_, _) => const SizedBox(height: 8),
+                itemBuilder: (_, index) {
+                  final record = records[index];
+                  return _AttendanceCard(
+                    record: record,
+                    onTap: () => widget.onSeminarTap(record.seminarId),
+                  );
+                },
+              ),
+            ),
+        ],
+      ),
     );
   }
 
-  Widget _buildHeader() {
-    final attended = (_summary['attended'] as num?)?.toInt() ?? 0;
-    final required = (_summary['required'] as num?)?.toInt() ?? 0;
-    final met = _summary['met'] == true;
+  Widget _buildHeader(AttendanceSummary summary) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(
         AppSpacing.pagePadding,
         AppSpacing.base,
         AppSpacing.pagePadding,
-        AppSpacing.sm,
+        0,
       ),
       child: Column(
         children: [
@@ -134,43 +160,39 @@ class _StudentSeminarAttendancePanelState
                         crossAxisAlignment: CrossAxisAlignment.baseline,
                         textBaseline: TextBaseline.alphabetic,
                         children: [
+                          Text('${summary.attended}', style: AppTextStyles.h2),
                           Text(
-                            '$attended',
-                            style: AppTextStyles.h2.copyWith(
-                              fontWeight: FontWeight.w900,
-                              color: AppColors.textPrimary,
-                            ),
-                          ),
-                          Text(
-                            ' / $required hadir',
-                            style: AppTextStyles.bodySmall.copyWith(
-                              color: AppColors.textSecondary,
-                            ),
+                            ' / ${summary.required} hadir',
+                            style: AppTextStyles.bodySmall,
                           ),
                         ],
+                      ),
+                      Text(
+                        '${summary.total} seminar tercatat',
+                        style: AppTextStyles.caption,
                       ),
                     ],
                   ),
                 ),
                 AppBadge(
-                  label: met ? 'Terpenuhi' : 'Belum',
-                  variant:
-                      met ? BadgeVariant.success : BadgeVariant.warning,
+                  label: summary.met ? 'Terpenuhi' : 'Belum',
+                  variant: summary.met
+                      ? BadgeVariant.success
+                      : BadgeVariant.warning,
                 ),
               ],
             ),
           ),
           const SizedBox(height: 8),
           TextField(
-            controller: _searchCtrl,
+            controller: _searchController,
             onChanged: (_) => setState(() {}),
             decoration: InputDecoration(
-              hintText: 'Cari presenter / judul / NIM…',
+              hintText: 'Cari presenter, judul, atau NIM…',
               prefixIcon: const Icon(Icons.search, size: 20),
               filled: true,
               fillColor: AppColors.surface,
-              contentPadding:
-                  const EdgeInsets.symmetric(vertical: 0, horizontal: 14),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 14),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(14),
                 borderSide: BorderSide(color: AppColors.border),
@@ -185,123 +207,51 @@ class _StudentSeminarAttendancePanelState
       ),
     );
   }
-
-  Widget _buildBody() {
-    if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    if (_error != null) {
-      return _ErrorView(message: _error!, onRetry: _fetch);
-    }
-    final data = _filtered;
-    if (data.isEmpty) {
-      return RefreshIndicator(
-        onRefresh: _fetch,
-        color: AppColors.primary,
-        child: ListView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          children: [
-            const SizedBox(height: 80),
-            Icon(
-              Icons.event_busy_outlined,
-              size: 56,
-              color: AppColors.textTertiary.withValues(alpha: 0.6),
-            ),
-            const SizedBox(height: 12),
-            Center(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.pagePadding),
-                child: Text(
-                  _records.isEmpty
-                      ? 'Belum ada riwayat kehadiran seminar.'
-                      : 'Tidak ada hasil yang cocok.',
-                  style: AppTextStyles.bodySmall
-                      .copyWith(color: AppColors.textSecondary),
-                  textAlign: TextAlign.center,
-                ),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-    return RefreshIndicator(
-      onRefresh: _fetch,
-      color: AppColors.primary,
-      child: ListView.separated(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(
-          AppSpacing.pagePadding,
-          4,
-          AppSpacing.pagePadding,
-          AppSpacing.lg,
-        ),
-        itemCount: data.length,
-        separatorBuilder: (_, __) => const SizedBox(height: 8),
-        itemBuilder: (_, i) => _AttendanceCard(
-          row: data[i],
-          onTap: () {
-            final id = data[i]['seminarId']?.toString();
-            if (id != null) widget.onSeminarTap(id);
-          },
-        ),
-      ),
-    );
-  }
 }
 
 class _AttendanceCard extends StatelessWidget {
-  final Map<String, dynamic> row;
+  final AttendanceRecord record;
   final VoidCallback onTap;
-  const _AttendanceCard({required this.row, required this.onTap});
 
-  (String, BadgeVariant) _statusOf() {
-    // Approved by supervisor → strictly "Hadir".
-    if (row['isPresent'] == true) {
-      return ('Hadir', BadgeVariant.success);
-    }
-    // Otherwise, if the seminar's result is finalised and either no end-time
-    // deadline is available or the deadline has passed, the student missed
-    // the verification window → "Tidak Hadir". Anything before that or with
-    // an in-flight result is "Menunggu Verifikasi".
-    final status = (row['seminarStatus'] ?? '').toString();
-    final isFinalized = const ['passed', 'passed_with_revision', 'failed']
-            .contains(status) ||
-        (row['seminarResultFinalizedAt'] ?? '').toString().isNotEmpty;
+  const _AttendanceCard({required this.record, required this.onTap});
 
-    final deadline = _seminarEndDateTime();
-    final now = DateTime.now();
-    if (isFinalized && (deadline == null || !now.isBefore(deadline))) {
+  (String, BadgeVariant) get _attendanceStatus {
+    if (record.isPresent) return ('Hadir', BadgeVariant.success);
+    if (record.seminarStatus?.isFinal == true && _verificationEnded) {
       return ('Tidak Hadir', BadgeVariant.destructive);
     }
     return ('Menunggu Verifikasi', BadgeVariant.warning);
   }
 
-  DateTime? _seminarEndDateTime() {
-    final dateStr = row['date']?.toString();
-    if (dateStr == null || dateStr.isEmpty) return null;
-    try {
-      final d = DateTime.parse(dateStr).toLocal();
-      final endStr = row['seminarEndTime']?.toString();
-      if (endStr != null && endStr.isNotEmpty) {
-        final t = DateTime.parse(endStr).toUtc();
-        return DateTime(d.year, d.month, d.day, t.hour, t.minute);
-      }
-      return DateTime(d.year, d.month, d.day, 23, 59, 59);
-    } catch (_) {
-      return null;
+  bool get _verificationEnded {
+    final date = record.date == null ? null : DateTime.tryParse(record.date!);
+    if (date == null) return record.resultFinalizedAt != null;
+    final time = _parseTime(record.seminarEndTime);
+    final localDate = date.toLocal();
+    final deadline = DateTime(
+      localDate.year,
+      localDate.month,
+      localDate.day,
+      time?.$1 ?? 23,
+      time?.$2 ?? 59,
+    );
+    return !DateTime.now().isBefore(deadline);
+  }
+
+  (int, int)? _parseTime(String? value) {
+    if (value == null || value.isEmpty) return null;
+    final plain = RegExp(r'^(\d{1,2}):(\d{2})').firstMatch(value);
+    if (plain != null) {
+      return (int.parse(plain.group(1)!), int.parse(plain.group(2)!));
     }
+    final parsed = DateTime.tryParse(value);
+    return parsed == null ? null : (parsed.hour, parsed.minute);
   }
 
   @override
   Widget build(BuildContext context) {
-    final (statusLabel, statusVariant) = _statusOf();
-    final approvedBy = (row['approvedBy'] ?? '').toString();
-    final presenter = (row['presenterName'] ?? '-').toString();
-    final nim = (row['presenterNim'] ?? '-').toString();
-    final title = (row['thesisTitle'] ?? '-').toString();
-
+    final (statusLabel, statusVariant) = _attendanceStatus;
+    final date = record.date == null ? null : DateTime.tryParse(record.date!);
     return AppCard(
       padding: const EdgeInsets.all(12),
       radius: 14,
@@ -317,17 +267,14 @@ class _AttendanceCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      presenter,
+                      record.presenterName,
                       style: AppTextStyles.label,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(height: 2),
                     Text(
-                      nim,
-                      style: AppTextStyles.caption.copyWith(
-                        color: AppColors.textSecondary,
-                      ),
+                      record.presenterNim ?? '-',
+                      style: AppTextStyles.caption,
                     ),
                   ],
                 ),
@@ -337,68 +284,90 @@ class _AttendanceCard extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            title,
+            record.thesisTitle,
             style: AppTextStyles.bodySmall.copyWith(
-              fontWeight: FontWeight.w600,
               color: AppColors.textPrimary,
+              fontWeight: FontWeight.w600,
             ),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
           ),
           const SizedBox(height: 8),
-          Row(
+          Wrap(
+            spacing: 12,
+            runSpacing: 6,
             children: [
-              const Icon(Icons.calendar_today_outlined,
-                  size: 13, color: AppColors.textTertiary),
-              const SizedBox(width: 6),
-              Text(
-                _formatDate(row['date']?.toString()) ?? '-',
-                style: AppTextStyles.caption.copyWith(
-                  color: AppColors.textSecondary,
-                  fontWeight: FontWeight.w600,
-                ),
+              _Meta(
+                icon: Icons.calendar_today_outlined,
+                text: date == null ? '-' : formatDateIndonesian(date.toLocal()),
               ),
-              const SizedBox(width: 12),
-              if (approvedBy.isNotEmpty) ...[
-                const Icon(Icons.verified_user_outlined,
-                    size: 13, color: AppColors.textTertiary),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    'Diverifikasi: $approvedBy',
-                    style: AppTextStyles.caption.copyWith(
-                      color: AppColors.textSecondary,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
+              if (record.approvedBy != null)
+                _Meta(
+                  icon: Icons.verified_user_outlined,
+                  text: 'Diverifikasi: ${record.approvedBy}',
                 ),
-              ],
             ],
           ),
         ],
       ),
     );
   }
+}
 
-  static String? _formatDate(String? iso) {
-    if (iso == null || iso.isEmpty) return null;
-    try {
-      final d = DateTime.parse(iso).toLocal();
-      const months = [
-        'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
-        'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des',
-      ];
-      return '${d.day} ${months[d.month - 1]} ${d.year}';
-    } catch (_) {
-      return null;
-    }
+class _Meta extends StatelessWidget {
+  final IconData icon;
+  final String text;
+
+  const _Meta({required this.icon, required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 13, color: AppColors.textTertiary),
+        const SizedBox(width: 5),
+        Flexible(child: Text(text, style: AppTextStyles.caption)),
+      ],
+    );
+  }
+}
+
+class _EmptyState extends StatelessWidget {
+  final String message;
+
+  const _EmptyState({required this.message});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.pagePadding),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.event_busy_outlined,
+              size: 56,
+              color: AppColors.textTertiary,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              message,
+              style: AppTextStyles.bodySmall,
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
 class _ErrorView extends StatelessWidget {
   final String message;
-  final VoidCallback onRetry;
+  final Future<void> Function() onRetry;
+
   const _ErrorView({required this.message, required this.onRetry});
 
   @override
@@ -407,18 +376,19 @@ class _ErrorView extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.all(AppSpacing.pagePadding),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.error_outline,
-                size: 48, color: AppColors.destructive),
+            const Icon(
+              Icons.error_outline,
+              size: 48,
+              color: AppColors.destructive,
+            ),
             const SizedBox(height: 12),
-            Text('Gagal memuat data',
-                style: AppTextStyles.h4, textAlign: TextAlign.center),
+            Text('Gagal memuat data', style: AppTextStyles.h4),
             const SizedBox(height: 6),
             Text(
               message,
-              style: AppTextStyles.bodySmall
-                  .copyWith(color: AppColors.textSecondary),
+              style: AppTextStyles.bodySmall,
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 16),

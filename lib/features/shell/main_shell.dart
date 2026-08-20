@@ -3,10 +3,15 @@ import '../../core/constants/app_colors.dart';
 import '../../core/enums/user_role.dart';
 import '../../core/models/auth_models.dart';
 import '../../core/services/fcm_service.dart';
+import '../../core/utils/notification_helpers.dart';
+import '../announcement/presentation/announcement_screen.dart';
+import '../defence/presentation/defence_detail_screen.dart';
 import '../defence/presentation/lecturer_defence_screen.dart';
 import '../hod/presentation/assign_examiner_screen.dart';
 import '../profile/presentation/profile_screen.dart';
 import '../seminar/presentation/lecturer_seminar_screen.dart';
+import '../seminar/presentation/seminar_detail_screen.dart';
+import '../yudisium/presentation/yudisium_overview_screen.dart';
 
 // Import screens - lecturer
 import '../guidance/presentation/lecturer/guidance_requests_screen.dart';
@@ -37,16 +42,12 @@ class _MainShellState extends State<MainShell> {
   @override
   void initState() {
     super.initState();
-    if (_isLecturerLike) {
-      _fcm.addOpenListener(_onLecturerNotificationOpened);
-    }
+    _fcm.addOpenListener(_onNotificationOpened);
   }
 
   @override
   void dispose() {
-    if (_isLecturerLike) {
-      _fcm.removeOpenListener(_onLecturerNotificationOpened);
-    }
+    _fcm.removeOpenListener(_onNotificationOpened);
     super.dispose();
   }
 
@@ -62,7 +63,7 @@ class _MainShellState extends State<MainShell> {
   ///   • seminar_examiner_unavailable — HoD only: an examiner rejected
   ///   • defence_need_examiner        — HoD only: defence variant
   ///   • defence_examiner_unavailable — HoD only: defence variant
-  void _onLecturerNotificationOpened(Map<String, dynamic> data) {
+  void _onNotificationOpened(Map<String, dynamic> data) {
     final type = data['type']?.toString();
     if (type == null) return;
 
@@ -72,51 +73,54 @@ class _MainShellState extends State<MainShell> {
     Future.delayed(const Duration(milliseconds: 400), () {
       if (!mounted) return;
 
-      if (type == 'seminar_examiner_assigned') {
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => LecturerSeminarScreen(
-              user: widget.user,
-              initialTab: 'menguji_mahasiswa',
-            ),
+      final seminarId = data['seminarId']?.toString();
+      final defenceId = data['defenceId']?.toString();
+      final destination = resolveNotificationDestination(
+        type: type,
+        userRole: widget.userRole,
+        seminarId: seminarId,
+        defenceId: defenceId,
+      );
+      final route = switch (destination) {
+        NotificationDestination.seminarAnnouncement => MaterialPageRoute(
+          builder: (_) => AnnouncementScreen(user: widget.user),
+        ),
+        NotificationDestination.seminarDetail => MaterialPageRoute(
+          builder: (_) =>
+              SeminarDetailScreen(seminarId: seminarId!, user: widget.user),
+        ),
+        NotificationDestination.defenceDetail => MaterialPageRoute(
+          builder: (_) =>
+              DefenceDetailScreen(defenceId: defenceId!, user: widget.user),
+        ),
+        NotificationDestination.yudisiumOverview => MaterialPageRoute(
+          builder: (_) => YudisiumOverviewScreen(user: widget.user),
+        ),
+        NotificationDestination.lecturerSeminar => MaterialPageRoute(
+          builder: (_) => LecturerSeminarScreen(
+            user: widget.user,
+            initialTab: 'menguji_mahasiswa',
           ),
-        );
-        return;
-      }
-
-      if (type == 'defence_examiner_assigned') {
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => LecturerDefenceScreen(
-              user: widget.user,
-              initialTab: 'menguji_mahasiswa',
-            ),
+        ),
+        NotificationDestination.lecturerDefence => MaterialPageRoute(
+          builder: (_) => LecturerDefenceScreen(
+            user: widget.user,
+            initialTab: 'menguji_mahasiswa',
           ),
-        );
-        return;
-      }
-
-      if (widget.userRole == UserRole.headOfDepartment) {
-        final String tab;
-        if (type == 'seminar_need_examiner' ||
-            type == 'seminar_examiner_unavailable') {
-          tab = 'seminar_hasil';
-        } else if (type == 'defence_need_examiner' ||
-            type == 'defence_examiner_unavailable') {
-          tab = 'sidang_ta';
-        } else {
-          return;
-        }
-
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => AssignExaminerScreen(
-              user: widget.user,
-              initialTab: tab,
-            ),
+        ),
+        NotificationDestination.assignSeminarExaminer => MaterialPageRoute(
+          builder: (_) => AssignExaminerScreen(
+            user: widget.user,
+            initialTab: 'seminar_hasil',
           ),
-        );
-      }
+        ),
+        NotificationDestination.assignDefenceExaminer => MaterialPageRoute(
+          builder: (_) =>
+              AssignExaminerScreen(user: widget.user, initialTab: 'sidang_ta'),
+        ),
+        NotificationDestination.none => null,
+      };
+      if (route != null) Navigator.of(context).push(route);
     });
   }
 

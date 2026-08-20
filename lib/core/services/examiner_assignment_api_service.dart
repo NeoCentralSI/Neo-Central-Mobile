@@ -1,92 +1,103 @@
+import '../../features/thesis_shared/data/models/examiner_assignment_models.dart';
+import '../../features/thesis_shared/data/models/thesis_people_models.dart';
+import '../utils/api_contract_parser.dart';
 import 'api_client.dart';
 
-/// API surface for Head-of-Department examiner assignment flows.
-///
-/// Mirrors the web `useAssignmentSeminars` / `useEligibleExaminers` /
-/// `useAssignExaminers` hooks and the parallel defence hooks.
-///
-/// Endpoints (all guarded by `Ketua Departemen` role on the backend):
-///   GET  /thesis-seminars?view=assignment        → AssignmentSeminarItem[]
-///   GET  /thesis-seminars/:id/eligible-examiners → EligibleExaminer[]
-///   POST /thesis-seminars/:id/examiners          ({ examinerIds })
-///   GET  /thesis-defences?view=assignment        → AssignmentDefenceItem[]
-///   GET  /thesis-defences/:id/eligible-examiners → EligibleExaminer[]
-///   POST /thesis-defences/:id/examiners          ({ examinerIds })
 class ExaminerAssignmentApiService {
   static final ExaminerAssignmentApiService _instance =
       ExaminerAssignmentApiService._internal();
+
   factory ExaminerAssignmentApiService() => _instance;
-  ExaminerAssignmentApiService._internal();
 
-  final ApiClient _api = ApiClient();
+  ExaminerAssignmentApiService._internal() : _api = ApiClient();
 
-  // ── Seminar Hasil ─────────────────────────────────────────────
+  ExaminerAssignmentApiService.withApiClient(ApiClient apiClient)
+    : _api = apiClient;
 
-  Future<List<Map<String, dynamic>>> getAssignmentSeminars() async {
-    final res = await _api.get(
-      '/thesis-seminars',
-      queryParams: const {'view': 'assignment'},
-    );
-    return _unwrapList(res);
-  }
+  final ApiClient _api;
 
-  Future<List<Map<String, dynamic>>> getEligibleSeminarExaminers(
+  Future<List<ExaminerAssignmentResource>> getAssignmentSeminars() =>
+      _getAssignmentResources('/thesis-seminars');
+
+  Future<List<EligibleExaminer>> getEligibleSeminarExaminers(
     String seminarId,
-  ) async {
-    final res = await _api.get('/thesis-seminars/$seminarId/eligible-examiners');
-    return _unwrapList(res);
-  }
+  ) => _getEligibleExaminers('/thesis-seminars/$seminarId/eligible-examiners');
 
-  Future<List<Map<String, dynamic>>> assignSeminarExaminers(
+  Future<List<ExaminerAssignment>> assignSeminarExaminers(
     String seminarId,
     List<String> examinerIds,
-  ) async {
-    final res = await _api.post(
-      '/thesis-seminars/$seminarId/examiners',
-      body: {'examinerIds': examinerIds},
-    );
-    return _unwrapList(res);
-  }
+  ) => _assignExaminers('/thesis-seminars/$seminarId/examiners', examinerIds);
 
-  // ── Sidang TA (Defence) ───────────────────────────────────────
+  Future<List<ExaminerAssignmentResource>> getAssignmentDefences() =>
+      _getAssignmentResources('/thesis-defences');
 
-  Future<List<Map<String, dynamic>>> getAssignmentDefences() async {
-    final res = await _api.get(
-      '/thesis-defences',
-      queryParams: const {'view': 'assignment'},
-    );
-    return _unwrapList(res);
-  }
-
-  Future<List<Map<String, dynamic>>> getEligibleDefenceExaminers(
+  Future<List<EligibleExaminer>> getEligibleDefenceExaminers(
     String defenceId,
-  ) async {
-    final res = await _api.get('/thesis-defences/$defenceId/eligible-examiners');
-    return _unwrapList(res);
-  }
+  ) => _getEligibleExaminers('/thesis-defences/$defenceId/eligible-examiners');
 
-  Future<List<Map<String, dynamic>>> assignDefenceExaminers(
+  Future<List<ExaminerAssignment>> assignDefenceExaminers(
     String defenceId,
     List<String> examinerIds,
-  ) async {
-    final res = await _api.post(
-      '/thesis-defences/$defenceId/examiners',
-      body: {'examinerIds': examinerIds},
-    );
-    return _unwrapList(res);
-  }
+  ) => _assignExaminers(
+    '/thesis-defences/$defenceId/examiners',
+    examinerIds,
+    exactCount: 2,
+  );
 
-  // Backend may return either a bare list or `{ data: [...] }` / `{ items: [...] }`.
-  List<Map<String, dynamic>> _unwrapList(dynamic res) {
-    final raw = res is List
-        ? res
-        : res is Map<String, dynamic>
-            ? (res['data'] ?? res['items'] ?? res['examiners'] ?? const [])
-            : const [];
-    if (raw is! List) return const [];
-    return raw
-        .whereType<Map>()
-        .map((m) => Map<String, dynamic>.from(m))
-        .toList();
+  Future<List<ExaminerAssignmentResource>> _getAssignmentResources(
+    String endpoint,
+  ) => _api.getData(
+    endpoint,
+    queryParams: const {'view': 'assignment'},
+    decoder: (value) => requireJsonList(
+      value,
+      context: 'examinerAssignmentResources',
+    ).map(ExaminerAssignmentResource.fromJson).toList(growable: false),
+  );
+
+  Future<List<EligibleExaminer>> _getEligibleExaminers(String endpoint) =>
+      _api.getData(
+        endpoint,
+        decoder: (value) => requireJsonList(
+          value,
+          context: 'eligibleExaminers',
+        ).map(EligibleExaminer.fromJson).toList(growable: false),
+      );
+
+  Future<List<ExaminerAssignment>> _assignExaminers(
+    String endpoint,
+    List<String> examinerIds, {
+    int? exactCount,
+  }) {
+    final uniqueIds = examinerIds.toSet().toList(growable: false);
+    if (uniqueIds.isEmpty) {
+      throw ArgumentError.value(
+        examinerIds,
+        'examinerIds',
+        'Minimal satu penguji wajib dipilih.',
+      );
+    }
+    if (uniqueIds.length != examinerIds.length) {
+      throw ArgumentError.value(
+        examinerIds,
+        'examinerIds',
+        'Penguji tidak boleh duplikat.',
+      );
+    }
+    if (exactCount != null && uniqueIds.length != exactCount) {
+      throw ArgumentError.value(
+        examinerIds,
+        'examinerIds',
+        'Sidang Tugas Akhir harus memiliki tepat $exactCount penguji aktif.',
+      );
+    }
+    return _api.postData(
+      endpoint,
+      body: {'examinerIds': examinerIds},
+      decoder: (value) => requireJsonList(
+        value,
+        context: 'assignedExaminers',
+      ).map(ExaminerAssignment.fromJson).toList(growable: false),
+    );
   }
 }

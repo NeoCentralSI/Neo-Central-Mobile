@@ -6,12 +6,9 @@ import '../../../../core/constants/app_text_styles.dart';
 import '../../../../core/models/auth_models.dart';
 import '../../../../core/services/yudisium_api_service.dart';
 import '../../../../shared/widgets/shared_widgets.dart';
+import '../../../yudisium/data/models/yudisium_models.dart';
 
-/// Pengumuman Yudisium panel.
-///
-/// Public list of yudisium events (registration window already closed) with
-/// their appointed / finalized participants. Mirrors the web
-/// `YudisiumAnnouncement.tsx`.
+/// Public announcement board for completed/closed yudisium periods.
 class YudisiumAnnouncementPanel extends StatefulWidget {
   final UserModel? user;
 
@@ -22,15 +19,14 @@ class YudisiumAnnouncementPanel extends StatefulWidget {
       _YudisiumAnnouncementPanelState();
 }
 
-class _YudisiumAnnouncementPanelState
-    extends State<YudisiumAnnouncementPanel>
+class _YudisiumAnnouncementPanelState extends State<YudisiumAnnouncementPanel>
     with AutomaticKeepAliveClientMixin {
   final _api = YudisiumApiService();
-  final _searchCtrl = TextEditingController();
+  final _searchController = TextEditingController();
 
   bool _isLoading = true;
   String? _error;
-  List<Map<String, dynamic>> _items = const [];
+  List<YudisiumAnnouncement> _announcements = const [];
 
   @override
   bool get wantKeepAlive => true;
@@ -38,110 +34,74 @@ class _YudisiumAnnouncementPanelState
   @override
   void initState() {
     super.initState();
-    _fetch();
+    _load();
   }
 
   @override
   void dispose() {
-    _searchCtrl.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
-  Future<void> _fetch() async {
+  Future<void> _load() async {
     if (!mounted) return;
     setState(() {
       _isLoading = true;
       _error = null;
     });
     try {
-      final res = await _api.getYudisiumAnnouncements();
+      final announcements = await _api.getYudisiumAnnouncements();
       if (!mounted) return;
       setState(() {
-        _items = res;
+        _announcements = announcements;
         _isLoading = false;
       });
-    } catch (e) {
+    } catch (exception) {
       if (!mounted) return;
       setState(() {
-        _error = e.toString();
+        _error = exception.toString();
         _isLoading = false;
       });
     }
   }
 
-  /// Mirrors the filter shape on the web `YudisiumAnnouncement.tsx`:
-  ///   • if the event name matches the query, keep all participants;
-  ///   • otherwise narrow participants down to those that match by
-  ///     studentName / studentNim / thesisTitle;
-  ///   • drop the event entirely when nothing matches.
-  ///
-  /// Within each event the participants are always sorted by `registeredAt`
-  /// ascending (earliest first) with `studentName` as the tie-breaker, so the
-  /// first registrant shows on top. Events themselves are sorted by
-  /// `eventDate` desc (newest first), matching the web.
-  List<Map<String, dynamic>> get _filtered {
-    final q = _searchCtrl.text.trim().toLowerCase();
-    final scoped = _items.map((y) {
-      final raw = ((y['participants'] as List?) ?? const [])
-          .whereType<Map>()
-          .map((m) => Map<String, dynamic>.from(m))
-          .toList();
+  List<_FilteredAnnouncement> get _filtered {
+    final query = _searchController.text.trim().toLowerCase();
+    final values = <_FilteredAnnouncement>[];
+    for (final announcement in _announcements) {
       final eventMatches =
-          q.isEmpty || (y['name'] ?? '').toString().toLowerCase().contains(q);
-      final narrowed = (q.isEmpty || eventMatches)
-          ? raw
-          : raw.where((p) {
-              final pn = (p['studentName'] ?? '').toString().toLowerCase();
-              final nim = (p['studentNim'] ?? '').toString().toLowerCase();
-              final title = (p['thesisTitle'] ?? '').toString().toLowerCase();
-              return pn.contains(q) || nim.contains(q) || title.contains(q);
-            }).toList();
-      return {...y, 'participants': _sortParticipants(narrowed)};
-    }).where((y) {
-      if (q.isEmpty) return true;
-      final hasParticipants =
-          ((y['participants'] as List?) ?? const []).isNotEmpty;
-      final eventMatches =
-          (y['name'] ?? '').toString().toLowerCase().contains(q);
-      return eventMatches || hasParticipants;
-    }).toList();
-
-    scoped.sort((a, b) {
-      final at = _parseDate(a['eventDate']?.toString());
-      final bt = _parseDate(b['eventDate']?.toString());
-      if (at == null && bt == null) return 0;
-      if (at == null) return 1;
-      if (bt == null) return -1;
-      return bt.compareTo(at);
-    });
-    return scoped;
-  }
-
-  /// Sort by `registeredAt` ascending (earliest first), missing dates last;
-  /// fall back to `studentName` for stable order.
-  List<Map<String, dynamic>> _sortParticipants(
-      List<Map<String, dynamic>> participants) {
-    final copy = [...participants];
-    copy.sort((a, b) {
-      final at = _parseDate(a['registeredAt']?.toString());
-      final bt = _parseDate(b['registeredAt']?.toString());
-      if (at != null && bt != null && at != bt) return at.compareTo(bt);
-      if (at == null && bt != null) return 1;
-      if (at != null && bt == null) return -1;
-      final an = (a['studentName'] ?? '').toString();
-      final bn = (b['studentName'] ?? '').toString();
-      return an.compareTo(bn);
-    });
-    return copy;
-  }
-
-  DateTime? _parseDate(String? iso) {
-    if (iso == null || iso.isEmpty) return null;
-    try {
-      return DateTime.parse(iso);
-    } catch (_) {
-      return null;
+          query.isEmpty || announcement.name.toLowerCase().contains(query);
+      final participants =
+          (query.isEmpty || eventMatches
+                  ? announcement.participants
+                  : announcement.participants.where(
+                      (participant) =>
+                          participant.studentName.toLowerCase().contains(
+                            query,
+                          ) ||
+                          participant.studentNim.toLowerCase().contains(
+                            query,
+                          ) ||
+                          participant.thesisTitle.toLowerCase().contains(query),
+                    ))
+              .toList();
+      participants.sort(_compareParticipants);
+      if (eventMatches || participants.isNotEmpty) {
+        values.add(
+          _FilteredAnnouncement(
+            announcement: announcement,
+            participants: participants,
+          ),
+        );
+      }
     }
+    values.sort(
+      (a, b) => _compareNullableDatesDesc(
+        a.announcement.eventDate,
+        b.announcement.eventDate,
+      ),
+    );
+    return values;
   }
 
   @override
@@ -151,18 +111,46 @@ class _YudisiumAnnouncementPanelState
       return const Center(child: CircularProgressIndicator());
     }
     if (_error != null) {
-      return _ErrorView(message: _error!, onRetry: _fetch);
+      return _ErrorView(message: _error!, onRetry: _load);
     }
-
     final items = _filtered;
     return Column(
       children: [
-        _buildSearchHeader(),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.pagePadding,
+            AppSpacing.base,
+            AppSpacing.pagePadding,
+            AppSpacing.sm,
+          ),
+          child: TextField(
+            controller: _searchController,
+            onChanged: (_) => setState(() {}),
+            decoration: InputDecoration(
+              hintText: 'Cari periode, mahasiswa, NIM, atau judul…',
+              prefixIcon: const Icon(Icons.search, size: 20),
+              filled: true,
+              fillColor: AppColors.surface,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 14),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: const BorderSide(color: AppColors.border),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: const BorderSide(color: AppColors.border),
+              ),
+            ),
+          ),
+        ),
         Expanded(
           child: items.isEmpty
-              ? _buildEmpty()
+              ? _EmptyView(
+                  filtered: _searchController.text.trim().isNotEmpty,
+                  onRefresh: _load,
+                )
               : RefreshIndicator(
-                  onRefresh: _fetch,
+                  onRefresh: _load,
                   color: AppColors.primary,
                   child: ListView.separated(
                     physics: const AlwaysScrollableScrollPhysics(),
@@ -173,170 +161,104 @@ class _YudisiumAnnouncementPanelState
                       AppSpacing.lg,
                     ),
                     itemCount: items.length,
-                    separatorBuilder: (_, __) =>
+                    separatorBuilder: (_, _) =>
                         const SizedBox(height: AppSpacing.base),
-                    itemBuilder: (_, i) => _EventCard(item: items[i]),
+                    itemBuilder: (_, index) =>
+                        _AnnouncementCard(value: items[index]),
                   ),
                 ),
         ),
       ],
     );
   }
-
-  Widget _buildSearchHeader() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        AppSpacing.pagePadding,
-        AppSpacing.base,
-        AppSpacing.pagePadding,
-        AppSpacing.sm,
-      ),
-      child: TextField(
-        controller: _searchCtrl,
-        onChanged: (_) => setState(() {}),
-        decoration: InputDecoration(
-          hintText: 'Cari nama yudisium, mahasiswa, atau judul…',
-          prefixIcon: const Icon(Icons.search, size: 20),
-          filled: true,
-          fillColor: AppColors.surface,
-          contentPadding:
-              const EdgeInsets.symmetric(vertical: 0, horizontal: 14),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(14),
-            borderSide: BorderSide(color: AppColors.border),
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(14),
-            borderSide: BorderSide(color: AppColors.border),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildEmpty() {
-    return RefreshIndicator(
-      onRefresh: _fetch,
-      color: AppColors.primary,
-      child: ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        children: [
-          const SizedBox(height: 80),
-          Icon(
-            Icons.emoji_events_outlined,
-            size: 56,
-            color: AppColors.textTertiary.withValues(alpha: 0.6),
-          ),
-          const SizedBox(height: 12),
-          Center(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: AppSpacing.pagePadding),
-              child: Text(
-                _searchCtrl.text.trim().isNotEmpty
-                    ? 'Tidak ada pengumuman yang cocok.'
-                    : 'Belum ada pengumuman hasil yudisium.',
-                style: AppTextStyles.bodySmall
-                    .copyWith(color: AppColors.textSecondary),
-                textAlign: TextAlign.center,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
-// ════════════════════════════════════════════════════════════════
-// Event card (one yudisium event with its participants)
-// ════════════════════════════════════════════════════════════════
+class _FilteredAnnouncement {
+  final YudisiumAnnouncement announcement;
+  final List<YudisiumAnnouncementParticipant> participants;
 
-class _EventCard extends StatefulWidget {
-  final Map<String, dynamic> item;
-  const _EventCard({required this.item});
+  const _FilteredAnnouncement({
+    required this.announcement,
+    required this.participants,
+  });
+}
+
+class _AnnouncementCard extends StatefulWidget {
+  final _FilteredAnnouncement value;
+
+  const _AnnouncementCard({required this.value});
 
   @override
-  State<_EventCard> createState() => _EventCardState();
+  State<_AnnouncementCard> createState() => _AnnouncementCardState();
 }
 
-class _EventCardState extends State<_EventCard> {
-  static const _initialParticipantLimit = 10;
+class _AnnouncementCardState extends State<_AnnouncementCard> {
+  static const _initialLimit = 10;
   bool _expanded = true;
-  bool _showAllParticipants = false;
+  bool _showAll = false;
 
   @override
   Widget build(BuildContext context) {
-    final item = widget.item;
-    final participants = ((item['participants'] as List?) ?? const [])
-        .whereType<Map>()
-        .map((m) => Map<String, dynamic>.from(m))
-        .toList();
-    final hasOverflow = participants.length > _initialParticipantLimit;
-    final visibleParticipants = !_showAllParticipants && hasOverflow
-        ? participants.take(_initialParticipantLimit).toList()
+    final event = widget.value.announcement;
+    final participants = widget.value.participants;
+    final hasOverflow = participants.length > _initialLimit;
+    final visible = hasOverflow && !_showAll
+        ? participants.take(_initialLimit).toList()
         : participants;
-    final room = item['room'] is Map
-        ? Map<String, dynamic>.from(item['room'] as Map)
-        : null;
-    final notes = (item['notes'] ?? '').toString();
-
     return AppCard(
       padding: EdgeInsets.zero,
       radius: 16,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // ─── Header ────────────────────────────────────────
           InkWell(
             onTap: () => setState(() => _expanded = !_expanded),
-            borderRadius: const BorderRadius.vertical(
-              top: Radius.circular(16),
-            ),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
             child: Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              padding: const EdgeInsets.all(14),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
-                      const Icon(Icons.calendar_today_outlined,
-                          size: 14, color: AppColors.primary),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          (item['name'] ?? '-').toString(),
-                          style: AppTextStyles.label,
-                        ),
+                      const Icon(
+                        Icons.emoji_events_outlined,
+                        size: 17,
+                        color: AppColors.primary,
                       ),
+                      const SizedBox(width: 7),
+                      Expanded(
+                        child: Text(event.name, style: AppTextStyles.label),
+                      ),
+                      AppBadge(
+                        label: _eventStatusLabel(event.status),
+                        variant: _eventStatusVariant(event.status),
+                      ),
+                      const SizedBox(width: 2),
                       Icon(
                         _expanded ? Icons.expand_less : Icons.expand_more,
-                        size: 18,
                         color: AppColors.textTertiary,
                       ),
                     ],
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 9),
                   Wrap(
-                    spacing: 10,
-                    runSpacing: 4,
+                    spacing: 8,
+                    runSpacing: 6,
                     children: [
                       _MetaPill(
-                        icon: Icons.access_time,
-                        text: _formatDate(item['eventDate']?.toString()) ?? '-',
+                        icon: Icons.calendar_today_outlined,
+                        text: _formatDate(event.eventDate),
                       ),
-                      if (room != null)
+                      if (event.room != null)
                         _MetaPill(
                           icon: Icons.place_outlined,
-                          text: (room['name'] ?? '-').toString(),
+                          text: event.room!.name,
                         ),
                       _MetaPill(
                         icon: Icons.people_outline,
-                        text: '${participants.length} Peserta',
-                        background:
-                            AppColors.primary.withValues(alpha: 0.08),
-                        color: AppColors.primaryDark,
+                        text: '${participants.length} peserta',
+                        highlighted: true,
                       ),
                     ],
                   ),
@@ -344,154 +266,46 @@ class _EventCardState extends State<_EventCard> {
               ),
             ),
           ),
-
           if (_expanded) ...[
-            Container(height: 1, color: AppColors.divider),
+            const Divider(height: 1),
             if (participants.isEmpty)
               Padding(
                 padding: const EdgeInsets.all(14),
                 child: Text(
                   'Belum ada peserta yang ditetapkan.',
-                  style: AppTextStyles.caption.copyWith(
+                  style: AppTextStyles.bodySmall.copyWith(
                     color: AppColors.textSecondary,
-                    fontStyle: FontStyle.italic,
                   ),
                 ),
               )
-            else ...[
-              for (var i = 0; i < visibleParticipants.length; i++) ...[
-                if (i > 0)
-                  Container(height: 1, color: AppColors.divider),
-                _ParticipantRow(
-                  index: i + 1,
-                  participant: visibleParticipants[i],
-                ),
+            else
+              for (var index = 0; index < visible.length; index++) ...[
+                if (index > 0) const Divider(height: 1),
+                _ParticipantRow(index: index + 1, participant: visible[index]),
               ],
-              if (hasOverflow)
-                InkWell(
-                  onTap: () => setState(
-                      () => _showAllParticipants = !_showAllParticipants),
-                  child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 10),
-                    decoration: BoxDecoration(
-                      border:
-                          Border(top: BorderSide(color: AppColors.divider)),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          _showAllParticipants
-                              ? Icons.unfold_less
-                              : Icons.unfold_more,
-                          size: 14,
-                          color: AppColors.primaryDark,
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          _showAllParticipants
-                              ? 'Sembunyikan ${participants.length - _initialParticipantLimit} peserta'
-                              : 'Lihat semua ${participants.length} peserta',
-                          style: AppTextStyles.caption.copyWith(
-                            color: AppColors.primaryDark,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+            if (hasOverflow)
+              TextButton.icon(
+                onPressed: () => setState(() => _showAll = !_showAll),
+                icon: Icon(_showAll ? Icons.unfold_less : Icons.unfold_more),
+                label: Text(
+                  _showAll
+                      ? 'Tampilkan lebih sedikit'
+                      : 'Lihat semua ${participants.length} peserta',
                 ),
-            ],
-            if (notes.isNotEmpty)
+              ),
+            if (event.notes?.isNotEmpty == true)
               Container(
-                width: double.infinity,
-                padding:
-                    const EdgeInsets.fromLTRB(14, 10, 14, 12),
-                decoration: BoxDecoration(
-                  border: Border(top: BorderSide(color: AppColors.divider)),
-                  color: AppColors.surfaceSecondary,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Catatan',
-                      style: AppTextStyles.caption.copyWith(
-                        color: AppColors.textTertiary,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      notes,
-                      style: AppTextStyles.caption.copyWith(
-                        color: AppColors.textPrimary,
-                        fontStyle: FontStyle.italic,
-                      ),
-                    ),
-                  ],
+                padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+                color: AppColors.surfaceSecondary,
+                child: Text(
+                  'Catatan: ${event.notes}',
+                  style: AppTextStyles.caption.copyWith(
+                    color: AppColors.textPrimary,
+                    fontStyle: FontStyle.italic,
+                  ),
                 ),
               ),
           ],
-        ],
-      ),
-    );
-  }
-
-  static String? _formatDate(String? iso) {
-    if (iso == null || iso.isEmpty) return null;
-    try {
-      final d = DateTime.parse(iso).toLocal();
-      const dows = [
-        'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu',
-      ];
-      const months = [
-        'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
-        'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember',
-      ];
-      return '${dows[d.weekday - 1]}, ${d.day} ${months[d.month - 1]} ${d.year}';
-    } catch (_) {
-      return null;
-    }
-  }
-}
-
-class _MetaPill extends StatelessWidget {
-  final IconData icon;
-  final String text;
-  final Color? color;
-  final Color? background;
-  const _MetaPill({
-    required this.icon,
-    required this.text,
-    this.color,
-    this.background,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final fg = color ?? AppColors.textSecondary;
-    final bg = background ?? AppColors.surfaceSecondary;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 12, color: fg),
-          const SizedBox(width: 4),
-          Text(
-            text,
-            style: AppTextStyles.caption.copyWith(
-              color: fg,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
         ],
       ),
     );
@@ -500,17 +314,13 @@ class _MetaPill extends StatelessWidget {
 
 class _ParticipantRow extends StatelessWidget {
   final int index;
-  final Map<String, dynamic> participant;
+  final YudisiumAnnouncementParticipant participant;
+
   const _ParticipantRow({required this.index, required this.participant});
 
   @override
   Widget build(BuildContext context) {
-    final status = (participant['status'] ?? 'appointed').toString();
-    final isFinalized = status == 'finalized';
-    final label = isFinalized ? 'LULUS' : 'PESERTA';
-    final variant =
-        isFinalized ? BadgeVariant.success : BadgeVariant.primary;
-
+    final finalized = participant.status == YudisiumParticipantStatus.finalized;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       child: Row(
@@ -525,57 +335,106 @@ class _ParticipantRow extends StatelessWidget {
               borderRadius: BorderRadius.circular(8),
               border: Border.all(color: AppColors.border),
             ),
-            child: Text(
-              '$index',
-              style: AppTextStyles.caption.copyWith(
-                fontWeight: FontWeight.w800,
-                color: AppColors.textSecondary,
-              ),
-            ),
+            child: Text('$index', style: AppTextStyles.labelSmall),
           ),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  (participant['studentName'] ?? '-').toString(),
-                  style: AppTextStyles.label,
-                ),
-                Text(
-                  (participant['studentNim'] ?? '-').toString(),
-                  style: AppTextStyles.caption.copyWith(
-                    color: AppColors.textTertiary,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-                if ((participant['thesisTitle'] ?? '').toString().isNotEmpty) ...[
+                Text(participant.studentName, style: AppTextStyles.label),
+                Text(participant.studentNim, style: AppTextStyles.caption),
+                if (participant.thesisTitle.isNotEmpty) ...[
                   const SizedBox(height: 4),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Icon(Icons.menu_book_outlined,
-                          size: 13, color: AppColors.textTertiary),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: Text(
-                          (participant['thesisTitle'] ?? '-').toString(),
-                          style: AppTextStyles.caption.copyWith(
-                            color: AppColors.textSecondary,
-                            fontStyle: FontStyle.italic,
-                          ),
-                          softWrap: true,
-                        ),
-                      ),
-                    ],
+                  Text(
+                    participant.thesisTitle,
+                    style: AppTextStyles.caption.copyWith(
+                      color: AppColors.textSecondary,
+                      fontStyle: FontStyle.italic,
+                    ),
                   ),
                 ],
               ],
             ),
           ),
-          const SizedBox(width: 8),
-          AppBadge(label: label, variant: variant),
+          const SizedBox(width: 7),
+          AppBadge(
+            label: finalized ? 'Lulus' : 'Peserta',
+            variant: finalized ? BadgeVariant.success : BadgeVariant.primary,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MetaPill extends StatelessWidget {
+  final IconData icon;
+  final String text;
+  final bool highlighted;
+
+  const _MetaPill({
+    required this.icon,
+    required this.text,
+    this.highlighted = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = highlighted ? AppColors.primaryDark : AppColors.textSecondary;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: highlighted
+            ? AppColors.primary.withValues(alpha: 0.08)
+            : AppColors.surfaceSecondary,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: color),
+          const SizedBox(width: 4),
+          Text(
+            text,
+            style: AppTextStyles.caption.copyWith(
+              color: color,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EmptyView extends StatelessWidget {
+  final bool filtered;
+  final Future<void> Function() onRefresh;
+
+  const _EmptyView({required this.filtered, required this.onRefresh});
+
+  @override
+  Widget build(BuildContext context) {
+    return RefreshIndicator(
+      onRefresh: onRefresh,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: [
+          const SizedBox(height: 80),
+          const Icon(
+            Icons.emoji_events_outlined,
+            size: 52,
+            color: AppColors.textTertiary,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            filtered
+                ? 'Tidak ada pengumuman yang cocok.'
+                : 'Belum ada pengumuman hasil yudisium.',
+            textAlign: TextAlign.center,
+            style: AppTextStyles.bodySmall,
+          ),
         ],
       ),
     );
@@ -585,6 +444,7 @@ class _ParticipantRow extends StatelessWidget {
 class _ErrorView extends StatelessWidget {
   final String message;
   final VoidCallback onRetry;
+
   const _ErrorView({required this.message, required this.onRetry});
 
   @override
@@ -593,25 +453,26 @@ class _ErrorView extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.all(AppSpacing.pagePadding),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.error_outline,
-                size: 48, color: AppColors.destructive),
+            const Icon(
+              Icons.error_outline,
+              size: 48,
+              color: AppColors.destructive,
+            ),
             const SizedBox(height: 12),
-            Text('Gagal memuat pengumuman',
-                style: AppTextStyles.h4, textAlign: TextAlign.center),
+            Text('Gagal memuat pengumuman', style: AppTextStyles.h4),
             const SizedBox(height: 6),
             Text(
               message,
-              style: AppTextStyles.bodySmall
-                  .copyWith(color: AppColors.textSecondary),
               textAlign: TextAlign.center,
+              style: AppTextStyles.bodySmall,
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 14),
             OutlinedButton.icon(
               onPressed: onRetry,
               icon: const Icon(Icons.refresh),
-              label: const Text('Coba Lagi'),
+              label: const Text('Coba lagi'),
             ),
           ],
         ),
@@ -619,3 +480,66 @@ class _ErrorView extends StatelessWidget {
     );
   }
 }
+
+int _compareParticipants(
+  YudisiumAnnouncementParticipant a,
+  YudisiumAnnouncementParticipant b,
+) {
+  final firstDate = a.registeredAt;
+  final secondDate = b.registeredAt;
+  if (firstDate != null && secondDate != null) {
+    final byDate = firstDate.compareTo(secondDate);
+    if (byDate != 0) return byDate;
+  } else if (firstDate == null && secondDate != null) {
+    return 1;
+  } else if (firstDate != null && secondDate == null) {
+    return -1;
+  }
+  return a.studentName.toLowerCase().compareTo(b.studentName.toLowerCase());
+}
+
+int _compareNullableDatesDesc(DateTime? a, DateTime? b) {
+  if (a == null && b == null) return 0;
+  if (a == null) return 1;
+  if (b == null) return -1;
+  return b.compareTo(a);
+}
+
+String _formatDate(DateTime? value) {
+  if (value == null) return '-';
+  final local = value.toLocal();
+  const days = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
+  const months = [
+    'Januari',
+    'Februari',
+    'Maret',
+    'April',
+    'Mei',
+    'Juni',
+    'Juli',
+    'Agustus',
+    'September',
+    'Oktober',
+    'November',
+    'Desember',
+  ];
+  return '${days[local.weekday - 1]}, ${local.day} '
+      '${months[local.month - 1]} ${local.year}';
+}
+
+String _eventStatusLabel(YudisiumDisplayStatus status) => switch (status) {
+  YudisiumDisplayStatus.draft => 'Draft',
+  YudisiumDisplayStatus.open => 'Pendaftaran dibuka',
+  YudisiumDisplayStatus.closed => 'Pendaftaran ditutup',
+  YudisiumDisplayStatus.ongoing => 'Berlangsung',
+  YudisiumDisplayStatus.completed => 'Selesai',
+};
+
+BadgeVariant _eventStatusVariant(YudisiumDisplayStatus status) =>
+    switch (status) {
+      YudisiumDisplayStatus.open ||
+      YudisiumDisplayStatus.ongoing => BadgeVariant.primary,
+      YudisiumDisplayStatus.completed => BadgeVariant.success,
+      YudisiumDisplayStatus.closed => BadgeVariant.warning,
+      YudisiumDisplayStatus.draft => BadgeVariant.secondary,
+    };

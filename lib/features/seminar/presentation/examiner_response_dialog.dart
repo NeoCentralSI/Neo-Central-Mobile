@@ -4,14 +4,12 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_spacing.dart';
 import '../../../core/constants/app_text_styles.dart';
 import '../../../core/services/seminar_api_service.dart';
+import '../../../core/utils/formatters.dart';
+import '../data/models/seminar_models.dart';
 
-/// Show the "Konfirmasi Penugasan Penguji" dialog.
-///
-/// Returns `true` if the lecturer submitted a response (Setujui / Tolak)
-/// and the caller should refresh the list. Returns `null` if dismissed.
 Future<bool?> showExaminerResponseDialog(
   BuildContext context, {
-  required Map<String, dynamic> seminar,
+  required LecturerSeminarListItem seminar,
 }) {
   return showDialog<bool>(
     context: context,
@@ -21,7 +19,8 @@ Future<bool?> showExaminerResponseDialog(
 }
 
 class _ExaminerResponseDialog extends StatefulWidget {
-  final Map<String, dynamic> seminar;
+  final LecturerSeminarListItem seminar;
+
   const _ExaminerResponseDialog({required this.seminar});
 
   @override
@@ -31,62 +30,53 @@ class _ExaminerResponseDialog extends StatefulWidget {
 
 class _ExaminerResponseDialogState extends State<_ExaminerResponseDialog> {
   final _api = SeminarApiService();
-  final _reasonCtrl = TextEditingController();
-  bool _submitting = false;
-  String? _submittingStatus;
+  final _reasonController = TextEditingController();
+  ExaminerResponse? _submitting;
 
   @override
   void dispose() {
-    _reasonCtrl.dispose();
+    _reasonController.dispose();
     super.dispose();
   }
 
-  Future<void> _respond(String status) async {
-    final seminarId = widget.seminar['id']?.toString();
-    final examinerId = widget.seminar['myExaminerId']?.toString();
-    if (seminarId == null || examinerId == null) return;
+  Future<void> _respond(ExaminerResponse response) async {
+    final examinerId = widget.seminar.myExaminerId;
+    if (examinerId == null) return;
 
-    setState(() {
-      _submitting = true;
-      _submittingStatus = status;
-    });
-
+    setState(() => _submitting = response);
     try {
       final result = await _api.respondToExaminerAssignment(
-        seminarId,
+        widget.seminar.id,
         examinerId,
-        status: status,
-        unavailableReasons:
-            status == 'unavailable' ? _reasonCtrl.text.trim() : null,
+        response: response,
+        unavailableReasons: response == ExaminerResponse.unavailable
+            ? _reasonController.text
+            : null,
       );
-
       if (!mounted) return;
-      Navigator.of(context).pop(true);
 
-      final messenger = ScaffoldMessenger.of(context);
-      final transitioned = result['seminarTransitioned'] == true;
-      final msg = status == 'available'
-          ? (transitioned
-              ? 'Anda menyetujui penugasan. Semua penguji telah bersedia — seminar siap dijadwalkan.'
-              : 'Anda telah menyetujui penugasan sebagai penguji.')
-          : 'Anda telah menolak penugasan sebagai penguji.';
-      messenger.showSnackBar(
+      Navigator.of(context).pop(true);
+      final accepted = response == ExaminerResponse.available;
+      final message = accepted
+          ? result.seminarTransitioned
+                ? 'Penugasan disetujui. Semua penguji telah bersedia dan seminar siap dijadwalkan.'
+                : 'Penugasan sebagai penguji telah disetujui.'
+          : 'Penugasan sebagai penguji telah ditolak.';
+      ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(msg),
-          backgroundColor:
-              status == 'available' ? AppColors.successDark : AppColors.textPrimary,
+          content: Text(message),
+          backgroundColor: accepted
+              ? AppColors.successDark
+              : AppColors.textPrimary,
           behavior: SnackBarBehavior.floating,
         ),
       );
-    } catch (e) {
+    } catch (exception) {
       if (!mounted) return;
-      setState(() {
-        _submitting = false;
-        _submittingStatus = null;
-      });
+      setState(() => _submitting = null);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Gagal mengirim respons: $e'),
+          content: Text('Gagal mengirim respons: $exception'),
           backgroundColor: AppColors.destructive,
           behavior: SnackBarBehavior.floating,
         ),
@@ -96,239 +86,177 @@ class _ExaminerResponseDialogState extends State<_ExaminerResponseDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final s = widget.seminar;
-    final studentName = (s['studentName'] ?? '-').toString();
-    final studentNim = (s['studentNim'] ?? '-').toString();
-    final thesisTitle = (s['thesisTitle'] ?? '-').toString();
-    final order = s['myExaminerOrder'];
-    final supervisors = (s['supervisors'] as List?) ?? const [];
-
+    final seminar = widget.seminar;
+    final supervisors = [...seminar.supervisors]
+      ..sort((a, b) => a.role.compareTo(b.role));
     return Dialog(
-      shape:
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 480),
         child: SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Konfirmasi Penugasan Penguji',
+                          style: AppTextStyles.h3,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Anda ditugaskan sebagai penguji seminar hasil.',
+                          style: AppTextStyles.bodySmall,
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: _submitting == null
+                        ? () => Navigator.of(context).pop()
+                        : null,
+                    icon: const Icon(Icons.close_rounded),
+                    tooltip: 'Tutup',
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceSecondary,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            'Konfirmasi Penugasan Penguji',
-                            style: AppTextStyles.h3,
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Anda ditugaskan sebagai penguji seminar hasil',
-                            style: AppTextStyles.bodySmall
-                                .copyWith(color: AppColors.textSecondary),
-                          ),
-                        ],
-                      ),
+                    _InfoLine(
+                      icon: Icons.school_outlined,
+                      title: seminar.studentName,
+                      subtitle: seminar.studentNim,
                     ),
-                    const SizedBox(width: 8),
-                    IconButton(
-                      onPressed:
-                          _submitting ? null : () => Navigator.of(context).pop(),
-                      icon: const Icon(Icons.close_rounded),
-                      style: IconButton.styleFrom(
-                        foregroundColor: AppColors.textSecondary,
-                        minimumSize: const Size(32, 32),
-                        padding: EdgeInsets.zero,
-                      ),
-                      tooltip: 'Tutup',
+                    const SizedBox(height: 10),
+                    _InfoLine(
+                      icon: Icons.menu_book_outlined,
+                      title: seminar.thesisTitle,
                     ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: AppColors.surfaceSecondary,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                        color: AppColors.border.withValues(alpha: 0.6)),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _iconRow(
-                        Icons.school_outlined,
-                        bold: studentName,
-                        sub: studentNim,
-                      ),
-                      const SizedBox(height: 10),
-                      _iconRow(Icons.menu_book_outlined, sub: thesisTitle),
-                      if (supervisors.isNotEmpty) ...[
-                        const SizedBox(height: 12),
-                        const Divider(height: 1),
-                        const SizedBox(height: 10),
-                        for (final sup in _sortSupervisors(
-                          supervisors
-                              .whereType<Map>()
-                              .map((m) => Map<String, dynamic>.from(m))
-                              .toList(),
-                        ))
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 2),
-                            child: Text(
-                              '${(sup['role'] ?? 'Pembimbing').toString()}: '
-                              '${(sup['name'] ?? '-').toString()}',
-                              style: AppTextStyles.caption.copyWith(
-                                color: AppColors.textSecondary,
-                              ),
-                            ),
+                    if (supervisors.isNotEmpty) ...[
+                      const Divider(height: 24),
+                      for (final supervisor in supervisors)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 4),
+                          child: Text(
+                            '${formatRoleName(supervisor.role)}: ${supervisor.name}',
+                            style: AppTextStyles.caption,
                           ),
-                      ],
+                        ),
                     ],
-                  ),
-                ),
-                const SizedBox(height: 14),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text('Peran Anda:',
-                        style: AppTextStyles.bodySmall
-                            .copyWith(color: AppColors.textSecondary)),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: AppColors.divider),
-                      ),
-                      child: Text(
-                        'Penguji ${order ?? "-"}',
-                        style: AppTextStyles.caption.copyWith(
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.textPrimary,
-                        ),
-                      ),
-                    ),
                   ],
                 ),
-                const SizedBox(height: 14),
-                Text(
-                  'Apakah Anda bersedia menjadi penguji untuk seminar hasil '
-                  'mahasiswa ini?',
-                  style: AppTextStyles.body,
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Text('Peran Anda', style: AppTextStyles.bodySmall),
+                  const Spacer(),
+                  Chip(
+                    visualDensity: VisualDensity.compact,
+                    label: Text('Penguji ${seminar.myExaminerOrder ?? '-'}'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Apakah Anda bersedia menjadi penguji untuk seminar hasil mahasiswa ini?',
+                style: AppTextStyles.body,
+              ),
+              const SizedBox(height: 14),
+              Text(
+                'Alasan Tidak Bersedia (Opsional)',
+                style: AppTextStyles.caption.copyWith(
+                  fontWeight: FontWeight.w600,
                 ),
-                const SizedBox(height: 14),
-                Text(
-                  'Alasan Tidak Bersedia (Opsional)',
-                  style: AppTextStyles.caption.copyWith(
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textSecondary,
+              ),
+              const SizedBox(height: 6),
+              TextField(
+                controller: _reasonController,
+                enabled: _submitting == null,
+                minLines: 2,
+                maxLines: 4,
+                decoration: InputDecoration(
+                  hintText: 'Masukkan alasan jika tidak bersedia…',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
                   ),
                 ),
-                const SizedBox(height: 6),
-                TextField(
-                  controller: _reasonCtrl,
-                  enabled: !_submitting,
-                  minLines: 2,
-                  maxLines: 4,
-                  decoration: InputDecoration(
-                    hintText: 'Masukkan alasan jika tidak bersedia…',
-                    hintStyle: AppTextStyles.bodySmall
-                        .copyWith(color: AppColors.textTertiary),
-                    contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 10),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: BorderSide(color: AppColors.border),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: BorderSide(color: AppColors.border),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: BorderSide(
-                          color: AppColors.primary.withValues(alpha: 0.7)),
+              ),
+              const SizedBox(height: AppSpacing.base),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _submitting == null
+                          ? () => _respond(ExaminerResponse.unavailable)
+                          : null,
+                      icon: _ActionIcon(
+                        active: _submitting == ExaminerResponse.unavailable,
+                        icon: Icons.close_rounded,
+                        color: AppColors.destructive,
+                      ),
+                      label: const Text('Tolak'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.destructive,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(height: AppSpacing.base),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed:
-                            _submitting ? null : () => _respond('unavailable'),
-                        icon: _submittingStatus == 'unavailable'
-                            ? const SizedBox(
-                                width: 14,
-                                height: 14,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: AppColors.destructive,
-                                ),
-                              )
-                            : const Icon(Icons.close_rounded, size: 18),
-                        label: const Text('Tolak'),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: AppColors.destructive,
-                          side: BorderSide(
-                              color: AppColors.destructive
-                                  .withValues(alpha: 0.45)),
-                          padding:
-                              const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: _submitting == null
+                          ? () => _respond(ExaminerResponse.available)
+                          : null,
+                      icon: _ActionIcon(
+                        active: _submitting == ExaminerResponse.available,
+                        icon: Icons.check_rounded,
+                        color: Colors.white,
+                      ),
+                      label: const Text('Setujui'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
                       ),
                     ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed:
-                            _submitting ? null : () => _respond('available'),
-                        icon: _submittingStatus == 'available'
-                            ? const SizedBox(
-                                width: 14,
-                                height: 14,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : const Icon(Icons.check_rounded, size: 18),
-                        label: const Text('Setujui'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.primary,
-                          foregroundColor: Colors.white,
-                          padding:
-                              const EdgeInsets.symmetric(vertical: 12),
-                          elevation: 0,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
       ),
     );
   }
+}
 
-  Widget _iconRow(IconData icon, {String? bold, String? sub}) {
+class _InfoLine extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String? subtitle;
+
+  const _InfoLine({required this.icon, required this.title, this.subtitle});
+
+  @override
+  Widget build(BuildContext context) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -338,39 +266,35 @@ class _ExaminerResponseDialogState extends State<_ExaminerResponseDialog> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (bold != null)
-                Text(
-                  bold,
-                  style: AppTextStyles.label,
-                ),
-              if (sub != null)
-                Text(
-                  sub,
-                  style: AppTextStyles.bodySmall.copyWith(
-                    color: bold != null
-                        ? AppColors.textSecondary
-                        : AppColors.textPrimary,
-                  ),
-                ),
+              Text(title, style: AppTextStyles.label),
+              if (subtitle != null)
+                Text(subtitle!, style: AppTextStyles.bodySmall),
             ],
           ),
         ),
       ],
     );
   }
+}
 
-  List<Map<String, dynamic>> _sortSupervisors(List<Map<String, dynamic>> sups) {
-    return sups
-      ..sort((a, b) {
-        final aOrder = _extractSupervisorOrder(a);
-        final bOrder = _extractSupervisorOrder(b);
-        return aOrder.compareTo(bOrder);
-      });
-  }
+class _ActionIcon extends StatelessWidget {
+  final bool active;
+  final IconData icon;
+  final Color color;
 
-  int _extractSupervisorOrder(Map<String, dynamic> sup) {
-    final role = (sup['role'] ?? '').toString();
-    final match = RegExp(r'(\d+)').firstMatch(role);
-    return int.tryParse(match?.group(1) ?? '') ?? 999;
+  const _ActionIcon({
+    required this.active,
+    required this.icon,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (!active) return Icon(icon, size: 18);
+    return SizedBox(
+      width: 14,
+      height: 14,
+      child: CircularProgressIndicator(strokeWidth: 2, color: color),
+    );
   }
 }

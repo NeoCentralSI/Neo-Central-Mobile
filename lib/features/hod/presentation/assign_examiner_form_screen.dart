@@ -4,6 +4,8 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_spacing.dart';
 import '../../../core/constants/app_text_styles.dart';
 import '../../../core/services/examiner_assignment_api_service.dart';
+import '../../thesis_shared/data/models/examiner_assignment_models.dart';
+import '../../thesis_shared/data/models/thesis_people_models.dart';
 import '../../../shared/widgets/shared_widgets.dart';
 
 /// Full-screen form to assign examiners to a seminar / defence.
@@ -27,10 +29,10 @@ class AssignExaminerFormScreen extends StatefulWidget {
   /// `{ lecturerId, lecturerName, availabilityStatus, order }`.
   /// Examiners with `availabilityStatus == 'available'` are locked (cannot
   /// be changed). Other statuses are pre-selected but editable.
-  final List<Map<String, dynamic>> existingExaminers;
+  final List<ExaminerAssignment> existingExaminers;
 
   /// Lecturers who previously rejected this assignment (shown as a hint).
-  final List<Map<String, dynamic>> rejectedExaminers;
+  final List<ExaminerAssignment> rejectedExaminers;
 
   const AssignExaminerFormScreen({
     super.key,
@@ -56,28 +58,36 @@ class _AssignExaminerFormScreenState extends State<AssignExaminerFormScreen> {
   bool _isSubmitting = false;
   String? _error;
 
-  List<Map<String, dynamic>> _lecturers = const [];
+  List<EligibleExaminer> _lecturers = const [];
   final Set<String> _selectedIds = {};
 
   late final Set<String> _lockedIds = widget.existingExaminers
-      .where((e) => e['availabilityStatus'] == 'available')
-      .map((e) => e['lecturerId'].toString())
+      .where(
+        (examiner) =>
+            examiner.availabilityStatus == ExaminerAvailabilityStatus.available,
+      )
+      .map((examiner) => examiner.lecturerId)
       .toSet();
 
   late final Set<String> _rejectedIds = widget.rejectedExaminers
-      .map((e) => e['lecturerId'].toString())
+      .map((examiner) => examiner.lecturerId)
       .toSet();
 
   bool get _isEdit => widget.existingExaminers.isNotEmpty;
   bool get _isPartialReplace => _lockedIds.isNotEmpty;
+  bool get _requiresTwoExaminers => widget.kind == 'defence';
+  bool get _selectionIsValid => _requiresTwoExaminers
+      ? _selectedIds.length == 2
+      : _selectedIds.isNotEmpty;
 
   @override
   void initState() {
     super.initState();
     // Pre-select active (non-unavailable) examiners.
-    for (final e in widget.existingExaminers) {
-      if (e['availabilityStatus'] != 'unavailable') {
-        _selectedIds.add(e['lecturerId'].toString());
+    for (final examiner in widget.existingExaminers) {
+      if (examiner.availabilityStatus !=
+          ExaminerAvailabilityStatus.unavailable) {
+        _selectedIds.add(examiner.lecturerId);
       }
     }
     _fetchEligible();
@@ -112,14 +122,13 @@ class _AssignExaminerFormScreenState extends State<AssignExaminerFormScreen> {
     }
   }
 
-  List<Map<String, dynamic>> get _filteredLecturers {
+  List<EligibleExaminer> get _filteredLecturers {
     final q = _searchCtrl.text.trim().toLowerCase();
     if (q.isEmpty) return _lecturers;
     return _lecturers.where((l) {
-      final name = (l['fullName'] ?? '').toString().toLowerCase();
-      final nip = (l['identityNumber'] ?? '').toString().toLowerCase();
-      final sg = (l['scienceGroup'] ?? '').toString().toLowerCase();
-      return name.contains(q) || nip.contains(q) || sg.contains(q);
+      return l.fullName.toLowerCase().contains(q) ||
+          l.identityNumber.toLowerCase().contains(q) ||
+          l.scienceGroup.toLowerCase().contains(q);
     }).toList();
   }
 
@@ -129,14 +138,26 @@ class _AssignExaminerFormScreenState extends State<AssignExaminerFormScreen> {
       if (_selectedIds.contains(id)) {
         _selectedIds.remove(id);
       } else {
+        if (_requiresTwoExaminers && _selectedIds.length >= 2) {
+          _toast(
+            'Sidang Tugas Akhir menggunakan tepat 2 penguji',
+            AppColors.warning,
+          );
+          return;
+        }
         _selectedIds.add(id);
       }
     });
   }
 
   Future<void> _submit() async {
-    if (_selectedIds.isEmpty) {
-      _toast('Harus memilih minimal 1 penguji', AppColors.destructive);
+    if (!_selectionIsValid) {
+      _toast(
+        _requiresTwoExaminers
+            ? 'Harus memilih tepat 2 penguji'
+            : 'Harus memilih minimal 1 penguji',
+        AppColors.destructive,
+      );
       return;
     }
     setState(() => _isSubmitting = true);
@@ -158,9 +179,9 @@ class _AssignExaminerFormScreenState extends State<AssignExaminerFormScreen> {
   }
 
   void _toast(String msg, Color bg) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg), backgroundColor: bg),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(msg), backgroundColor: bg));
   }
 
   String get _title {
@@ -267,14 +288,14 @@ class _AssignExaminerFormScreenState extends State<AssignExaminerFormScreen> {
           children: [
             Row(
               children: [
-                const Icon(Icons.person_outline, size: 18,
-                    color: AppColors.textSecondary),
+                const Icon(
+                  Icons.person_outline,
+                  size: 18,
+                  color: AppColors.textSecondary,
+                ),
                 const SizedBox(width: 6),
                 Expanded(
-                  child: Text(
-                    widget.studentName,
-                    style: AppTextStyles.label,
-                  ),
+                  child: Text(widget.studentName, style: AppTextStyles.label),
                 ),
                 Text(
                   widget.studentNim,
@@ -315,8 +336,10 @@ class _AssignExaminerFormScreenState extends State<AssignExaminerFormScreen> {
           prefixIcon: const Icon(Icons.search, size: 20),
           filled: true,
           fillColor: AppColors.surface,
-          contentPadding:
-              const EdgeInsets.symmetric(vertical: 0, horizontal: 14),
+          contentPadding: const EdgeInsets.symmetric(
+            vertical: 0,
+            horizontal: 14,
+          ),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(14),
             borderSide: BorderSide(color: AppColors.border),
@@ -367,8 +390,10 @@ class _AssignExaminerFormScreenState extends State<AssignExaminerFormScreen> {
                 style: AppTextStyles.label,
               ),
               AppBadge(
-                label: '${_selectedIds.length} dipilih',
-                variant: _selectedIds.isEmpty
+                label: _requiresTwoExaminers
+                    ? '${_selectedIds.length}/2 dipilih'
+                    : '${_selectedIds.length} dipilih',
+                variant: !_selectionIsValid
                     ? BadgeVariant.secondary
                     : BadgeVariant.success,
               ),
@@ -388,21 +413,18 @@ class _AssignExaminerFormScreenState extends State<AssignExaminerFormScreen> {
     );
   }
 
-  Widget _buildLecturerTile(Map<String, dynamic> l) {
-    final id = l['id'].toString();
+  Widget _buildLecturerTile(EligibleExaminer lecturer) {
+    final id = lecturer.id;
     final isSelected = _selectedIds.contains(id);
     final isLocked = _lockedIds.contains(id);
     final isRejected = _rejectedIds.contains(id);
-    final isPrevious = l['isPreviousExaminer'] == true;
-    final name = (l['fullName'] ?? '-').toString();
-    final nip = (l['identityNumber'] ?? '-').toString();
-    final sg = (l['scienceGroup'] ?? '-').toString();
-    final upcoming = (l['upcomingCount'] ?? 0).toString();
-    final ranges = (l['availabilityRanges'] as List?) ?? const [];
+    final isPrevious = lecturer.isPreviousExaminer;
+    final ranges = lecturer.availabilityRanges;
 
     final order = isLocked
         ? widget.existingExaminers
-            .firstWhere((e) => e['lecturerId'].toString() == id)['order']
+              .firstWhere((examiner) => examiner.lecturerId == id)
+              .order
         : (isSelected ? _selectedIds.toList().indexOf(id) + 1 : null);
 
     Color bg;
@@ -446,7 +468,7 @@ class _AssignExaminerFormScreenState extends State<AssignExaminerFormScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        name,
+                        lecturer.fullName,
                         style: AppTextStyles.label.copyWith(
                           color: isLocked
                               ? AppColors.textSecondary
@@ -457,7 +479,7 @@ class _AssignExaminerFormScreenState extends State<AssignExaminerFormScreen> {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        '$nip · $sg',
+                        '${lecturer.identityNumber} · ${lecturer.scienceGroup}',
                         style: AppTextStyles.caption.copyWith(
                           color: AppColors.textSecondary,
                         ),
@@ -486,7 +508,7 @@ class _AssignExaminerFormScreenState extends State<AssignExaminerFormScreen> {
               children: [
                 _ChipText(
                   icon: Icons.event_busy_outlined,
-                  label: 'Acara Mendatang: $upcoming',
+                  label: 'Acara Mendatang: ${lecturer.upcomingCount}',
                 ),
                 if (isLocked)
                   const _ChipText(
@@ -527,10 +549,9 @@ class _AssignExaminerFormScreenState extends State<AssignExaminerFormScreen> {
                       ),
                     ),
                     const SizedBox(height: 4),
-                    ...ranges.take(3).map((r) {
-                      final m = r as Map;
+                    ...ranges.take(3).map((range) {
                       return Text(
-                        (m['label'] ?? '-').toString(),
+                        range.label,
                         style: AppTextStyles.caption.copyWith(
                           color: AppColors.textSecondary,
                         ),
@@ -570,13 +591,11 @@ class _AssignExaminerFormScreenState extends State<AssignExaminerFormScreen> {
       child: SizedBox(
         height: 48,
         child: ElevatedButton(
-          onPressed:
-              _isSubmitting || _selectedIds.isEmpty ? null : _submit,
+          onPressed: _isSubmitting || !_selectionIsValid ? null : _submit,
           style: ElevatedButton.styleFrom(
             backgroundColor: AppColors.primary,
             foregroundColor: Colors.white,
-            disabledBackgroundColor:
-                AppColors.primary.withValues(alpha: 0.4),
+            disabledBackgroundColor: AppColors.primary.withValues(alpha: 0.4),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(14),
             ),
@@ -651,8 +670,11 @@ class _ErrorBlock extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.error_outline,
-                size: 48, color: AppColors.destructive),
+            const Icon(
+              Icons.error_outline,
+              size: 48,
+              color: AppColors.destructive,
+            ),
             const SizedBox(height: 12),
             Text(
               'Gagal memuat dosen',

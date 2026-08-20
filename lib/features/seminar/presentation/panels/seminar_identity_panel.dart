@@ -3,53 +3,25 @@ import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_spacing.dart';
 import '../../../../core/constants/app_text_styles.dart';
+import '../../../../core/services/seminar_api_service.dart';
+import '../../../../core/utils/formatters.dart';
 import '../../../../shared/widgets/shared_widgets.dart';
+import '../../../thesis_shared/data/models/academic_requirement.dart';
+import '../../../thesis_shared/presentation/widgets/authenticated_binary_download_button.dart';
+import '../../data/models/seminar_models.dart';
 
-/// Identitas panel — read-only summary of the seminar identity.
-///
-/// Mirrors `ThesisSeminarDetailIdentityPanel` on the web but flattened
-/// into a single column for mobile.
 class SeminarIdentityPanel extends StatelessWidget {
-  final Map<String, dynamic> detail;
+  final SeminarDetail detail;
+
   const SeminarIdentityPanel({super.key, required this.detail});
 
   @override
   Widget build(BuildContext context) {
-    final student = (detail['student'] as Map?) ?? const {};
-    final thesis = (detail['thesis'] as Map?) ?? const {};
-    // Supervisors may sit at the top level (lecturer-facing detail) OR inside
-    // thesis.supervisors (student-facing detail). Normalize both shapes: each
-    // entry exposes 'role' + a name field (some shapes use 'name', others
-    // 'lecturerName').
-    final rawSupervisors = (detail['supervisors'] as List?) ??
-        (thesis['supervisors'] as List?) ??
-        const [];
-    final supervisors = rawSupervisors
-        .whereType<Map>()
-        .map((m) {
-          final src = Map<String, dynamic>.from(m);
-          return {
-            'role': (src['role'] ?? '').toString(),
-            'name':
-                (src['name'] ?? src['lecturerName'] ?? '-').toString(),
-            'lecturerId': src['lecturerId'],
-          };
-        })
-        .toList()
-      ..sort((a, b) =>
-          (a['role'] ?? '').toString().compareTo((b['role'] ?? '').toString()));
-    final examiners = ((detail['examiners'] as List?) ?? const [])
-        .whereType<Map>()
-        .map((m) => Map<String, dynamic>.from(m))
-        .toList();
-    final docTypes = ((detail['documentTypes'] as List?) ?? const [])
-        .whereType<Map>()
-        .map((m) => Map<String, dynamic>.from(m))
-        .toList();
-    final documents = ((detail['documents'] as List?) ?? const [])
-        .whereType<Map>()
-        .map((m) => Map<String, dynamic>.from(m))
-        .toList();
+    final supervisors = [...detail.supervisors]
+      ..sort((a, b) => a.role.compareTo(b.role));
+    final examiners = [...detail.examiners]
+      ..sort((a, b) => a.order.compareTo(b.order));
+    final documents = _documentEntries();
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(AppSpacing.pagePadding),
@@ -60,38 +32,44 @@ class SeminarIdentityPanel extends StatelessWidget {
             icon: Icons.calendar_today_outlined,
             title: 'Informasi Seminar',
             children: [
-              _InfoRow(label: 'Nama Mahasiswa', value: (student['name'] ?? '-').toString()),
-              _InfoRow(label: 'NIM', value: (student['nim'] ?? '-').toString()),
-              for (var i = 0; i < examiners.length; i++)
+              _InfoRow(label: 'Nama Mahasiswa', value: detail.student.name),
+              _InfoRow(label: 'NIM', value: detail.student.nim),
+              for (final examiner in examiners)
                 _InfoRow(
-                  label: 'Penguji ${examiners[i]['order'] ?? i + 1}',
-                  value: (examiners[i]['lecturerName'] ?? '-').toString(),
+                  label: 'Penguji ${examiner.order}',
+                  value: examiner.lecturerName,
                 ),
               _InfoRow(
                 label: 'Tanggal',
-                value: _formatDate(detail['date']?.toString()) ??
-                    'Belum dijadwalkan',
+                value: _dateLabel(detail.date) ?? 'Belum dijadwalkan',
               ),
               _InfoRow(
                 label: 'Waktu',
-                value: _formatTimeRange(
-                  detail['startTime']?.toString(),
-                  detail['endTime']?.toString(),
-                ),
+                value: _timeRange(detail.startTime, detail.endTime),
               ),
-              _InfoRow(
-                label: 'Ruangan',
-                value: ((detail['room'] as Map?)?['name'] ?? '-').toString(),
-              ),
-              if ((detail['meetingLink'] ?? '').toString().isNotEmpty)
-                _InfoRow(
-                  label: 'Link Daring',
-                  value: detail['meetingLink'].toString(),
-                ),
-              if ((detail['scheduledAt'] ?? '').toString().isNotEmpty)
+              _InfoRow(label: 'Ruangan', value: detail.room?.name ?? '-'),
+              if (detail.room?.location != null)
+                _InfoRow(label: 'Lokasi', value: detail.room!.location!),
+              if (detail.meetingLink != null)
+                _InfoRow(label: 'Link Daring', value: detail.meetingLink!),
+              if (detail.scheduledAt != null)
                 _InfoRow(
                   label: 'Jadwal Ditetapkan',
-                  value: _formatDate(detail['scheduledAt']?.toString()) ?? '-',
+                  value: formatDateIndonesian(detail.scheduledAt!.toLocal()),
+                ),
+              if (detail.cancelledReason != null)
+                _InfoRow(
+                  label: 'Alasan Pembatalan',
+                  value: detail.cancelledReason!,
+                ),
+              if (detail.status.canDownloadInvitation)
+                AuthenticatedBinaryDownloadButton(
+                  download: () =>
+                      SeminarApiService().downloadInvitationLetter(detail.id),
+                  fallbackFileName: 'Undangan-Seminar-Hasil.pdf',
+                  successMessage: 'Surat undangan berhasil disimpan.',
+                  errorPrefix: 'Gagal mengunduh surat undangan',
+                  label: 'Unduh Surat Undangan',
                 ),
             ],
           ),
@@ -100,24 +78,20 @@ class SeminarIdentityPanel extends StatelessWidget {
             icon: Icons.menu_book_outlined,
             title: 'Informasi Tugas Akhir',
             children: [
-              _InfoRow(
-                label: 'Judul',
-                value: (thesis['title'] ?? '-').toString(),
-              ),
-              for (var i = 0; i < supervisors.length; i++)
+              _InfoRow(label: 'Judul', value: detail.thesis.title),
+              for (final supervisor in supervisors)
                 _InfoRow(
-                  label: (supervisors[i]['role'] ?? 'Pembimbing ${i + 1}')
-                      .toString(),
-                  value: (supervisors[i]['name'] ?? '-').toString(),
+                  label: formatRoleName(supervisor.role),
+                  value: supervisor.name,
                 ),
             ],
           ),
-          if (docTypes.isNotEmpty || documents.isNotEmpty) ...[
+          if (documents.isNotEmpty) ...[
             const SizedBox(height: AppSpacing.base),
             _Section(
               icon: Icons.description_outlined,
               title: 'Dokumen Seminar',
-              children: _buildDocuments(docTypes, documents),
+              children: documents,
             ),
           ],
           const SizedBox(height: AppSpacing.lg),
@@ -126,60 +100,58 @@ class SeminarIdentityPanel extends StatelessWidget {
     );
   }
 
-  List<Widget> _buildDocuments(
-    List<Map<String, dynamic>> docTypes,
-    List<Map<String, dynamic>> documents,
-  ) {
-    final list = docTypes.isNotEmpty
-        ? docTypes.map((dt) {
-            final doc = documents.firstWhere(
-              (d) => d['documentTypeId'] == dt['id'],
-              orElse: () => const {},
-            );
+  List<Widget> _documentEntries() {
+    if (detail.documentTypes.isNotEmpty) {
+      return detail.documentTypes
+          .map((requirement) {
+            SeminarDocument? document;
+            for (final candidate in detail.documents) {
+              if (candidate.requirementId == requirement.id) {
+                document = candidate;
+                break;
+              }
+            }
             return _DocumentRow(
-              name: (dt['name'] ?? 'Dokumen').toString(),
-              document: doc.isEmpty ? null : doc,
+              seminarId: detail.id,
+              name: requirement.name,
+              document: document,
             );
-          }).toList()
-        : documents
-            .map((doc) => _DocumentRow(
-                  name: (doc['documentTypeName'] ?? 'Dokumen').toString(),
-                  document: doc,
-                ))
-            .toList();
-    return list;
-  }
-
-  static String? _formatDate(String? iso) {
-    if (iso == null || iso.isEmpty) return null;
-    try {
-      final d = DateTime.parse(iso).toLocal();
-      const months = [
-        'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
-        'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember',
-      ];
-      return '${d.day} ${months[d.month - 1]} ${d.year}';
-    } catch (_) {
-      return null;
+          })
+          .toList(growable: false);
     }
+    return detail.documents
+        .map(
+          (document) => _DocumentRow(
+            seminarId: detail.id,
+            name: document.requirementName ?? 'Dokumen Seminar',
+            document: document,
+          ),
+        )
+        .toList(growable: false);
   }
 
-  static String _formatTimeRange(String? startIso, String? endIso) {
-    final start = _extractTime(startIso);
-    final end = _extractTime(endIso);
-    if (start == null && end == null) return '--:--';
-    if (end == null) return '$start WIB';
-    return '$start – $end WIB';
+  String? _dateLabel(String? value) {
+    final date = value == null ? null : DateTime.tryParse(value);
+    return date == null ? null : formatDateIndonesian(date.toLocal());
   }
 
-  static String? _extractTime(String? iso) {
-    if (iso == null || iso.isEmpty) return null;
-    try {
-      final d = DateTime.parse(iso);
-      return '${d.toUtc().hour.toString().padLeft(2, '0')}.${d.toUtc().minute.toString().padLeft(2, '0')}';
-    } catch (_) {
-      return null;
+  String _timeRange(String? start, String? end) {
+    final startLabel = _timeLabel(start);
+    final endLabel = _timeLabel(end);
+    if (startLabel == null && endLabel == null) return 'Belum dijadwalkan';
+    if (endLabel == null) return '$startLabel WIB';
+    return '$startLabel–$endLabel WIB';
+  }
+
+  String? _timeLabel(String? value) {
+    if (value == null || value.isEmpty) return null;
+    final plain = RegExp(r'^(\d{1,2}):(\d{2})').firstMatch(value);
+    if (plain != null) {
+      return '${plain.group(1)!.padLeft(2, '0')}.${plain.group(2)}';
     }
+    final date = DateTime.tryParse(value);
+    if (date == null) return value;
+    return '${date.hour.toString().padLeft(2, '0')}.${date.minute.toString().padLeft(2, '0')}';
   }
 }
 
@@ -187,6 +159,7 @@ class _Section extends StatelessWidget {
   final IconData icon;
   final String title;
   final List<Widget> children;
+
   const _Section({
     required this.icon,
     required this.title,
@@ -204,9 +177,7 @@ class _Section extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             decoration: BoxDecoration(
-              border: Border(
-                bottom: BorderSide(color: AppColors.divider),
-              ),
+              border: Border(bottom: BorderSide(color: AppColors.divider)),
             ),
             child: Row(
               children: [
@@ -232,6 +203,7 @@ class _Section extends StatelessWidget {
 class _InfoRow extends StatelessWidget {
   final String label;
   final String value;
+
   const _InfoRow({required this.label, required this.value});
 
   @override
@@ -241,12 +213,7 @@ class _InfoRow extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            label,
-            style: AppTextStyles.caption.copyWith(
-              color: AppColors.textTertiary,
-            ),
-          ),
+          Text(label, style: AppTextStyles.caption),
           const SizedBox(height: 2),
           Text(
             value,
@@ -262,86 +229,88 @@ class _InfoRow extends StatelessWidget {
 }
 
 class _DocumentRow extends StatelessWidget {
+  final String seminarId;
   final String name;
-  final Map<String, dynamic>? document;
+  final SeminarDocument? document;
 
-  const _DocumentRow({required this.name, this.document});
+  const _DocumentRow({
+    required this.seminarId,
+    required this.name,
+    required this.document,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final doc = document;
-    final status = (doc?['status'] ?? '').toString();
-    final fileName = (doc?['fileName'] ?? 'Belum diunggah').toString();
-    final submittedAt = doc?['submittedAt']?.toString();
-
-    final hasDoc = doc != null;
-    final (label, variant) = _statusDisplay(status);
-
+    final current = document;
+    final (statusLabel, variant) = _documentStatus(current?.status);
     return Container(
       margin: const EdgeInsets.only(top: 8),
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: AppColors.surfaceSecondary,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.border.withValues(alpha: 0.5)),
+        border: Border.all(color: AppColors.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: hasDoc
-                      ? AppColors.successLight
-                      : AppColors.surface,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(
-                  Icons.description,
-                  size: 16,
-                  color: hasDoc
-                      ? AppColors.successDark
-                      : AppColors.textTertiary,
-                ),
+              const Icon(
+                Icons.description_outlined,
+                size: 20,
+                color: AppColors.textTertiary,
               ),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    Text(name, style: AppTextStyles.label),
                     Text(
-                      name,
-                      style: AppTextStyles.bodySmall.copyWith(
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      submittedAt != null
-                          ? '$fileName • ${_formatShort(submittedAt)}'
-                          : fileName,
-                      style: AppTextStyles.caption.copyWith(
-                        color: AppColors.textSecondary,
-                      ),
+                      current?.fileName ?? 'Belum diunggah',
+                      style: AppTextStyles.caption,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                   ],
                 ),
               ),
-              if (hasDoc) AppBadge(label: label, variant: variant),
+              if (current != null)
+                AppBadge(label: statusLabel, variant: variant),
             ],
           ),
-          if ((doc?['notes'] ?? '').toString().isNotEmpty) ...[
+          if (current?.submittedAt != null) ...[
+            const SizedBox(height: 4),
+            Text(
+              'Diunggah ${formatDateIndonesian(current!.submittedAt!.toLocal())}',
+              style: AppTextStyles.caption,
+            ),
+          ],
+          if (current?.notes != null) ...[
             const SizedBox(height: 6),
             Text(
-              'Catatan: ${doc!['notes']}',
+              'Catatan: ${current!.notes}',
               style: AppTextStyles.caption.copyWith(
-                color: AppColors.textSecondary,
                 fontStyle: FontStyle.italic,
+              ),
+            ),
+          ],
+          if (current != null) ...[
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerRight,
+              child: AuthenticatedBinaryDownloadButton(
+                download: () => SeminarApiService().downloadDocument(
+                  seminarId,
+                  current.requirementId,
+                ),
+                fallbackFileName:
+                    current.fileName ?? 'Dokumen-Seminar-Hasil.pdf',
+                successMessage: 'Dokumen berhasil disimpan.',
+                errorPrefix: 'Gagal mengunduh dokumen',
+                label: 'Unduh',
+                style: BinaryDownloadButtonStyle.text,
               ),
             ),
           ],
@@ -350,23 +319,11 @@ class _DocumentRow extends StatelessWidget {
     );
   }
 
-  static (String, BadgeVariant) _statusDisplay(String s) {
-    switch (s) {
-      case 'approved':
-        return ('Disetujui', BadgeVariant.success);
-      case 'declined':
-        return ('Ditolak', BadgeVariant.destructive);
-      default:
-        return ('Menunggu', BadgeVariant.warning);
-    }
-  }
-
-  static String _formatShort(String iso) {
-    try {
-      final d = DateTime.parse(iso).toLocal();
-      return '${d.day}/${d.month}/${d.year}';
-    } catch (_) {
-      return iso;
-    }
+  (String, BadgeVariant) _documentStatus(DocumentStatus? status) {
+    return switch (status) {
+      DocumentStatus.approved => ('Disetujui', BadgeVariant.success),
+      DocumentStatus.declined => ('Ditolak', BadgeVariant.destructive),
+      _ => ('Menunggu', BadgeVariant.warning),
+    };
   }
 }

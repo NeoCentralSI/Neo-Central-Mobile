@@ -7,29 +7,18 @@ import '../../../core/enums/user_role.dart';
 import '../../../core/models/auth_models.dart';
 import '../../../core/services/seminar_api_service.dart';
 import '../../../shared/widgets/shared_widgets.dart';
+import '../../thesis_shared/domain/thesis_access_policy.dart';
+import '../data/models/seminar_models.dart';
 import 'panels/seminar_assessment_panel.dart';
 import 'panels/seminar_audience_panel.dart';
 import 'panels/seminar_identity_panel.dart';
 import 'panels/seminar_revision_panel.dart';
 
-/// Seminar Hasil — shared detail screen.
-///
-/// Tabs: Identitas, Penilaian, Peserta, Revisi.
-/// Scheduling tab is intentionally omitted on mobile (admin-only on web).
-///
-/// Accessed via card tap from:
-///   • Seminar Hasil ▸ Mahasiswa Bimbingan  (Supervisor)
-///   • Seminar Hasil ▸ Menguji Mahasiswa    (Examiner)
-///   • Tetapkan Penguji ▸ Seminar Hasil     (HoD — read-only view)
 class SeminarDetailScreen extends StatefulWidget {
   final String seminarId;
   final UserModel? user;
 
-  const SeminarDetailScreen({
-    super.key,
-    required this.seminarId,
-    this.user,
-  });
+  const SeminarDetailScreen({super.key, required this.seminarId, this.user});
 
   @override
   State<SeminarDetailScreen> createState() => _SeminarDetailScreenState();
@@ -39,17 +28,15 @@ class _SeminarDetailScreenState extends State<SeminarDetailScreen>
     with TickerProviderStateMixin {
   final _api = SeminarApiService();
   late TabController _tabController;
-
+  SeminarDetail? _detail;
   bool _isLoading = true;
   String? _error;
-  Map<String, dynamic> _detail = const {};
 
   @override
   void initState() {
     super.initState();
-    // Initial controller; rebuilt once we know which tabs are visible.
     _tabController = TabController(length: 1, vsync: this);
-    _fetch();
+    _load();
   }
 
   @override
@@ -58,7 +45,7 @@ class _SeminarDetailScreenState extends State<SeminarDetailScreen>
     super.dispose();
   }
 
-  Future<void> _fetch() async {
+  Future<void> _load() async {
     if (!mounted) return;
     setState(() {
       _isLoading = true;
@@ -67,150 +54,106 @@ class _SeminarDetailScreenState extends State<SeminarDetailScreen>
     try {
       final detail = await _api.getSeminarDetail(widget.seminarId);
       if (!mounted) return;
+      final tabCount = _buildTabSpecs(detail).length;
+      if (_tabController.length != tabCount) {
+        final previousIndex = _tabController.index;
+        _tabController.dispose();
+        _tabController = TabController(
+          length: tabCount,
+          vsync: this,
+          initialIndex: previousIndex < tabCount ? previousIndex : 0,
+        );
+      }
       setState(() {
         _detail = detail;
         _isLoading = false;
       });
-    } catch (e) {
+    } catch (exception) {
       if (!mounted) return;
       setState(() {
-        _error = e.toString();
+        _error = exception.toString();
         _isLoading = false;
       });
     }
   }
 
-  bool _isOngoing(Map<String, dynamic> d) {
-    final status = (d['status'] ?? '').toString();
-    if (status == 'ongoing') return true;
-    if (status != 'scheduled') return false;
-    final dateStr = d['date']?.toString();
-    final startStr = d['startTime']?.toString();
-    if (dateStr == null || startStr == null) return false;
-    try {
-      final dateObj = DateTime.parse(dateStr);
-      final timeObj = DateTime.parse(startStr);
-      final start = DateTime(
-        dateObj.toUtc().year,
-        dateObj.toUtc().month,
-        dateObj.toUtc().day,
-        timeObj.toUtc().hour,
-        timeObj.toUtc().minute,
-      );
-      return DateTime.now().isAfter(start) ||
-          DateTime.now().isAtSameMomentAs(start);
-    } catch (_) {
-      return false;
-    }
-  }
-
-  bool _isFinalized(Map<String, dynamic> d) {
-    const finalStatuses = ['passed', 'passed_with_revision', 'failed'];
-    return finalStatuses.contains((d['status'] ?? '').toString());
-  }
-
-  bool _isUserSupervisor(Map<String, dynamic> d) {
+  bool _isSupervisor(SeminarDetail detail) {
     final lecturerId = widget.user?.lecturer?.id;
-    if (lecturerId == null) return false;
-    final supervisors = (d['supervisors'] as List?) ?? const [];
-    return supervisors.whereType<Map>().any((s) => s['lecturerId'] == lecturerId);
+    return lecturerId != null &&
+        detail.supervisors.any((person) => person.lecturerId == lecturerId);
   }
 
-  bool _isUserExaminer(Map<String, dynamic> d) {
+  bool _isExaminer(SeminarDetail detail) {
     final lecturerId = widget.user?.lecturer?.id;
-    if (lecturerId == null) return false;
-    final examiners = (d['examiners'] as List?) ?? const [];
-    return examiners.whereType<Map>().any((e) => e['lecturerId'] == lecturerId);
+    return lecturerId != null &&
+        detail.examiners.any((person) => person.lecturerId == lecturerId);
   }
 
-  bool _isUserPresenter(Map<String, dynamic> d) {
+  bool _isPresenter(SeminarDetail detail) {
     final studentId = widget.user?.student?.id;
-    if (studentId == null) return false;
-    final detailStudent = d['student'];
-    if (detailStudent is Map && detailStudent['id'] == studentId) return true;
-    // Fallback by NIM match
-    final myNim = widget.user?.identityNumber;
-    if (myNim != null && detailStudent is Map && detailStudent['nim'] == myNim) {
-      return true;
-    }
-    return false;
+    if (studentId != null && detail.student.id == studentId) return true;
+    return widget.user?.identityNumber == detail.student.nim;
   }
 
-  bool get _isUserHod =>
-      widget.user?.appRole == UserRole.headOfDepartment;
+  List<_TabSpec> _buildTabSpecs(SeminarDetail detail) {
+    final supervisor = _isSupervisor(detail);
+    final examiner = _isExaminer(detail);
+    final presenter = _isPresenter(detail);
+    final appRole = widget.user?.appRole;
+    final leadership =
+        appRole == UserRole.headOfDepartment || appRole == UserRole.admin;
+    final showInteractiveData = detail.status.canShowAssessment;
+    final finalized = detail.resultFinalizedAt != null || detail.status.isFinal;
+    final showAssessment = canViewThesisAssessment(
+      workflowAllowsAssessment: showInteractiveData,
+      finalized: finalized,
+      isPresenter: presenter,
+      isSupervisor: supervisor,
+      isExaminer: examiner,
+      isLeadership: leadership,
+    );
+    final showRevision = canViewThesisRevision(
+      passedWithRevision: detail.status == SeminarStatus.passedWithRevision,
+      isArchive: false,
+      isPresenter: presenter,
+      isSupervisor: supervisor,
+    );
 
-  List<_TabSpec> _computeTabs(Map<String, dynamic> d) {
-    final ongoing = _isOngoing(d);
-    final finalized = _isFinalized(d);
-    final isSupervisor = _isUserSupervisor(d);
-    final isExaminer = _isUserExaminer(d);
-    final isPresenter = _isUserPresenter(d);
-    final isHod = _isUserHod;
-    final status = (d['status'] ?? '').toString();
-
-    final tabs = <_TabSpec>[
+    return [
       _TabSpec(
         label: 'Identitas',
-        builder: (refresh) => SeminarIdentityPanel(detail: d),
+        builder: () => SeminarIdentityPanel(detail: detail),
       ),
+      if (showAssessment)
+        _TabSpec(
+          label: 'Penilaian',
+          builder: () => SeminarAssessmentPanel(
+            seminarId: detail.id,
+            detail: detail,
+            user: widget.user,
+            onRefresh: _load,
+          ),
+        ),
+      if (showInteractiveData)
+        _TabSpec(
+          label: 'Peserta',
+          builder: () => SeminarAudiencePanel(
+            seminarId: detail.id,
+            detail: detail,
+            user: widget.user,
+          ),
+        ),
+      if (showRevision)
+        _TabSpec(
+          label: 'Revisi',
+          builder: () => SeminarRevisionPanel(
+            seminarId: detail.id,
+            detail: detail,
+            user: widget.user,
+            onRefresh: _load,
+          ),
+        ),
     ];
-
-    // Penilaian visible to: presenter, supervisor, examiner, and HoD.
-    final showAssessment = (ongoing || finalized) &&
-        (isPresenter || isSupervisor || isExaminer || isHod);
-    if (showAssessment) {
-      tabs.add(_TabSpec(
-        label: 'Penilaian',
-        builder: (refresh) => SeminarAssessmentPanel(
-          seminarId: widget.seminarId,
-          detail: d,
-          user: widget.user,
-          onRefresh: refresh,
-        ),
-      ));
-    }
-
-    // Peserta visible to anyone when ongoing/finalized (audience list is public).
-    final showAudience = ongoing || finalized;
-    if (showAudience) {
-      tabs.add(_TabSpec(
-        label: 'Peserta',
-        builder: (refresh) => SeminarAudiencePanel(
-          seminarId: widget.seminarId,
-          detail: d,
-          user: widget.user,
-        ),
-      ));
-    }
-
-    // Revisi: supervisor approves; presenter creates/edits/submits.
-    final showRevisions =
-        (isSupervisor || isPresenter) && status == 'passed_with_revision';
-    if (showRevisions) {
-      tabs.add(_TabSpec(
-        label: 'Revisi',
-        builder: (refresh) => SeminarRevisionPanel(
-          seminarId: widget.seminarId,
-          detail: d,
-          user: widget.user,
-          onRefresh: refresh,
-        ),
-      ));
-    }
-
-    return tabs;
-  }
-
-  void _ensureTabController(int length) {
-    if (_tabController.length != length) {
-      final oldIndex = _tabController.index;
-      _tabController.dispose();
-      _tabController = TabController(
-        length: length,
-        vsync: this,
-        initialIndex: oldIndex < length ? oldIndex : 0,
-      );
-    }
   }
 
   @override
@@ -218,50 +161,52 @@ class _SeminarDetailScreenState extends State<SeminarDetailScreen>
     return Scaffold(
       backgroundColor: AppColors.surfaceSecondary,
       body: SafeArea(
-        child: _isLoading
-            ? _buildLoading()
-            : _error != null
-                ? _buildError()
-                : _buildContent(),
+        child: switch ((_isLoading, _error, _detail)) {
+          (true, _, null) => _loadingView(),
+          (_, String error, null) => _errorView(error),
+          (_, _, SeminarDetail detail) => _content(detail),
+          _ => _errorView('Detail seminar tidak tersedia.'),
+        },
       ),
     );
   }
 
-  Widget _buildLoading() {
+  Widget _loadingView() {
     return Column(
       children: [
-        _buildHeader(title: 'Detail Seminar', tabs: const []),
+        _header(title: 'Detail Seminar', tabs: const []),
         const Expanded(child: Center(child: CircularProgressIndicator())),
       ],
     );
   }
 
-  Widget _buildError() {
+  Widget _errorView(String message) {
     return Column(
       children: [
-        _buildHeader(title: 'Detail Seminar', tabs: const []),
+        _header(title: 'Detail Seminar', tabs: const []),
         Expanded(
           child: Center(
             child: Padding(
               padding: const EdgeInsets.all(AppSpacing.pagePadding),
               child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.error_outline,
-                      size: 48, color: AppColors.destructive),
+                  const Icon(
+                    Icons.error_outline,
+                    size: 48,
+                    color: AppColors.destructive,
+                  ),
                   const SizedBox(height: 12),
-                  Text('Gagal memuat detail seminar',
-                      style: AppTextStyles.h4, textAlign: TextAlign.center),
+                  Text('Gagal memuat detail seminar', style: AppTextStyles.h4),
                   const SizedBox(height: 6),
                   Text(
-                    _error ?? '',
-                    style: AppTextStyles.bodySmall
-                        .copyWith(color: AppColors.textSecondary),
+                    message,
+                    style: AppTextStyles.bodySmall,
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 16),
                   OutlinedButton.icon(
-                    onPressed: _fetch,
+                    onPressed: _load,
                     icon: const Icon(Icons.refresh),
                     label: const Text('Coba Lagi'),
                   ),
@@ -274,36 +219,41 @@ class _SeminarDetailScreenState extends State<SeminarDetailScreen>
     );
   }
 
-  Widget _buildContent() {
-    final tabs = _computeTabs(_detail);
-    _ensureTabController(tabs.length);
-
-    final studentName = (_detail['student']?['name'] ?? '-').toString();
-    final studentNim = (_detail['student']?['nim'] ?? '-').toString();
-    final status = (_detail['status'] ?? '-').toString();
-
+  Widget _content(SeminarDetail detail) {
+    final tabs = _buildTabSpecs(detail);
     return Column(
       children: [
-        _buildHeader(
+        _header(
           title: 'Detail Seminar Hasil',
-          subtitle: '$studentName • $studentNim',
-          status: status,
+          subtitle: '${detail.student.name} • ${detail.student.nim}',
+          status: detail.status,
           tabs: tabs,
         ),
         Expanded(
-          child: TabBarView(
-            controller: _tabController,
-            children: tabs.map((t) => t.builder(_fetch)).toList(),
+          child: Stack(
+            children: [
+              TabBarView(
+                controller: _tabController,
+                children: tabs.map((tab) => tab.builder()).toList(),
+              ),
+              if (_isLoading)
+                const Positioned(
+                  left: 0,
+                  right: 0,
+                  top: 0,
+                  child: LinearProgressIndicator(minHeight: 2),
+                ),
+            ],
           ),
         ),
       ],
     );
   }
 
-  Widget _buildHeader({
+  Widget _header({
     required String title,
     String? subtitle,
-    String? status,
+    SeminarStatus? status,
     required List<_TabSpec> tabs,
   }) {
     return Container(
@@ -333,8 +283,7 @@ class _SeminarDetailScreenState extends State<SeminarDetailScreen>
                   shape: BoxShape.circle,
                 ),
                 child: IconButton(
-                  icon: const Icon(Icons.arrow_back,
-                      color: Colors.white, size: 22),
+                  icon: const Icon(Icons.arrow_back, color: Colors.white),
                   onPressed: () => Navigator.of(context).maybePop(),
                 ),
               ),
@@ -342,16 +291,17 @@ class _SeminarDetailScreenState extends State<SeminarDetailScreen>
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
                       title,
-                      style: AppTextStyles.h1
-                          .copyWith(color: Colors.white, fontSize: 20),
+                      style: AppTextStyles.h1.copyWith(
+                        color: Colors.white,
+                        fontSize: 20,
+                      ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    if (subtitle != null && subtitle.isNotEmpty)
+                    if (subtitle != null)
                       Text(
                         subtitle,
                         style: AppTextStyles.bodySmall.copyWith(
@@ -363,21 +313,20 @@ class _SeminarDetailScreenState extends State<SeminarDetailScreen>
                   ],
                 ),
               ),
-              if (status != null && status != '-')
-                _HeaderStatusBadge(status: status),
+              if (status != null) _HeaderStatusBadge(status: status),
             ],
           ),
           if (tabs.length > 1) ...[
             const SizedBox(height: 8),
             TabBar(
               controller: _tabController,
+              isScrollable: true,
               indicatorColor: Colors.white,
               indicatorWeight: 3,
               labelColor: Colors.white,
               unselectedLabelColor: Colors.white.withValues(alpha: 0.75),
               labelStyle: const TextStyle(fontWeight: FontWeight.w700),
-              labelPadding: const EdgeInsets.symmetric(horizontal: 4),
-              tabs: [for (final t in tabs) Tab(text: t.label)],
+              tabs: tabs.map((tab) => Tab(text: tab.label)).toList(),
             ),
           ] else
             const SizedBox(height: 8),
@@ -389,12 +338,14 @@ class _SeminarDetailScreenState extends State<SeminarDetailScreen>
 
 class _TabSpec {
   final String label;
-  final Widget Function(Future<void> Function() refresh) builder;
-  _TabSpec({required this.label, required this.builder});
+  final Widget Function() builder;
+
+  const _TabSpec({required this.label, required this.builder});
 }
 
 class _HeaderStatusBadge extends StatelessWidget {
-  final String status;
+  final SeminarStatus status;
+
   const _HeaderStatusBadge({required this.status});
 
   @override
@@ -407,7 +358,7 @@ class _HeaderStatusBadge extends StatelessWidget {
         border: Border.all(color: Colors.white.withValues(alpha: 0.4)),
       ),
       child: Text(
-        seminarStatusLabel(status),
+        seminarStatusLabel(status.value),
         style: AppTextStyles.caption.copyWith(
           color: Colors.white,
           fontWeight: FontWeight.w700,
@@ -417,50 +368,29 @@ class _HeaderStatusBadge extends StatelessWidget {
   }
 }
 
-/// Shared seminar status label translator (used by detail screen + panels).
-String seminarStatusLabel(String s) {
-  switch (s) {
-    case 'registered':
-      return 'Terdaftar';
-    case 'verified':
-      return 'Terverifikasi';
-    case 'examiner_assigned':
-      return 'Penguji Ditetapkan';
-    case 'scheduled':
-      return 'Dijadwalkan';
-    case 'ongoing':
-      return 'Berlangsung';
-    case 'passed':
-      return 'Lulus';
-    case 'passed_with_revision':
-      return 'Lulus + Revisi';
-    case 'failed':
-      return 'Gagal';
-    case 'cancelled':
-      return 'Dibatalkan';
-    default:
-      return s;
-  }
+String seminarStatusLabel(String status) {
+  return switch (status) {
+    'registered' => 'Terdaftar',
+    'verified' => 'Terverifikasi',
+    'examiner_assigned' => 'Penguji Ditetapkan',
+    'scheduled' => 'Dijadwalkan',
+    'ongoing' => 'Berlangsung',
+    'passed' => 'Lulus',
+    'passed_with_revision' => 'Lulus + Revisi',
+    'failed' => 'Gagal',
+    'cancelled' => 'Dibatalkan',
+    _ => status,
+  };
 }
 
-/// Status → badge variant mapping used by panels.
-BadgeVariant seminarStatusVariant(String s) {
-  switch (s) {
-    case 'ongoing':
-      return BadgeVariant.primary;
-    case 'scheduled':
-    case 'examiner_assigned':
-      return BadgeVariant.warning;
-    case 'passed':
-    case 'passed_with_revision':
-      return BadgeVariant.success;
-    case 'failed':
-    case 'cancelled':
-      return BadgeVariant.destructive;
-    case 'verified':
-      return BadgeVariant.outline;
-    case 'registered':
-    default:
-      return BadgeVariant.secondary;
-  }
+BadgeVariant seminarStatusVariant(String status) {
+  return switch (status) {
+    'ongoing' => BadgeVariant.primary,
+    'scheduled' || 'examiner_assigned' => BadgeVariant.warning,
+    'passed' || 'passed_with_revision' => BadgeVariant.success,
+    'failed' || 'cancelled' => BadgeVariant.destructive,
+    'verified' => BadgeVariant.outline,
+    'registered' => BadgeVariant.secondary,
+    _ => BadgeVariant.secondary,
+  };
 }

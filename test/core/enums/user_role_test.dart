@@ -15,8 +15,16 @@ void main() {
       expect(UserRole.staff.displayName, 'Staff');
     });
 
-    test('enum values count is 3', () {
-      expect(UserRole.values.length, 3);
+    test('displayName for head of department is Ketua Departemen', () {
+      expect(UserRole.headOfDepartment.displayName, 'Ketua Departemen');
+    });
+
+    test('displayName for admin is Admin', () {
+      expect(UserRole.admin.displayName, 'Admin');
+    });
+
+    test('contains all five application roles', () {
+      expect(UserRole.values.length, 5);
     });
   });
 }

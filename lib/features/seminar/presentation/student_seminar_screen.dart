@@ -29,6 +29,7 @@ class StudentSeminarScreen extends StatefulWidget {
 class _StudentSeminarScreenState extends State<StudentSeminarScreen>
     with TickerProviderStateMixin {
   late final TabController _tabController;
+  int _refreshSignal = 0;
 
   @override
   void initState() {
@@ -42,11 +43,14 @@ class _StudentSeminarScreenState extends State<StudentSeminarScreen>
     super.dispose();
   }
 
-  void _openDetail(String seminarId) {
-    Navigator.of(context).push(MaterialPageRoute(
-      builder: (_) =>
-          SeminarDetailScreen(seminarId: seminarId, user: widget.user),
-    ));
+  Future<void> _openDetail(String seminarId) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) =>
+            SeminarDetailScreen(seminarId: seminarId, user: widget.user),
+      ),
+    );
+    if (mounted) setState(() => _refreshSignal++);
   }
 
   @override
@@ -65,10 +69,12 @@ class _StudentSeminarScreenState extends State<StudentSeminarScreen>
                   StudentSeminarOverviewPanel(
                     user: widget.user,
                     onSeminarTap: _openDetail,
+                    refreshSignal: _refreshSignal,
                   ),
                   StudentSeminarAttendancePanel(
                     user: widget.user,
                     onSeminarTap: _openDetail,
+                    refreshSignal: _refreshSignal,
                   ),
                 ],
               ),
@@ -108,8 +114,7 @@ class _StudentSeminarScreenState extends State<StudentSeminarScreen>
                     shape: BoxShape.circle,
                   ),
                   child: IconButton(
-                    icon: const Icon(Icons.menu,
-                        color: Colors.white, size: 24),
+                    icon: const Icon(Icons.menu, color: Colors.white, size: 24),
                     onPressed: () => Scaffold.of(ctx).openDrawer(),
                   ),
                 ),
@@ -118,8 +123,10 @@ class _StudentSeminarScreenState extends State<StudentSeminarScreen>
               Expanded(
                 child: Text(
                   'Seminar Hasil',
-                  style: AppTextStyles.h1
-                      .copyWith(color: Colors.white, fontSize: 20),
+                  style: AppTextStyles.h1.copyWith(
+                    color: Colors.white,
+                    fontSize: 20,
+                  ),
                 ),
               ),
             ],
