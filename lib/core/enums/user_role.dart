@@ -2,7 +2,9 @@
 enum UserRole {
   student,
   lecturer,
-  staff;
+  staff,
+  headOfDepartment,
+  admin;
 
   String get displayName {
     switch (this) {
@@ -12,6 +14,10 @@ enum UserRole {
         return 'Dosen';
       case UserRole.staff:
         return 'Staff';
+      case UserRole.headOfDepartment:
+        return 'Ketua Departemen';
+      case UserRole.admin:
+        return 'Admin';
     }
   }
 }

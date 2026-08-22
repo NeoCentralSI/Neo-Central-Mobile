@@ -49,20 +49,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget build(BuildContext context) {
     final role = widget.user?.appRole ?? UserRole.lecturer;
     final isLecturer = role == UserRole.lecturer;
+    final isAdmin = role == UserRole.admin;
 
-    final name = widget.user?.fullName ?? (isLecturer ? 'Dosen' : 'Mahasiswa');
+    final name = widget.user?.fullName ??
+        (isAdmin ? 'Admin' : (isLecturer ? 'Dosen' : 'Mahasiswa'));
     final email = widget.user?.email ?? '-';
     final identityNumber = widget.user?.identityNumber ?? '-';
 
     return Scaffold(
       backgroundColor: AppColors.surfaceSecondary,
-      drawer: AppDrawer(user: widget.user, activeRoute: 'profile'),
+      // Admin has no cross-module navigation — drawer would expose modules the
+      // backend won't authorize. Keep the screen drawer-less for admin.
+      drawer: isAdmin
+          ? null
+          : AppDrawer(user: widget.user, activeRoute: 'profile'),
       body: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
         child: Stack(
           clipBehavior: Clip.none,
           children: [
-            _buildHeaderBackground(context, isLecturer, name),
+            _buildHeaderBackground(context, isLecturer, isAdmin, name),
             Padding(
               padding: const EdgeInsets.only(
                 top: 280,
@@ -86,13 +92,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    _buildInfoCard(isLecturer, identityNumber, email),
+                    _buildInfoCard(isLecturer, isAdmin, identityNumber, email),
                     const Divider(
                       color: AppColors.surfaceSecondary,
                       thickness: 8,
                       height: 8,
                     ),
-                    _buildMenuCard(context, isLecturer),
+                    _buildMenuCard(context, isLecturer, isAdmin),
                     const SizedBox(height: AppSpacing.xl),
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -112,6 +118,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget _buildHeaderBackground(
     BuildContext context,
     bool isLecturer,
+    bool isAdmin,
     String name,
   ) {
     return Container(
@@ -127,16 +134,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
       child: Stack(
         children: [
-          Positioned(
-            top: 50,
-            left: 20,
-            child: Builder(
-              builder: (context) => IconButton(
-                icon: const Icon(Icons.menu, color: Colors.white, size: 28),
-                onPressed: () => Scaffold.of(context).openDrawer(),
+          if (!isAdmin)
+            Positioned(
+              top: 50,
+              left: 20,
+              child: Builder(
+                builder: (context) => IconButton(
+                  icon: const Icon(Icons.menu, color: Colors.white, size: 28),
+                  onPressed: () => Scaffold.of(context).openDrawer(),
+                ),
               ),
             ),
-          ),
           Positioned.fill(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -182,7 +190,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  isLecturer ? 'Dosen Pembimbing' : 'Mahasiswa',
+                  isAdmin
+                      ? 'Admin'
+                      : (isLecturer ? 'Dosen Pembimbing' : 'Mahasiswa'),
                   style: AppTextStyles.body.copyWith(
                     color: Colors.white.withValues(alpha: 0.9),
                   ),
@@ -196,7 +206,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildInfoCard(bool isLecturer, String identityNumber, String email) {
+  Widget _buildInfoCard(
+    bool isLecturer,
+    bool isAdmin,
+    String identityNumber,
+    String email,
+  ) {
+    final identityLabel = isAdmin
+        ? 'ID'
+        : (isLecturer ? 'NIP' : 'NIM');
+
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -206,7 +225,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           const AppDivider(),
           InfoRow(
             icon: Icons.badge_outlined,
-            label: isLecturer ? 'NIP' : 'NIM',
+            label: identityLabel,
             value: identityNumber,
           ),
           const SizedBox(height: AppSpacing.md),
@@ -217,7 +236,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
             label: 'Departemen',
             value: 'Sistem Informasi – FTI Unand',
           ),
-          if (!isLecturer && widget.user?.student?.enrollmentYear != null) ...[
+          if (!isLecturer &&
+              !isAdmin &&
+              widget.user?.student?.enrollmentYear != null) ...[
             const SizedBox(height: AppSpacing.md),
             InfoRow(
               icon: Icons.calendar_today_outlined,
@@ -232,7 +253,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
 
 
-  Widget _buildMenuCard(BuildContext context, bool isLecturer) {
+  Widget _buildMenuCard(BuildContext context, bool isLecturer, bool isAdmin) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
       child: Column(
@@ -240,28 +261,35 @@ class _ProfileScreenState extends State<ProfileScreen> {
         children: [
           Text('Pengaturan & Informasi', style: AppTextStyles.h4),
           const AppDivider(),
-          
-          // Default Home Setting (Expandable)
-          _buildExpandableMenuItem(
-            icon: Icons.home_outlined,
-            label: 'Halaman Utama Default',
-            value: _defaultHome == 'internship' ? 'Kerja Praktik' : 'Tugas Akhir',
-            isExpanded: _showHomeSettings,
-            onTap: () => setState(() => _showHomeSettings = !_showHomeSettings),
-            children: [
-              _buildSubMenuItem(
-                label: 'Tugas Akhir',
-                isSelected: _defaultHome == 'tugas_akhir',
-                onTap: () => _updateDefaultHome('tugas_akhir'),
-              ),
-              _buildSubMenuItem(
-                label: 'Kerja Praktik',
-                isSelected: _defaultHome == 'internship',
-                onTap: () => _updateDefaultHome('internship'),
-              ),
-            ],
-          ),
-          Divider(height: 1, color: AppColors.divider),
+
+          // Default Home Setting — only relevant when the user has more than
+          // one shell to land on (Tugas Akhir vs Kerja Praktik). Admin has a
+          // single shell, so the toggle is hidden.
+          if (!isAdmin) ...[
+            _buildExpandableMenuItem(
+              icon: Icons.home_outlined,
+              label: 'Halaman Utama Default',
+              value: _defaultHome == 'internship'
+                  ? 'Kerja Praktik'
+                  : 'Tugas Akhir',
+              isExpanded: _showHomeSettings,
+              onTap: () =>
+                  setState(() => _showHomeSettings = !_showHomeSettings),
+              children: [
+                _buildSubMenuItem(
+                  label: 'Tugas Akhir',
+                  isSelected: _defaultHome == 'tugas_akhir',
+                  onTap: () => _updateDefaultHome('tugas_akhir'),
+                ),
+                _buildSubMenuItem(
+                  label: 'Kerja Praktik',
+                  isSelected: _defaultHome == 'internship',
+                  onTap: () => _updateDefaultHome('internship'),
+                ),
+              ],
+            ),
+            Divider(height: 1, color: AppColors.divider),
+          ],
 
           _buildPlainMenuItem(
             icon: Icons.notifications_outlined,

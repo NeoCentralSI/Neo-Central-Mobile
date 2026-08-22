@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -87,6 +87,34 @@ class FcmService {
     _listeners.remove(listener);
   }
 
+  /// Callbacks fired when the user taps a notification and opens the app.
+  /// Use this to navigate to the relevant screen (e.g. switch to Dashboard tab).
+  final List<void Function(Map<String, dynamic> data)> _openListeners = [];
+
+  /// The most recent tap payload that arrived with no listeners registered.
+  /// Replayed to the next listener that calls [addOpenListener] so cold-start
+  /// taps (where FCM `getInitialMessage` fires inside AuthGate before any
+  /// shell has been built) are not silently lost.
+  Map<String, dynamic>? _pendingOpenData;
+
+  void addOpenListener(void Function(Map<String, dynamic> data) listener) {
+    _openListeners.add(listener);
+    final pending = _pendingOpenData;
+    if (pending != null) {
+      _pendingOpenData = null;
+      // Defer past the pushReplacement entry animation (≈300 ms) so that the
+      // shell's Navigator.push is not issued while the transition is still
+      // running — Flutter can silently drop a push made mid-transition.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        Future.delayed(const Duration(milliseconds: 400), () => listener(pending));
+      });
+    }
+  }
+
+  void removeOpenListener(void Function(Map<String, dynamic> data) listener) {
+    _openListeners.remove(listener);
+  }
+
   // ── Initialisation ──────────────────────────────────────────
 
   /// Call once after Firebase.initializeApp in main().
@@ -162,6 +190,15 @@ class FcmService {
       onDidReceiveNotificationResponse: (response) {
         debugPrint('[LocalNotif] Tapped: ${response.payload}');
         _handleNotificationAction(response);
+        // Fire open-listeners so the UI switches to the relevant screen
+        final data = response.payload != null
+            ? Map<String, dynamic>.from(
+                (jsonDecode(response.payload!) as Map),
+              )
+            : <String, dynamic>{};
+        for (final listener in List.of(_openListeners)) {
+          listener(data);
+        }
       },
       onDidReceiveBackgroundNotificationResponse:
           localNotificationTapBackground,
@@ -322,9 +359,18 @@ class FcmService {
   void _handleMessageOpen(RemoteMessage message) {
     debugPrint('[FCM] Message opened: ${message.data}');
 
-    // Notify listeners so screens can react (e.g. refresh data)
     final data = message.data;
-    for (final listener in _listeners) {
+    // If no listener is registered yet (cold-start: AuthGate has called
+    // getInitialMessage before any shell mounted), stash for replay.
+    if (_openListeners.isEmpty) {
+      _pendingOpenData = data;
+    } else {
+      for (final listener in List.of(_openListeners)) {
+        listener(data);
+      }
+    }
+    // Data-refresh listeners always fire (no replay — they just refresh data).
+    for (final listener in List.of(_listeners)) {
       listener(data);
     }
   }
