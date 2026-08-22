@@ -1,10 +1,11 @@
 import 'api_client.dart';
 
 /// API service for student-facing internship activities.
-/// 
+///
 /// Base path: /insternship
 class InternshipApiService {
-  static final InternshipApiService _instance = InternshipApiService._internal();
+  static final InternshipApiService _instance =
+      InternshipApiService._internal();
   factory InternshipApiService() => _instance;
   InternshipApiService._internal();
 
@@ -20,14 +21,50 @@ class InternshipApiService {
     return res as Map<String, dynamic>;
   }
 
+  /// GET /insternship/activity/history
+  /// Returns completed/failed internships for dashboard context.
+  Future<List<dynamic>> getInternshipHistory() async {
+    final res = await _api.get('$_base/activity/history');
+    if (res is Map && res.containsKey('data')) {
+      return res['data'] as List;
+    }
+    return [];
+  }
+
+  /// PUT /insternship/activity/details
+  /// Saves field supervisor and work unit information for the active internship.
+  Future<Map<String, dynamic>> updateInternshipDetails({
+    required String fieldSupervisorName,
+    required String fieldSupervisorEmail,
+    String? fieldSupervisorPhone,
+    String? fieldSupervisorNip,
+    required String unitSection,
+  }) async {
+    final res = await _api.put(
+      '$_base/activity/details',
+      body: {
+        'fieldSupervisorName': fieldSupervisorName,
+        'fieldSupervisorEmail': fieldSupervisorEmail,
+        'fieldSupervisorPhone': fieldSupervisorPhone,
+        'fieldSupervisorNip': fieldSupervisorNip,
+        'unitSection': unitSection,
+      },
+    );
+    return res as Map<String, dynamic>;
+  }
+
   // ── Logbook ─────────────────────────────────────────────────
 
   /// PUT /insternship/activity/logbook/:id
   /// Updates activity description for a specific logbook entry.
-  Future<Map<String, dynamic>> updateLogbook(String id, String activityDescription) async {
-    final res = await _api.put('$_base/activity/logbook/$id', body: {
-      'activityDescription': activityDescription,
-    });
+  Future<Map<String, dynamic>> updateLogbook(
+    String id,
+    String activityDescription,
+  ) async {
+    final res = await _api.put(
+      '$_base/activity/logbook/$id',
+      body: {'activityDescription': activityDescription},
+    );
     return res as Map<String, dynamic>;
   }
 
@@ -49,11 +86,14 @@ class InternshipApiService {
 
   /// POST /insternship/activity/guidance/submit
   /// Submits student guidance answers for a specific week.
-  Future<Map<String, dynamic>> submitStudentGuidance(int weekNumber, Map<String, String> answers) async {
-    final res = await _api.post('$_base/activity/guidance/submit', body: {
-      'weekNumber': weekNumber,
-      'answers': answers,
-    });
+  Future<Map<String, dynamic>> submitStudentGuidance(
+    int weekNumber,
+    Map<String, String> answers,
+  ) async {
+    final res = await _api.post(
+      '$_base/activity/guidance/submit',
+      body: {'weekNumber': weekNumber, 'answers': answers},
+    );
     return res as Map<String, dynamic>;
   }
 
@@ -87,7 +127,7 @@ class InternshipApiService {
   }
 
   // ── Seminar ────────────────────────────────────────────────
-  
+
   /// GET /insternship/activity/seminars
   /// Returns a list of upcoming seminars for all students.
   Future<List<dynamic>> getUpcomingSeminars() async {
@@ -115,15 +155,44 @@ class InternshipApiService {
   /// DELETE /insternship/activity/seminars/:id/audience
   /// Unregisters the current student as audience.
   Future<Map<String, dynamic>> unregisterAttendance(String seminarId) async {
-    final res = await _api.delete('$_base/activity/seminars/$seminarId/audience');
+    final res = await _api.delete(
+      '$_base/activity/seminars/$seminarId/audience',
+    );
     return res as Map<String, dynamic>;
   }
 
   /// POST /insternship/activity/register-seminar
   /// Registers the current student for an internship seminar.
-  Future<Map<String, dynamic>> registerSeminar(Map<String, dynamic> data) async {
+  Future<Map<String, dynamic>> registerSeminar(
+    Map<String, dynamic> data,
+  ) async {
     final res = await _api.post('$_base/activity/register-seminar', body: data);
     return res as Map<String, dynamic>;
+  }
+
+  /// GET /insternship/registration/eligible-students
+  /// Returns a list of eligible students for seminar moderator selection.
+  Future<List<dynamic>> getEligibleStudents() async {
+    final res = await _api.get('$_base/registration/eligible-students');
+    if (res is Map && res.containsKey('data')) {
+      return res['data'] as List;
+    }
+    return [];
+  }
+
+  /// GET /adminfeatures/rooms
+  /// Returns rooms for seminar scheduling.
+  Future<List<dynamic>> getRooms({
+    int page = 1,
+    int limit = 500,
+    String search = '',
+  }) async {
+    final query = 'page=$page&limit=$limit&search=$search';
+    final res = await _api.get('/adminfeatures/rooms?$query');
+    if (res is Map && res.containsKey('data')) {
+      return res['data'] as List;
+    }
+    return [];
   }
 
   // ── Lecturer Facing ─────────────────────────────────────────
@@ -139,34 +208,56 @@ class InternshipApiService {
 
   /// GET /insternship/activity/guidance/lecturer/students/:internshipId
   /// Returns the guidance timeline for a specific supervised student.
-  Future<Map<String, dynamic>> getSupervisedStudentTimeline(String internshipId) async {
-    final res = await _api.get('$_base/activity/guidance/lecturer/students/$internshipId');
+  Future<Map<String, dynamic>> getSupervisedStudentTimeline(
+    String internshipId,
+  ) async {
+    final res = await _api.get(
+      '$_base/activity/guidance/lecturer/students/$internshipId',
+    );
     return res as Map<String, dynamic>;
   }
 
   /// GET /insternship/activity/guidance/lecturer/students/:internshipId/week/:weekNumber
-  Future<Map<String, dynamic>> getSupervisedStudentWeekDetail(String internshipId, int weekNumber) async {
-    final res = await _api.get('$_base/activity/guidance/lecturer/students/$internshipId/week/$weekNumber');
+  Future<Map<String, dynamic>> getSupervisedStudentWeekDetail(
+    String internshipId,
+    int weekNumber,
+  ) async {
+    final res = await _api.get(
+      '$_base/activity/guidance/lecturer/students/$internshipId/week/$weekNumber',
+    );
     return res as Map<String, dynamic>;
   }
 
   /// POST /insternship/activity/guidance/lecturer/students/:internshipId/week/:weekNumber/evaluate
-  Future<Map<String, dynamic>> submitLecturerEvaluation(String internshipId, int weekNumber, Map<String, dynamic> evaluations) async {
-    final res = await _api.post('$_base/activity/guidance/lecturer/students/$internshipId/week/$weekNumber/evaluate', body: {
-      'evaluations': evaluations,
-    });
+  Future<Map<String, dynamic>> submitLecturerEvaluation(
+    String internshipId,
+    int weekNumber,
+    Map<String, dynamic> evaluations,
+  ) async {
+    final res = await _api.post(
+      '$_base/activity/guidance/lecturer/students/$internshipId/week/$weekNumber/evaluate',
+      body: {'status': 'APPROVED', 'evaluations': evaluations},
+    );
     return res as Map<String, dynamic>;
   }
 
   /// POST /insternship/activity/guidance/lecturer/seminar/:id/approve
   Future<Map<String, dynamic>> approveSeminar(String seminarId) async {
-    final res = await _api.post('$_base/activity/guidance/lecturer/seminar/$seminarId/approve');
+    final res = await _api.post(
+      '$_base/activity/guidance/lecturer/seminar/$seminarId/approve',
+    );
     return res as Map<String, dynamic>;
   }
 
   /// POST /insternship/activity/guidance/lecturer/seminar/:id/reject
-  Future<Map<String, dynamic>> rejectSeminar(String seminarId, String notes) async {
-    final res = await _api.post('$_base/activity/guidance/lecturer/seminar/$seminarId/reject', body: {'notes': notes});
+  Future<Map<String, dynamic>> rejectSeminar(
+    String seminarId,
+    String notes,
+  ) async {
+    final res = await _api.post(
+      '$_base/activity/guidance/lecturer/seminar/$seminarId/reject',
+      body: {'notes': notes},
+    );
     return res as Map<String, dynamic>;
   }
 }

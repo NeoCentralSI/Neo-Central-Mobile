@@ -18,10 +18,12 @@ class InternshipSeminarDetailScreen extends StatefulWidget {
   });
 
   @override
-  State<InternshipSeminarDetailScreen> createState() => _InternshipSeminarDetailScreenState();
+  State<InternshipSeminarDetailScreen> createState() =>
+      _InternshipSeminarDetailScreenState();
 }
 
-class _InternshipSeminarDetailScreenState extends State<InternshipSeminarDetailScreen> {
+class _InternshipSeminarDetailScreenState
+    extends State<InternshipSeminarDetailScreen> {
   final InternshipApiService _api = InternshipApiService();
   bool _isLoading = true;
   bool _isSubmitting = false;
@@ -63,7 +65,7 @@ class _InternshipSeminarDetailScreenState extends State<InternshipSeminarDetailS
 
   Future<void> _handleAttendance() async {
     final isAlreadyRegistered = _seminar?['isRegistered'] == true;
-    
+
     setState(() => _isSubmitting = true);
     try {
       final res = isAlreadyRegistered
@@ -73,7 +75,12 @@ class _InternshipSeminarDetailScreenState extends State<InternshipSeminarDetailS
       if (res['success'] == true) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(res['message'] ?? (isAlreadyRegistered ? 'Berhasil membatalkan kehadiran' : 'Berhasil mengambil kehadiran')),
+            content: Text(
+              res['message'] ??
+                  (isAlreadyRegistered
+                      ? 'Berhasil membatalkan kehadiran'
+                      : 'Berhasil mengambil kehadiran'),
+            ),
             backgroundColor: AppColors.success,
           ),
         );
@@ -86,7 +93,7 @@ class _InternshipSeminarDetailScreenState extends State<InternshipSeminarDetailS
       if (e is ApiException) {
         errorMessage = e.message;
       }
-      
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(errorMessage),
@@ -108,10 +115,12 @@ class _InternshipSeminarDetailScreenState extends State<InternshipSeminarDetailS
         foregroundColor: Colors.white,
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+          ? const Center(
+              child: CircularProgressIndicator(color: AppColors.primary),
+            )
           : _error != null
-              ? _buildErrorState()
-              : _buildContent(),
+          ? _buildErrorState()
+          : _buildContent(),
       bottomNavigationBar: _seminar == null || _isLoading
           ? null
           : _buildBottomAction(),
@@ -119,93 +128,147 @@ class _InternshipSeminarDetailScreenState extends State<InternshipSeminarDetailS
   }
 
   Widget _buildErrorState() {
-    return Center(
+    return _buildRefreshableState(
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.error_outline, size: 64, color: AppColors.destructive),
+          const Icon(
+            Icons.error_outline,
+            size: 64,
+            color: AppColors.destructive,
+          ),
           const SizedBox(height: 16),
           Text('Terjadi Kesalahan', style: AppTextStyles.h3),
           const SizedBox(height: 8),
           Text(_error ?? 'Gagal memuat data', textAlign: TextAlign.center),
           const SizedBox(height: 24),
-          ElevatedButton(onPressed: _loadDetail, child: const Text('Coba Lagi')),
+          ElevatedButton(
+            onPressed: _loadDetail,
+            child: const Text('Coba Lagi'),
+          ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildRefreshableState({required Widget child}) {
+    return RefreshIndicator(
+      onRefresh: _loadDetail,
+      color: AppColors.primary,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          return SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: constraints.maxHeight),
+              child: Center(child: child),
+            ),
+          );
+        },
       ),
     );
   }
 
   Widget _buildContent() {
     final seminar = _seminar!;
-    final studentName = seminar['internship']?['student']?['user']?['fullName'] ?? 'Mahasiswa';
-    final companyName = seminar['internship']?['proposal']?['targetCompany']?['companyName'] ?? '-';
-    final date = DateTime.tryParse(seminar['seminarDate']?.toString() ?? '') ?? DateTime.now();
+    final studentName =
+        seminar['internship']?['student']?['user']?['fullName'] ?? 'Mahasiswa';
+    final companyName =
+        seminar['internship']?['proposal']?['targetCompany']?['companyName'] ??
+        '-';
+    final date =
+        DateTime.tryParse(seminar['seminarDate']?.toString() ?? '') ??
+        DateTime.now();
     final startTime = seminar['startTime'];
     final endTime = seminar['endTime'];
     final room = seminar['room']?['name'] ?? 'TBA';
     final link = seminar['linkMeeting'];
-    final moderator = seminar['moderatorStudent']?['user']?['fullName'] ?? 'TBA';
+    final moderator =
+        seminar['moderatorStudent']?['user']?['fullName'] ?? 'TBA';
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(AppSpacing.pagePadding),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Student Info Card
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.05),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                CircleAvatar(
-                  radius: 30,
-                  backgroundColor: AppColors.primary.withValues(alpha: 0.1),
-                  child: const Icon(Icons.person, color: AppColors.primary, size: 32),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(studentName, style: AppTextStyles.h4),
-                      const SizedBox(height: 4),
-                      Text(companyName, style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary)),
-                    ],
+    return RefreshIndicator(
+      onRefresh: _loadDetail,
+      color: AppColors.primary,
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(AppSpacing.pagePadding),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Student Info Card
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.05),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
                   ),
-                ),
-              ],
+                ],
+              ),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 30,
+                    backgroundColor: AppColors.primary.withValues(alpha: 0.1),
+                    child: const Icon(
+                      Icons.person,
+                      color: AppColors.primary,
+                      size: 32,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(studentName, style: AppTextStyles.h4),
+                        const SizedBox(height: 4),
+                        Text(
+                          companyName,
+                          style: AppTextStyles.bodySmall.copyWith(
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-          const SizedBox(height: 24),
-          Text('Informasi Seminar', style: AppTextStyles.h4),
-          const SizedBox(height: 16),
-          _buildDetailItem(Icons.calendar_today, 'Tanggal', fmt.formatDateIndonesian(date)),
-          _buildDetailItem(Icons.access_time, 'Waktu', '${_formatTime(startTime)} - ${_formatTime(endTime)} WIB'),
-          _buildDetailItem(Icons.location_on, 'Ruangan', room),
-          if (link != null && link.isNotEmpty)
-            _buildDetailItem(Icons.link, 'Link Meeting', link, isLink: true),
-          _buildDetailItem(Icons.person_outline, 'Moderator', moderator),
-          
-          const SizedBox(height: 24),
-          _buildAttendanceInfo(),
-        ],
+            const SizedBox(height: 24),
+            Text('Informasi Seminar', style: AppTextStyles.h4),
+            const SizedBox(height: 16),
+            _buildDetailItem(
+              Icons.calendar_today,
+              'Tanggal',
+              fmt.formatDateIndonesian(date),
+            ),
+            _buildDetailItem(
+              Icons.access_time,
+              'Waktu',
+              '${_formatTime(startTime)} - ${_formatTime(endTime)} WIB',
+            ),
+            _buildDetailItem(Icons.location_on, 'Ruangan', room),
+            if (link != null && link.isNotEmpty)
+              _buildDetailItem(Icons.link, 'Link Meeting', link, isLink: true),
+            _buildDetailItem(Icons.person_outline, 'Moderator', moderator),
+
+            const SizedBox(height: 24),
+            _buildAttendanceInfo(),
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildAttendanceInfo() {
     final isAlreadyRegistered = _seminar?['isRegistered'] == true;
-    final audienceStatus = _seminar?['myRegistrationStatus']; // 'REQUESTED' or 'VALIDATED'
+    final audienceStatus =
+        _seminar?['myRegistrationStatus']; // 'REQUESTED' or 'VALIDATED'
 
     if (!isAlreadyRegistered) return const SizedBox.shrink();
 
@@ -232,7 +295,10 @@ class _InternshipSeminarDetailScreenState extends State<InternshipSeminarDetailS
           const SizedBox(width: 12),
           Text(
             statusLabel,
-            style: AppTextStyles.label.copyWith(color: statusColor, fontWeight: FontWeight.bold),
+            style: AppTextStyles.label.copyWith(
+              color: statusColor,
+              fontWeight: FontWeight.bold,
+            ),
           ),
         ],
       ),
@@ -261,27 +327,45 @@ class _InternshipSeminarDetailScreenState extends State<InternshipSeminarDetailS
           width: double.infinity,
           height: 50,
           child: ElevatedButton(
-            onPressed: (_isSubmitting || (isAlreadyRegistered && !canCancel)) ? null : _handleAttendance,
+            onPressed: (_isSubmitting || (isAlreadyRegistered && !canCancel))
+                ? null
+                : _handleAttendance,
             style: ElevatedButton.styleFrom(
-              backgroundColor: isAlreadyRegistered ? AppColors.destructive : AppColors.primary,
+              backgroundColor: isAlreadyRegistered
+                  ? AppColors.destructive
+                  : AppColors.primary,
               foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
               elevation: 0,
             ),
             child: _isSubmitting
                 ? const SizedBox(
                     height: 20,
                     width: 20,
-                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                    child: CircularProgressIndicator(
+                      color: Colors.white,
+                      strokeWidth: 2,
+                    ),
                   )
-                : Text(isAlreadyRegistered ? 'Batalkan Kehadiran' : 'Ambil Kehadiran'),
+                : Text(
+                    isAlreadyRegistered
+                        ? 'Batalkan Kehadiran'
+                        : 'Ambil Kehadiran',
+                  ),
           ),
         ),
       ),
     );
   }
 
-  Widget _buildDetailItem(IconData icon, String label, String value, {bool isLink = false}) {
+  Widget _buildDetailItem(
+    IconData icon,
+    String label,
+    String value, {
+    bool isLink = false,
+  }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: Row(
@@ -300,7 +384,12 @@ class _InternshipSeminarDetailScreenState extends State<InternshipSeminarDetailS
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(label, style: AppTextStyles.caption.copyWith(color: AppColors.textSecondary)),
+                Text(
+                  label,
+                  style: AppTextStyles.caption.copyWith(
+                    color: AppColors.textSecondary,
+                  ),
+                ),
                 Text(
                   value,
                   style: AppTextStyles.body.copyWith(

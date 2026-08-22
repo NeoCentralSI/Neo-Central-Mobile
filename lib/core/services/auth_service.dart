@@ -77,6 +77,41 @@ class AuthService {
     }
   }
 
+  /// Standard Email & Password Login
+  Future<AuthResult> loginWithEmail(String email, String password) async {
+    try {
+      final response = await http.post(
+        Uri.parse('${AppConfig.baseUrl}/auth/login'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'email': email,
+          'password': password,
+        }),
+      ).timeout(const Duration(seconds: 15));
+
+      if (response.statusCode != 200) {
+        final body = jsonDecode(response.body) as Map<String, dynamic>;
+        final message = body['message'] ?? 'Authentication gagal.';
+        throw Exception(message);
+      }
+
+      final tokenData = jsonDecode(response.body) as Map<String, dynamic>;
+      final result = AuthResult.fromJson(tokenData);
+
+      // Persist tokens
+      await _storage.saveAuthResult(result);
+
+      return result;
+    } on http.ClientException catch (_) {
+      throw Exception(
+        'Tidak dapat terhubung ke server. Periksa koneksi internet atau IP server.',
+      );
+    } catch (_) {
+      rethrow;
+    }
+  }
+
+
   /// Returns a persisted [AuthResult] if the user is already logged in.
   ///
   /// Checks two layers:

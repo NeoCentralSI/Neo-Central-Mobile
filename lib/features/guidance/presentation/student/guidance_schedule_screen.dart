@@ -9,7 +9,6 @@ import '../../../../core/utils/formatters.dart' as fmt;
 import '../../../../shared/widgets/shared_widgets.dart';
 import '../../../../core/widgets/app_drawer.dart';
 import '../../../../core/models/auth_models.dart';
-import '../../../../core/services/auth_service.dart';
 
 /// Student screen to request a new guidance session (bimbingan).
 ///

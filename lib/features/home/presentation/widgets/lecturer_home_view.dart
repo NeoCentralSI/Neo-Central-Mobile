@@ -50,10 +50,8 @@ class _LecturerHomeViewState extends State<LecturerHomeView> {
 
       int total = 0;
       for (final list in results) {
-        if (list is List) {
-          total += list.length;
-        }
-      }
+        total += list.length;
+            }
 
       if (mounted) {
         setState(() {

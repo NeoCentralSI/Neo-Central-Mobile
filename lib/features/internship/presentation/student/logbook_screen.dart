@@ -1,25 +1,27 @@
 import 'package:flutter/material.dart';
+
 import '../../../../core/constants/app_colors.dart';
-import '../../../../core/constants/app_spacing.dart';
 import '../../../../core/constants/app_text_styles.dart';
 import '../../../../core/models/auth_models.dart';
 import '../../../../core/services/internship_api_service.dart';
+import '../../../../core/utils/formatters.dart' as fmt;
 import '../../../../core/widgets/app_drawer.dart';
 import '../../../notifications/presentation/notification_screen.dart';
-import '../../../../core/utils/formatters.dart' as fmt;
 
 class InternshipLogbookScreen extends StatefulWidget {
   final UserModel? user;
   const InternshipLogbookScreen({super.key, this.user});
 
   @override
-  State<InternshipLogbookScreen> createState() => _InternshipLogbookScreenState();
+  State<InternshipLogbookScreen> createState() =>
+      _InternshipLogbookScreenState();
 }
 
 class _InternshipLogbookScreenState extends State<InternshipLogbookScreen> {
   final _api = InternshipApiService();
   bool _isLoading = true;
   String? _error;
+  Map<String, dynamic>? _internship;
   List<dynamic> _logbooks = [];
   bool _isLogbookLocked = false;
 
@@ -39,12 +41,22 @@ class _InternshipLogbookScreenState extends State<InternshipLogbookScreen> {
       if (res['success'] == true) {
         final data = res['data'];
         setState(() {
-          _logbooks = data['logbooks'] ?? [];
-          // Check if logbook is locked (usually based on internship status)
           final internship = data['internship'];
-          if (internship != null) {
-            final status = internship['status'];
-            _isLogbookLocked = status == 'COMPLETED' || status == 'REPORTING';
+          _internship = internship is Map
+              ? Map<String, dynamic>.from(internship)
+              : null;
+          _logbooks = _internship == null ? [] : data['logbooks'] ?? [];
+          _isLogbookLocked = false;
+          // Check if logbook is locked (usually based on internship status)
+          if (_internship != null) {
+            final status = _internship!['status'];
+            final isLockedFlag = _internship!['isLogbookLocked'] == true;
+            final fieldAssessmentStatus = _internship!['fieldAssessmentStatus'];
+            _isLogbookLocked =
+                status == 'COMPLETED' ||
+                status == 'REPORTING' ||
+                fieldAssessmentStatus == 'COMPLETED' ||
+                isLockedFlag;
           }
           _isLoading = false;
         });
@@ -60,98 +72,136 @@ class _InternshipLogbookScreenState extends State<InternshipLogbookScreen> {
   }
 
   Future<void> _updateEntry(String id, String description) async {
+    if (_isLogbookLocked) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Logbook sudah dikunci dan tidak dapat diedit lagi.'),
+        ),
+      );
+      return;
+    }
     try {
       await _api.updateLogbook(id, description);
       _loadData(); // Refresh list
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Gagal memperbarui logbook: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Gagal memperbarui logbook: $e')));
     }
   }
 
   void _showEditDialog(Map<String, dynamic> entry) {
     if (_isLogbookLocked) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Logbook sudah dikunci dan tidak dapat diedit lagi.')),
+        const SnackBar(
+          content: Text('Logbook sudah dikunci dan tidak dapat diedit lagi.'),
+        ),
       );
       return;
     }
 
-    final controller = TextEditingController(text: entry['activityDescription'] ?? '');
-    final date = DateTime.tryParse(entry['activityDate'] ?? '') ?? DateTime.now();
+    final controller = TextEditingController(
+      text: entry['activityDescription'] ?? '',
+    );
+    final date =
+        DateTime.tryParse(entry['activityDate'] ?? '') ?? DateTime.now();
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom,
-        ),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) {
+          final trimmed = controller.text.trim();
+          final isValid = trimmed.length >= 10;
+          final errorText = trimmed.isEmpty
+              ? null
+              : (isValid ? null : 'Deskripsi aktivitas minimal 10 karakter.');
+
+          return Container(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(context).viewInsets.bottom,
+            ),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Isi Logbook', style: AppTextStyles.h4),
-                  IconButton(
-                    icon: const Icon(Icons.close),
-                    onPressed: () => Navigator.pop(context),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('Isi Logbook', style: AppTextStyles.h4),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                    ],
                   ),
+                  const SizedBox(height: 8),
+                  Text(
+                    fmt.formatDateIndonesian(date),
+                    style: AppTextStyles.bodySmall.copyWith(
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  TextField(
+                    controller: controller,
+                    maxLines: 5,
+                    onChanged: (_) => setModalState(() {}),
+                    decoration: InputDecoration(
+                      hintText: 'Tuliskan aktivitas Anda hari ini...',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(color: AppColors.border),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(
+                          color: Colors.amber,
+                          width: 2,
+                        ),
+                      ),
+                      errorText: errorText,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: isValid && !_isLogbookLocked
+                          ? () {
+                              Navigator.pop(context);
+                              _updateEntry(
+                                entry['id'].toString(),
+                                controller.text.trim(),
+                              );
+                            }
+                          : null,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.amber,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: const Text('Simpan Perubahan'),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
                 ],
               ),
-              const SizedBox(height: 8),
-              Text(
-                fmt.formatDateIndonesian(date),
-                style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary),
-              ),
-              const SizedBox(height: 20),
-              TextField(
-                controller: controller,
-                maxLines: 5,
-                decoration: InputDecoration(
-                  hintText: 'Tuliskan aktivitas Anda hari ini...',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: AppColors.border),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: Colors.amber, width: 2),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.pop(context);
-                    _updateEntry(entry['id'].toString(), controller.text.trim());
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.amber,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                  child: const Text('Simpan Perubahan'),
-                ),
-              ),
-              const SizedBox(height: 12),
-            ],
-          ),
-        ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -174,36 +224,45 @@ class _InternshipLogbookScreenState extends State<InternshipLogbookScreen> {
         ),
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+          ? const Center(
+              child: CircularProgressIndicator(color: AppColors.primary),
+            )
           : _error != null
-              ? _buildErrorState()
-              : _logbooks.isEmpty
-                  ? _buildEmptyState()
-                  : RefreshIndicator(
-                      onRefresh: _loadData,
-                      color: AppColors.primary,
-                      child: ListView.builder(
-                        padding: const EdgeInsets.all(16),
-                        itemCount: _logbooks.length,
-                        itemBuilder: (context, index) {
-                          final entry = _logbooks[index];
-                          return _buildLogbookCard(entry, index);
-                        },
-                      ),
-                    ),
+          ? _buildErrorState()
+          : _internship == null
+          ? _buildNoActiveInternshipState()
+          : _logbooks.isEmpty
+          ? _buildEmptyState()
+          : RefreshIndicator(
+              onRefresh: _loadData,
+              color: AppColors.primary,
+              child: ListView.builder(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.all(16),
+                itemCount: _logbooks.length,
+                itemBuilder: (context, index) {
+                  final entry = _logbooks[index];
+                  return _buildLogbookCard(entry, index);
+                },
+              ),
+            ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => Navigator.push(
           context,
           MaterialPageRoute(builder: (_) => const NotificationScreen()),
         ),
         backgroundColor: Colors.amber,
-        child: const Icon(Icons.notifications_active_outlined, color: Colors.white),
+        child: const Icon(
+          Icons.notifications_active_outlined,
+          color: Colors.white,
+        ),
       ),
     );
   }
 
   Widget _buildLogbookCard(Map<String, dynamic> entry, int index) {
-    final date = DateTime.tryParse(entry['activityDate'] ?? '') ?? DateTime.now();
+    final date =
+        DateTime.tryParse(entry['activityDate'] ?? '') ?? DateTime.now();
     final description = entry['activityDescription'] as String?;
     final hasEntry = description != null && description.trim().isNotEmpty;
 
@@ -251,11 +310,15 @@ class _InternshipLogbookScreenState extends State<InternshipLogbookScreen> {
                         children: [
                           Text(
                             fmt.formatDateIndonesian(date),
-                            style: AppTextStyles.label.copyWith(fontWeight: FontWeight.bold),
+                            style: AppTextStyles.label.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                           Text(
                             'Hari Ke-${index + 1}',
-                            style: AppTextStyles.caption.copyWith(color: AppColors.textSecondary),
+                            style: AppTextStyles.caption.copyWith(
+                              color: AppColors.textSecondary,
+                            ),
                           ),
                         ],
                       ),
@@ -266,9 +329,13 @@ class _InternshipLogbookScreenState extends State<InternshipLogbookScreen> {
               ),
               const Divider(height: 24),
               Text(
-                hasEntry ? description : 'Belum ada catatan aktivitas untuk hari ini.',
+                hasEntry
+                    ? description
+                    : 'Belum ada catatan aktivitas untuk hari ini.',
                 style: AppTextStyles.body.copyWith(
-                  color: hasEntry ? AppColors.textPrimary : AppColors.textTertiary,
+                  color: hasEntry
+                      ? AppColors.textPrimary
+                      : AppColors.textTertiary,
                   fontStyle: hasEntry ? FontStyle.normal : FontStyle.italic,
                 ),
                 maxLines: 3,
@@ -287,7 +354,11 @@ class _InternshipLogbookScreenState extends State<InternshipLogbookScreen> {
                       ),
                     ),
                     const SizedBox(width: 4),
-                    Icon(Icons.chevron_right, size: 16, color: Colors.amber[800]),
+                    Icon(
+                      Icons.chevron_right,
+                      size: 16,
+                      color: Colors.amber[800],
+                    ),
                   ],
                 ),
               ],
@@ -302,7 +373,9 @@ class _InternshipLogbookScreenState extends State<InternshipLogbookScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: filled ? Colors.green.withValues(alpha: 0.1) : Colors.grey.withValues(alpha: 0.1),
+        color: filled
+            ? Colors.green.withValues(alpha: 0.1)
+            : Colors.grey.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
@@ -326,12 +399,44 @@ class _InternshipLogbookScreenState extends State<InternshipLogbookScreen> {
     );
   }
 
+  Widget _buildNoActiveInternshipState() {
+    return _buildRefreshableState(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.assignment_outlined,
+              size: 64,
+              color: AppColors.textTertiary,
+            ),
+            const SizedBox(height: 16),
+            Text('Belum Ada KP Aktif', style: AppTextStyles.h4),
+            const SizedBox(height: 8),
+            Text(
+              'Logbook akan tampil setelah pendaftaran KP baru diterima dan status KP berjalan.',
+              textAlign: TextAlign.center,
+              style: AppTextStyles.bodySmall.copyWith(
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildEmptyState() {
-    return Center(
+    return _buildRefreshableState(
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.assignment_outlined, size: 64, color: AppColors.textTertiary),
+          Icon(
+            Icons.assignment_outlined,
+            size: 64,
+            color: AppColors.textTertiary,
+          ),
           const SizedBox(height: 16),
           Text('Belum ada data logbook', style: AppTextStyles.h4),
           const SizedBox(height: 8),
@@ -342,11 +447,11 @@ class _InternshipLogbookScreenState extends State<InternshipLogbookScreen> {
   }
 
   Widget _buildErrorState() {
-    return Center(
+    return _buildRefreshableState(
       child: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
             const Icon(Icons.error_outline, size: 48, color: Colors.red),
             const SizedBox(height: 16),
@@ -354,9 +459,30 @@ class _InternshipLogbookScreenState extends State<InternshipLogbookScreen> {
             const SizedBox(height: 8),
             Text(_error!, textAlign: TextAlign.center),
             const SizedBox(height: 24),
-            ElevatedButton(onPressed: _loadData, child: const Text('Coba Lagi')),
+            ElevatedButton(
+              onPressed: _loadData,
+              child: const Text('Coba Lagi'),
+            ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildRefreshableState({required Widget child}) {
+    return RefreshIndicator(
+      onRefresh: _loadData,
+      color: AppColors.primary,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          return SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: constraints.maxHeight),
+              child: Center(child: child),
+            ),
+          );
+        },
       ),
     );
   }
