@@ -1,154 +1,260 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+import 'package:neocentral/core/models/api_envelope.dart';
 import 'package:neocentral/core/services/api_client.dart';
+import 'package:neocentral/core/services/secure_storage_service.dart';
+import 'package:neocentral/core/services/token_store.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+class MemoryTokenStore implements TokenStore {
+  final values = <String, String>{};
+
+  @override
+  Future<void> delete(String key) async => values.remove(key);
+
+  @override
+  Future<String?> read(String key) async => values[key];
+
+  @override
+  Future<void> write(String key, String value) async => values[key] = value;
+}
 
 void main() {
-  // ─── ApiException ─────────────────────────────────────────
+  late MemoryTokenStore tokenStore;
+  late SecureStorageService storage;
 
-  group('ApiException', () {
-    test('stores statusCode and message', () {
-      const ex = ApiException(404, 'Not found');
-      expect(ex.statusCode, 404);
-      expect(ex.message, 'Not found');
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+    tokenStore = MemoryTokenStore();
+    storage = SecureStorageService(tokenStore: tokenStore);
+  });
+
+  ApiClient clientWith(MockClient client) => ApiClient.withDependencies(
+    httpClient: client,
+    storage: storage,
+    baseUrl: 'https://example.test',
+    timeout: const Duration(seconds: 2),
+  );
+
+  String? authorization(http.Request request) =>
+      request.headers['Authorization'] ?? request.headers['authorization'];
+
+  group('ApiException compatibility and typing', () {
+    test('keeps the original constructor and string representation', () {
+      const exception = ApiException(404, 'Not found');
+
+      expect(exception.statusCode, 404);
+      expect(exception.message, 'Not found');
+      expect(exception.toString(), 'ApiException(404): Not found');
     });
 
-    test('toString includes statusCode and message', () {
-      const ex = ApiException(500, 'Server error');
-      expect(ex.toString(), 'ApiException(500): Server error');
-    });
+    test('maps forbidden responses to a typed exception', () async {
+      final api = clientWith(
+        MockClient(
+          (_) async =>
+              http.Response(jsonEncode({'message': 'Tidak diizinkan'}), 403),
+        ),
+      );
 
-    test('implements Exception', () {
-      const ex = ApiException(401, 'Unauthorized');
-      expect(ex, isA<Exception>());
+      expect(api.get('/forbidden'), throwsA(isA<ForbiddenApiException>()));
     });
   });
 
-  // ─── Response unwrapping patterns ─────────────────────────
-  // Since _handleResponse is private and uses real HTTP,
-  // we test the unwrapping patterns used across services.
+  group('JSON contracts', () {
+    test('legacy method still returns decoded raw JSON', () async {
+      final api = clientWith(
+        MockClient(
+          (_) async => http.Response(jsonEncode({'legacy': true}), 200),
+        ),
+      );
 
-  group('Response unwrapping patterns', () {
-    // Simulates the unwrapping logic used in StudentApiService/LecturerApiService
+      expect(await api.get('/legacy'), {'legacy': true});
+    });
 
-    dynamic unwrapList(dynamic res, List<String> keys) {
-      if (res is List) return res;
-      if (res is Map) {
-        for (final key in keys) {
-          if (res.containsKey(key) && res[key] is List) {
-            return res[key] as List;
+    test('typed method strictly unwraps a valid envelope', () async {
+      final api = clientWith(
+        MockClient(
+          (_) async => http.Response(
+            jsonEncode({
+              'success': true,
+              'data': {'id': 'item-1'},
+            }),
+            200,
+          ),
+        ),
+      );
+
+      final id = await api.getData<String>(
+        '/item',
+        decoder: (data) => (data as Map<String, dynamic>)['id'] as String,
+      );
+      expect(id, 'item-1');
+    });
+
+    test('malformed successful JSON is a contract error', () async {
+      final api = clientWith(
+        MockClient((_) async => http.Response('<html>', 200)),
+      );
+
+      expect(api.get('/broken'), throwsA(isA<ApiContractException>()));
+    });
+
+    test('missing envelope data is a contract error, not an empty value', () {
+      expect(
+        () => ApiEnvelope<List<String>>.decode({
+          'success': true,
+        }, (value) => List<String>.from(value as List)),
+        throwsA(isA<ApiContractException>()),
+      );
+    });
+  });
+
+  group('authenticated transport', () {
+    test('binary download includes bearer token and preserves bytes', () async {
+      await storage.saveTokens(
+        accessToken: 'binary-token',
+        refreshToken: 'refresh-token',
+      );
+      final api = clientWith(
+        MockClient((request) async {
+          expect(authorization(request), 'Bearer binary-token');
+          return http.Response.bytes(
+            [0, 1, 2, 255],
+            200,
+            headers: {
+              'content-type': 'application/pdf',
+              'content-disposition': 'attachment; filename="hasil.pdf"',
+            },
+          );
+        }),
+      );
+
+      final result = await api.getBinary('/documents/result');
+      expect(result.bytes, [0, 1, 2, 255]);
+      expect(result.contentType, 'application/pdf');
+      expect(result.fileName, 'hasil.pdf');
+    });
+
+    test('multipart sends UUID field and bearer token', () async {
+      await storage.saveTokens(
+        accessToken: 'upload-token',
+        refreshToken: 'refresh-token',
+      );
+      final api = clientWith(
+        MockClient((request) async {
+          expect(authorization(request), 'Bearer upload-token');
+          expect(request.body, contains('name="requirementId"'));
+          expect(
+            request.body,
+            contains('0cf78ed0-591b-4f14-b37e-b41af2d01055'),
+          );
+          expect(
+            RegExp('name="milestoneIds\\[\\]"').allMatches(request.body),
+            hasLength(2),
+          );
+          expect(request.body, contains('milestone-1'));
+          expect(request.body, contains('milestone-2'));
+          return http.Response(jsonEncode({'success': true}), 200);
+        }),
+      );
+
+      await api.postMultipart(
+        '/requirements/upload',
+        fields: const {'requirementId': '0cf78ed0-591b-4f14-b37e-b41af2d01055'},
+        listFields: const [
+          MapEntry('milestoneIds[]', 'milestone-1'),
+          MapEntry('milestoneIds[]', 'milestone-2'),
+        ],
+      );
+    });
+
+    test('parallel 401 responses share one refresh and retry once', () async {
+      await storage.saveTokens(
+        accessToken: 'expired-access',
+        refreshToken: 'refresh-1',
+      );
+      var refreshCalls = 0;
+      var oldTokenCalls = 0;
+      var newTokenCalls = 0;
+      final api = clientWith(
+        MockClient((request) async {
+          if (request.url.path == '/auth/refresh') {
+            refreshCalls++;
+            expect(jsonDecode(request.body), {'refreshToken': 'refresh-1'});
+            await Future<void>.delayed(const Duration(milliseconds: 20));
+            return http.Response(
+              jsonEncode({
+                'success': true,
+                'accessToken': 'fresh-access',
+                'refreshToken': 'refresh-2',
+              }),
+              200,
+            );
           }
-        }
-      }
-      return [];
-    }
 
-    test('unwraps direct List response', () {
-      final result = unwrapList([1, 2, 3], ['items', 'data']);
-      expect(result, [1, 2, 3]);
-    });
+          if (authorization(request) == 'Bearer expired-access') {
+            oldTokenCalls++;
+            return http.Response(jsonEncode({'message': 'Expired'}), 401);
+          }
 
-    test('unwraps Map with "items" key', () {
-      final result = unwrapList({'items': [1, 2]}, ['items', 'data']);
-      expect(result, [1, 2]);
-    });
-
-    test('unwraps Map with "data" key', () {
-      final result = unwrapList({'data': [3, 4]}, ['items', 'data']);
-      expect(result, [3, 4]);
-    });
-
-    test('returns empty list for Map without matching key', () {
-      final result = unwrapList({'other': [1]}, ['items', 'data']);
-      expect(result, isEmpty);
-    });
-
-    test('returns empty list for null', () {
-      final result = unwrapList(null, ['items']);
-      expect(result, isEmpty);
-    });
-
-    test('returns empty list for string response', () {
-      final result = unwrapList('not a list', ['items']);
-      expect(result, isEmpty);
-    });
-
-    test('unwraps Map with "students" key', () {
-      final result = unwrapList(
-        {'students': ['s1', 's2']},
-        ['students', 'data', 'items'],
+          expect(authorization(request), 'Bearer fresh-access');
+          newTokenCalls++;
+          return http.Response(
+            jsonEncode({'success': true, 'data': request.url.path}),
+            200,
+          );
+        }),
       );
-      expect(result, ['s1', 's2']);
+
+      final results = await Future.wait([
+        api.getData<String>('/first', decoder: (value) => value as String),
+        api.getData<String>('/second', decoder: (value) => value as String),
+      ]);
+
+      expect(results, ['/first', '/second']);
+      expect(oldTokenCalls, 2);
+      expect(newTokenCalls, 2);
+      expect(refreshCalls, 1);
+      expect(await storage.getAccessToken(), 'fresh-access');
+      expect(await storage.getRefreshToken(), 'refresh-2');
     });
 
-    test('unwraps Map with "guidances" key', () {
-      final result = unwrapList(
-        {'guidances': ['g1']},
-        ['guidances', 'data', 'items'],
-      );
-      expect(result, ['g1']);
-    });
+    test(
+      'does not loop when the retried request is still unauthorized',
+      () async {
+        await storage.saveTokens(
+          accessToken: 'expired-access',
+          refreshToken: 'refresh-1',
+        );
+        var protectedCalls = 0;
+        var refreshCalls = 0;
+        final api = clientWith(
+          MockClient((request) async {
+            if (request.url.path == '/auth/refresh') {
+              refreshCalls++;
+              return http.Response(
+                jsonEncode({
+                  'accessToken': 'fresh-access',
+                  'refreshToken': 'refresh-2',
+                }),
+                200,
+              );
+            }
+            protectedCalls++;
+            return http.Response(jsonEncode({'message': 'Unauthorized'}), 401);
+          }),
+        );
 
-    test('unwraps Map with "requests" key', () {
-      final result = unwrapList(
-        {'requests': ['r1', 'r2']},
-        ['data', 'items', 'requests'],
-      );
-      expect(result, ['r1', 'r2']);
-    });
-
-    test('prefers first matching key', () {
-      final result = unwrapList(
-        {'items': [1], 'data': [2]},
-        ['items', 'data'],
-      );
-      expect(result, [1]);
-    });
-  });
-
-  group('Map response unwrapping', () {
-    // Simulates getStudentDetail/getGuidanceDetail patterns
-
-    Map<String, dynamic> unwrapMap(dynamic res, {String? dataKey}) {
-      if (res is Map<String, dynamic>) {
-        if (dataKey != null &&
-            res.containsKey(dataKey) &&
-            res[dataKey] is Map) {
-          return res[dataKey] as Map<String, dynamic>;
-        }
-        return res;
-      }
-      return {};
-    }
-
-    test('unwraps Map with "data" envelope', () {
-      final result = unwrapMap(
-        {'success': true, 'data': {'id': '1', 'name': 'test'}},
-        dataKey: 'data',
-      );
-      expect(result['id'], '1');
-      expect(result['name'], 'test');
-    });
-
-    test('returns raw Map when no envelope', () {
-      final result = unwrapMap(
-        {'id': '1', 'name': 'test'},
-        dataKey: 'data',
-      );
-      expect(result['id'], '1');
-    });
-
-    test('unwraps Map with "guidance" envelope', () {
-      final result = unwrapMap(
-        {'guidance': {'id': 'g1', 'status': 'approved'}},
-        dataKey: 'guidance',
-      );
-      expect(result['id'], 'g1');
-      expect(result['status'], 'approved');
-    });
-
-    test('returns empty map for non-Map response', () {
-      expect(unwrapMap('string'), isEmpty);
-      expect(unwrapMap(null), isEmpty);
-      expect(unwrapMap(42), isEmpty);
-    });
+        await expectLater(
+          api.get('/protected'),
+          throwsA(isA<UnauthorizedApiException>()),
+        );
+        expect(refreshCalls, 1);
+        expect(protectedCalls, 2);
+      },
+    );
   });
 }

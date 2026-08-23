@@ -5,26 +5,23 @@ import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_spacing.dart';
 import '../../../../core/constants/app_text_styles.dart';
 import '../../../../core/models/auth_models.dart';
-import '../../../../core/services/seminar_api_service.dart';
+import '../../../../core/utils/formatters.dart';
 import '../../../../shared/widgets/shared_widgets.dart';
-import '../seminar_detail_screen.dart' show seminarStatusLabel, seminarStatusVariant;
+import '../../../thesis_shared/data/models/academic_requirement.dart';
+import '../../data/models/seminar_models.dart';
+import '../controllers/student_seminar_controller.dart';
+import '../seminar_detail_screen.dart';
 
-/// Ringkasan panel for the student Seminar Hasil screen.
-///
-/// Stacks these cards vertically (mobile-first layout):
-///   1. Identity (when a current seminar exists and is past-examiner-assignment)
-///   2. Status stepper (5 milestone roadmap)
-///   3. Checklist Persyaratan (4 prerequisites)
-///   4. Upload Dokumen Seminar (per documentType slot)
-///   5. Riwayat Percobaan (failed / cancelled attempts)
 class StudentSeminarOverviewPanel extends StatefulWidget {
   final UserModel? user;
-  final void Function(String seminarId) onSeminarTap;
+  final ValueChanged<String> onSeminarTap;
+  final int refreshSignal;
 
   const StudentSeminarOverviewPanel({
     super.key,
+    required this.user,
     required this.onSeminarTap,
-    this.user,
+    this.refreshSignal = 0,
   });
 
   @override
@@ -33,444 +30,333 @@ class StudentSeminarOverviewPanel extends StatefulWidget {
 }
 
 class _StudentSeminarOverviewPanelState
-    extends State<StudentSeminarOverviewPanel>
-    with AutomaticKeepAliveClientMixin {
-  final _api = SeminarApiService();
-
-  bool _isLoading = true;
-  String? _error;
-  Map<String, dynamic> _overview = const {};
-  List<Map<String, dynamic>> _history = const [];
-  List<Map<String, dynamic>> _docTypes = const [];
-
-  String? _uploadingDocType;
-
-  @override
-  bool get wantKeepAlive => true;
+    extends State<StudentSeminarOverviewPanel> {
+  late final StudentSeminarController _controller;
 
   @override
   void initState() {
     super.initState();
-    _fetch();
+    _controller = StudentSeminarController()..load();
   }
 
-  Future<void> _fetch() async {
-    if (!mounted) return;
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
-    try {
-      final results = await Future.wait([
-        _api.getStudentOverview(),
-        _api.getStudentSeminarHistory(),
-        _api.getSeminarDocumentTypes(),
-      ]);
-      if (!mounted) return;
-      setState(() {
-        _overview = results[0] as Map<String, dynamic>;
-        _history = results[1] as List<Map<String, dynamic>>;
-        _docTypes = results[2] as List<Map<String, dynamic>>;
-        _isLoading = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _error = e.toString();
-        _isLoading = false;
-      });
-    }
+  @override
+  void didUpdateWidget(covariant StudentSeminarOverviewPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.refreshSignal != widget.refreshSignal) _controller.load();
   }
 
-  Future<void> _pickAndUpload(Map<String, dynamic> docType) async {
-    final docTypeName = (docType['name'] ?? '').toString();
-    if (docTypeName.isEmpty) return;
-    final accept = ((docType['accept'] as List?) ?? const [])
-        .map((e) => e.toString().replaceFirst('.', '').toLowerCase())
-        .toList();
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
-    PlatformFile? picked;
-    try {
-      final result = accept.isNotEmpty
-          ? await FilePicker.platform.pickFiles(
-              type: FileType.custom,
-              allowedExtensions: accept,
-            )
-          : await FilePicker.platform.pickFiles(type: FileType.any);
-      picked = result?.files.firstOrNull;
-    } catch (_) {
-      try {
-        final result = await FilePicker.platform.pickFiles(type: FileType.any);
-        picked = result?.files.firstOrNull;
-      } catch (e) {
-        if (!mounted) return;
-        _toast('Gagal memilih file: $e', isError: true);
-        return;
-      }
+  Future<void> _pickAndUpload(AcademicRequirement requirement) async {
+    final overview = _controller.overview;
+    if (overview == null) return;
+    final selection = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['pdf'],
+      allowMultiple: false,
+    );
+    if (!mounted || selection == null || selection.files.isEmpty) return;
+    final file = selection.files.single;
+    if (file.path == null) {
+      _message('File tidak dapat diakses dari perangkat ini.', error: true);
+      return;
     }
-
-    if (picked == null || picked.path == null) return;
-
-    // Use existing seminar ID if available, otherwise sentinel "active" so the
-    // backend auto-creates the seminar on first upload (matches web flow).
-    final seminarId =
-        _overview['seminar']?['id']?.toString() ?? 'active';
-
-    setState(() => _uploadingDocType = docTypeName);
-    try {
-      await _api.uploadStudentDocument(
-        seminarId,
-        filePath: picked.path!,
-        fileName: picked.name,
-        documentTypeName: docTypeName,
+    if (file.size > overview.uploadConfig.maxFileSizeBytes) {
+      _message(
+        'Ukuran file maksimal ${overview.uploadConfig.maxFileSizeMb} MB.',
+        error: true,
       );
-      if (!mounted) return;
-      _toast('Dokumen berhasil diunggah.');
-      await _fetch();
-    } catch (e) {
-      if (!mounted) return;
-      _toast('Gagal unggah: $e', isError: true);
-    } finally {
-      if (mounted) setState(() => _uploadingDocType = null);
+      return;
+    }
+
+    try {
+      await _controller.uploadRequirement(
+        requirementId: requirement.id,
+        filePath: file.path!,
+        fileName: file.name,
+      );
+      _message('Dokumen berhasil diunggah dan menunggu verifikasi.');
+    } catch (error) {
+      _message('Gagal mengunggah dokumen: $error', error: true);
     }
   }
 
-  void _toast(String msg, {bool isError = false}) {
+  void _message(String message, {bool error = false}) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(msg),
-        backgroundColor:
-            isError ? AppColors.destructive : AppColors.successDark,
-        behavior: SnackBarBehavior.floating,
+        content: Text(message),
+        backgroundColor: error ? AppColors.destructive : AppColors.success,
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    super.build(context);
-    if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    if (_error != null) {
-      return _ErrorView(message: _error!, onRetry: _fetch);
-    }
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, _) {
+        if (_controller.isLoading && _controller.overview == null) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (_controller.error != null && _controller.overview == null) {
+          return _ErrorView(
+            error: _controller.error!,
+            onRetry: _controller.load,
+          );
+        }
+        final overview = _controller.overview;
+        if (overview == null) return const SizedBox.shrink();
 
-    final seminar = _overview['seminar'] is Map
-        ? Map<String, dynamic>.from(_overview['seminar'] as Map)
-        : null;
-    final checklist = _overview['checklist'] is Map
-        ? Map<String, dynamic>.from(_overview['checklist'] as Map)
-        : const <String, dynamic>{};
-    final allChecklistMet = _overview['allChecklistMet'] == true;
-    final currentId = seminar?['id']?.toString();
-    final historyItems =
-        _history.where((it) => it['id']?.toString() != currentId).toList();
+        return RefreshIndicator(
+          onRefresh: _controller.load,
+          child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.all(AppSpacing.pagePadding),
+            children: [
+              _IdentityCard(user: widget.user, overview: overview),
+              const SizedBox(height: AppSpacing.base),
+              if (overview.seminar != null) ...[
+                _CurrentSeminarCard(
+                  seminar: overview.seminar!,
+                  thesisTitle: overview.thesisTitle,
+                  onTap: () => widget.onSeminarTap(overview.seminar!.id),
+                ),
+                const SizedBox(height: AppSpacing.base),
+              ],
+              _MilestoneCard(milestones: overview.milestones),
+              const SizedBox(height: AppSpacing.base),
+              _ChecklistCard(checklist: overview.checklist),
+              const SizedBox(height: AppSpacing.base),
+              _RequirementsCard(
+                overview: overview,
+                uploadingRequirementId: _controller.uploadingRequirementId,
+                onUpload: _pickAndUpload,
+              ),
+              if (_controller.history.isNotEmpty) ...[
+                const SizedBox(height: AppSpacing.base),
+                _HistoryCard(
+                  history: _controller.history,
+                  onOpen: widget.onSeminarTap,
+                ),
+              ],
+              const SizedBox(height: 32),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
 
-    return RefreshIndicator(
-      onRefresh: _fetch,
-      color: AppColors.primary,
-      child: ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(AppSpacing.pagePadding),
+class _IdentityCard extends StatelessWidget {
+  final UserModel? user;
+  final StudentSeminarOverview overview;
+
+  const _IdentityCard({required this.user, required this.overview});
+
+  @override
+  Widget build(BuildContext context) {
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (seminar != null && _isIdentityVisible(seminar)) ...[
-            _IdentityCard(
-              seminar: seminar,
-              onTap: () => widget.onSeminarTap(seminar['id'].toString()),
-            ),
-            const SizedBox(height: AppSpacing.base),
-          ],
-          _StatusStepperCard(
-            status: seminar?['status']?.toString(),
-            allChecklistMet: allChecklistMet,
+          const SectionHeader(title: 'Identitas Mahasiswa'),
+          const SizedBox(height: 14),
+          InfoRow(
+            icon: Icons.person_outline,
+            label: 'Nama',
+            value: user?.fullName ?? '-',
           ),
-          const SizedBox(height: AppSpacing.base),
-          _ChecklistCard(checklist: checklist),
-          const SizedBox(height: AppSpacing.base),
-          _DocumentsCard(
-            allChecklistMet: allChecklistMet,
-            seminarStatus: seminar?['status']?.toString(),
-            docTypes: _docTypes,
-            documents: ((seminar?['documents'] as List?) ?? const [])
-                .whereType<Map>()
-                .map((m) => Map<String, dynamic>.from(m))
-                .toList(),
-            uploadingDocType: _uploadingDocType,
-            onPickFile: _pickAndUpload,
+          const SizedBox(height: 10),
+          InfoRow(
+            icon: Icons.badge_outlined,
+            label: 'NIM',
+            value: user?.identityNumber ?? '-',
           ),
-          if (historyItems.isNotEmpty) ...[
-            const SizedBox(height: AppSpacing.base),
-            _HistoryCard(
-              items: historyItems,
-              onTap: (id) => widget.onSeminarTap(id),
-            ),
-          ],
-          const SizedBox(height: AppSpacing.lg),
+          const SizedBox(height: 10),
+          InfoRow(
+            icon: Icons.menu_book_outlined,
+            label: 'Judul Tugas Akhir',
+            value: overview.thesisTitle ?? 'Tugas akhir belum tersedia',
+          ),
         ],
       ),
     );
   }
-
-  bool _isIdentityVisible(Map<String, dynamic> seminar) {
-    const visibleStatuses = [
-      'examiner_assigned',
-      'scheduled',
-      'ongoing',
-      'passed',
-      'passed_with_revision',
-    ];
-    return visibleStatuses.contains((seminar['status'] ?? '').toString());
-  }
 }
 
-// ════════════════════════════════════════════════════════════════
-// Identity card
-// ════════════════════════════════════════════════════════════════
-
-class _IdentityCard extends StatelessWidget {
-  final Map<String, dynamic> seminar;
+class _CurrentSeminarCard extends StatelessWidget {
+  final SeminarInfo seminar;
+  final String? thesisTitle;
   final VoidCallback onTap;
-  const _IdentityCard({required this.seminar, required this.onTap});
+
+  const _CurrentSeminarCard({
+    required this.seminar,
+    required this.thesisTitle,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final status = (seminar['status'] ?? '').toString();
-    final examiners = ((seminar['examiners'] as List?) ?? const [])
-        .whereType<Map>()
-        .where((e) => (e['availabilityStatus'] ?? '').toString() == 'available')
-        .map((m) => Map<String, dynamic>.from(m))
-        .toList();
-    final showSchedule = const [
-      'scheduled',
-      'ongoing',
-      'passed',
-      'passed_with_revision',
-      'failed',
-    ].contains(status);
-    final showScore = const ['passed', 'passed_with_revision', 'failed']
-            .contains(status) &&
-        seminar['finalScore'] != null;
-    final room = seminar['room'] is Map
-        ? Map<String, dynamic>.from(seminar['room'] as Map)
-        : null;
-    final isOnline =
-        room == null && (seminar['meetingLink'] ?? '').toString().isNotEmpty;
-
     return AppCard(
-      padding: const EdgeInsets.all(14),
-      radius: 16,
       onTap: onTap,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Expanded(
-                child: Text('Informasi Seminar', style: AppTextStyles.label),
-              ),
+              Expanded(child: Text('Seminar Aktif', style: AppTextStyles.h4)),
               AppBadge(
-                label: seminarStatusLabel(status),
-                variant: seminarStatusVariant(status),
+                label: seminarStatusLabel(seminar.status.value),
+                variant: seminarStatusVariant(seminar.status.value),
               ),
-              const SizedBox(width: 4),
-              const Icon(Icons.chevron_right,
-                  size: 18, color: AppColors.textTertiary),
             ],
           ),
           const SizedBox(height: 12),
-          if (examiners.isNotEmpty)
-            _InfoBlock(
-              icon: Icons.people_outline,
-              label: 'Dosen Penguji',
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  for (final e in examiners)
-                    Text(
-                      (e['lecturerName'] ?? '-').toString(),
-                      style: AppTextStyles.bodySmall.copyWith(
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          if (showSchedule && (seminar['date'] ?? '').toString().isNotEmpty) ...[
+          Text(
+            thesisTitle ?? '-',
+            style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600),
+          ),
+          if (seminar.date != null) ...[
             const SizedBox(height: 10),
-            _InfoBlock(
-              icon: Icons.calendar_today_outlined,
-              label: 'Jadwal',
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    _formatDate(seminar['date']?.toString()) ?? '-',
-                    style: AppTextStyles.bodySmall.copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                  Text(
-                    _formatTimeRange(
-                      seminar['startTime']?.toString(),
-                      seminar['endTime']?.toString(),
-                    ),
-                    style: AppTextStyles.caption
-                        .copyWith(color: AppColors.textSecondary),
-                  ),
-                ],
+            Text(
+              _formatDate(seminar.date),
+              style: AppTextStyles.bodySmall.copyWith(
+                color: AppColors.textSecondary,
               ),
             ),
           ],
-          if (showSchedule && (room != null || isOnline)) ...[
-            const SizedBox(height: 10),
-            _InfoBlock(
-              icon: isOnline ? Icons.videocam_outlined : Icons.place_outlined,
-              label: isOnline ? 'Mode Seminar' : 'Ruangan',
-              child: isOnline
-                  ? Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: AppColors.infoLight,
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            'Daring',
-                            style: AppTextStyles.caption.copyWith(
-                              color: AppColors.infoDark,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                      ],
-                    )
-                  : Text(
-                      (room?['name'] ?? '-').toString(),
-                      style: AppTextStyles.bodySmall.copyWith(
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-            ),
-          ],
-          if (showScore) ...[
-            const SizedBox(height: 10),
-            _InfoBlock(
-              icon: Icons.emoji_events_outlined,
-              label: 'Nilai Akhir',
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.baseline,
-                textBaseline: TextBaseline.alphabetic,
-                children: [
-                  Text(
-                    (seminar['finalScore'] as num).toStringAsFixed(2),
-                    style: AppTextStyles.h3.copyWith(
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    '/ ${seminar['maxWeight'] ?? 100}',
-                    style: AppTextStyles.caption
-                        .copyWith(color: AppColors.textSecondary),
-                  ),
-                  if ((seminar['grade'] ?? '').toString().isNotEmpty) ...[
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: AppColors.primary.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        seminar['grade'].toString(),
-                        style: AppTextStyles.caption.copyWith(
-                          color: AppColors.primaryDark,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ),
-                  ],
-                ],
+          if (seminar.room != null || seminar.meetingLink != null) ...[
+            const SizedBox(height: 6),
+            Text(
+              seminar.room?.name ?? 'Online • ${seminar.meetingLink}',
+              style: AppTextStyles.bodySmall.copyWith(
+                color: AppColors.textSecondary,
               ),
             ),
+          ],
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              Text('Lihat detail', style: AppTextStyles.primaryLabel),
+              const SizedBox(width: 4),
+              const Icon(Icons.chevron_right, color: AppColors.primary),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MilestoneCard extends StatelessWidget {
+  final List<SeminarMilestone> milestones;
+
+  const _MilestoneCard({required this.milestones});
+
+  @override
+  Widget build(BuildContext context) {
+    final completed = milestones.where((item) => item.checked).length;
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Expanded(child: SectionHeader(title: 'Progres Seminar')),
+              Text(
+                '$completed/${milestones.length}',
+                style: AppTextStyles.label,
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          AppProgressBar(
+            value: milestones.isEmpty ? 0 : completed / milestones.length,
+          ),
+          const SizedBox(height: 14),
+          for (var index = 0; index < milestones.length; index++) ...[
+            _StatusRow(
+              label: milestones[index].label,
+              complete: milestones[index].checked,
+            ),
+            if (index != milestones.length - 1) const SizedBox(height: 9),
           ],
         ],
       ),
     );
   }
+}
 
-  static String? _formatDate(String? iso) {
-    if (iso == null || iso.isEmpty) return null;
-    try {
-      final d = DateTime.parse(iso).toLocal();
-      const months = [
-        'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
-        'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des',
-      ];
-      return '${d.day} ${months[d.month - 1]} ${d.year}';
-    } catch (_) {
-      return null;
-    }
-  }
+class _ChecklistCard extends StatelessWidget {
+  final SeminarChecklist checklist;
 
-  static String _formatTimeRange(String? startIso, String? endIso) {
-    final s = _extract(startIso);
-    final e = _extract(endIso);
-    if (s == null && e == null) return '';
-    if (e == null) return '$s WIB';
-    return '$s – $e WIB';
-  }
+  const _ChecklistCard({required this.checklist});
 
-  static String? _extract(String? iso) {
-    if (iso == null || iso.isEmpty) return null;
-    try {
-      final d = DateTime.parse(iso);
-      return '${d.toUtc().hour.toString().padLeft(2, '0')}.'
-          '${d.toUtc().minute.toString().padLeft(2, '0')}';
-    } catch (_) {
-      return null;
-    }
+  @override
+  Widget build(BuildContext context) {
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SectionHeader(title: 'Checklist Pendaftaran'),
+          const SizedBox(height: 14),
+          for (var index = 0; index < checklist.items.length; index++) ...[
+            _ChecklistRow(item: checklist.items[index]),
+            if (index != checklist.items.length - 1) const Divider(height: 22),
+          ],
+        ],
+      ),
+    );
   }
 }
 
-class _InfoBlock extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final Widget child;
-  const _InfoBlock({
-    required this.icon,
-    required this.label,
-    required this.child,
-  });
+class _ChecklistRow extends StatelessWidget {
+  final SeminarChecklistItem item;
+
+  const _ChecklistRow({required this.item});
 
   @override
   Widget build(BuildContext context) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 16, color: AppColors.textTertiary),
-        const SizedBox(width: 8),
+        Icon(
+          item.met ? Icons.check_circle : Icons.radio_button_unchecked,
+          color: item.met ? AppColors.success : AppColors.textTertiary,
+          size: 22,
+        ),
+        const SizedBox(width: 10),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                label,
-                style: AppTextStyles.caption.copyWith(
-                  color: AppColors.textTertiary,
-                  fontWeight: FontWeight.w600,
+              Text(item.label, style: AppTextStyles.label),
+              if (item.current != null && item.required != null)
+                Text(
+                  '${item.current}/${item.required}',
+                  style: AppTextStyles.caption.copyWith(
+                    color: AppColors.textSecondary,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 2),
-              child,
+              for (final supervisor in item.supervisors)
+                Padding(
+                  padding: const EdgeInsets.only(top: 3),
+                  child: Text(
+                    '${supervisor.role}: ${supervisor.name} • ${supervisor.ready ? 'Siap' : 'Belum siap'}',
+                    style: AppTextStyles.caption.copyWith(
+                      color: supervisor.ready
+                          ? AppColors.successDark
+                          : AppColors.warningDark,
+                    ),
+                  ),
+                ),
             ],
           ),
         ),
@@ -479,690 +365,198 @@ class _InfoBlock extends StatelessWidget {
   }
 }
 
-// ════════════════════════════════════════════════════════════════
-// Status stepper (roadmap)
-// ════════════════════════════════════════════════════════════════
+class _RequirementsCard extends StatelessWidget {
+  final StudentSeminarOverview overview;
+  final String? uploadingRequirementId;
+  final ValueChanged<AcademicRequirement> onUpload;
 
-class _StatusStepperCard extends StatelessWidget {
-  final String? status;
-  final bool allChecklistMet;
-  const _StatusStepperCard({
-    required this.status,
-    required this.allChecklistMet,
+  const _RequirementsCard({
+    required this.overview,
+    required this.uploadingRequirementId,
+    required this.onUpload,
   });
-
-  static const _steps = [
-    'Checklist Persyaratan',
-    'Dokumen Seminar Lengkap',
-    'Penetapan Dosen Penguji',
-    'Penetapan Jadwal Seminar',
-    'Pelaksanaan Seminar Hasil',
-  ];
-
-  int _activeIndex() {
-    final s = status;
-    if (s == 'passed' || s == 'passed_with_revision') return 4;
-    if (s == 'scheduled' || s == 'ongoing') return 3;
-    if (s == 'examiner_assigned') return 2;
-    if (s == 'verified') return 1;
-    if (s == 'registered') return 0;
-    if (allChecklistMet) return 0;
-    return -1;
-  }
 
   @override
   Widget build(BuildContext context) {
-    final activeIndex = _activeIndex();
-    final completedCount = activeIndex + 1;
-    final progress = activeIndex == -1 ? 0 : (activeIndex + 1) * 20;
-    final isFinalized = status == 'passed' || status == 'passed_with_revision';
-
     return AppCard(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
-      radius: 16,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text('Status Seminar', style: AppTextStyles.label),
-              ),
-              if (isFinalized)
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: AppColors.successLight,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: AppColors.success.withValues(alpha: 0.4),
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.celebration_outlined,
-                          size: 12, color: AppColors.successDark),
-                      const SizedBox(width: 4),
-                      Text(
-                        'Selesai',
-                        style: AppTextStyles.caption.copyWith(
-                          color: AppColors.successDark,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'Progres pengajuan seminar hasil',
-            style: AppTextStyles.caption
-                .copyWith(color: AppColors.textSecondary),
-          ),
-          const SizedBox(height: 16),
-          for (var i = 0; i < _steps.length; i++)
-            _StepRow(
-              label: _steps[i],
-              isActive: i <= activeIndex,
-              isLast: i == _steps.length - 1,
-              isConnectorActive: i < activeIndex,
-            ),
-          const SizedBox(height: 12),
-          Container(height: 1, color: AppColors.divider),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'Progres Keseluruhan',
-                  style: AppTextStyles.caption.copyWith(
-                    color: AppColors.textSecondary,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-              Text(
-                '$progress%',
-                style: AppTextStyles.caption.copyWith(
-                  color: AppColors.successDark,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: LinearProgressIndicator(
-              value: progress / 100,
-              minHeight: 6,
-              backgroundColor: AppColors.divider,
-              valueColor: const AlwaysStoppedAnimation<Color>(
-                AppColors.successDark,
-              ),
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            completedCount > 0
-                ? '$completedCount dari ${_steps.length} tahap selesai'
-                : 'Checklist persyaratan belum terpenuhi',
-            style: AppTextStyles.caption
-                .copyWith(color: AppColors.textSecondary),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _StepRow extends StatelessWidget {
-  final String label;
-  final bool isActive;
-  final bool isLast;
-  final bool isConnectorActive;
-  const _StepRow({
-    required this.label,
-    required this.isActive,
-    required this.isLast,
-    required this.isConnectorActive,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final color = isActive ? AppColors.successDark : AppColors.textTertiary;
-    return IntrinsicHeight(
-      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(
-            width: 24,
-            child: Column(
-              children: [
-                Container(
-                  width: 22,
-                  height: 22,
-                  decoration: BoxDecoration(
-                    color: isActive ? AppColors.successDark : AppColors.surface,
-                    border: Border.all(
-                      color:
-                          isActive ? AppColors.successDark : AppColors.divider,
-                      width: 2,
-                    ),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    isActive ? Icons.check : Icons.schedule,
-                    size: 11,
-                    color: isActive ? Colors.white : AppColors.textTertiary,
-                  ),
-                ),
-                if (!isLast)
-                  Expanded(
-                    child: Container(
-                      width: 2,
-                      color: isConnectorActive
-                          ? AppColors.successDark
-                          : AppColors.divider,
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Padding(
-              padding: EdgeInsets.only(bottom: isLast ? 0 : 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    label,
-                    style: AppTextStyles.bodySmall.copyWith(
-                      fontWeight: FontWeight.w700,
-                      color: isActive
-                          ? AppColors.textPrimary
-                          : AppColors.textSecondary,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    isActive ? 'Terpenuhi' : 'Menunggu',
-                    style: AppTextStyles.caption.copyWith(
-                      color: color,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ════════════════════════════════════════════════════════════════
-// Checklist persyaratan
-// ════════════════════════════════════════════════════════════════
-
-class _ChecklistCard extends StatelessWidget {
-  final Map<String, dynamic> checklist;
-  const _ChecklistCard({required this.checklist});
-
-  @override
-  Widget build(BuildContext context) {
-    final metopen = checklist['metopen'] is Map
-        ? Map<String, dynamic>.from(checklist['metopen'] as Map)
-        : const <String, dynamic>{};
-    final bimbingan = checklist['bimbingan'] is Map
-        ? Map<String, dynamic>.from(checklist['bimbingan'] as Map)
-        : const <String, dynamic>{};
-    final kehadiran = checklist['kehadiran'] is Map
-        ? Map<String, dynamic>.from(checklist['kehadiran'] as Map)
-        : const <String, dynamic>{};
-    final pembimbing = checklist['pembimbing'] is Map
-        ? Map<String, dynamic>.from(checklist['pembimbing'] as Map)
-        : const <String, dynamic>{};
-
-    return AppCard(
-      padding: const EdgeInsets.all(16),
-      radius: 16,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text('Checklist Persyaratan', style: AppTextStyles.label),
-          const SizedBox(height: 12),
-          _ChecklistRow(
-            label: (metopen['label'] ?? 'Lulus Mata Kuliah Metode Penelitian')
-                .toString(),
-            met: metopen['met'] == true,
-          ),
+          const SectionHeader(title: 'Dokumen Persyaratan'),
           const SizedBox(height: 6),
-          _ChecklistRow(
-            label: (bimbingan['label'] ?? '-').toString(),
-            met: bimbingan['met'] == true,
-            current: (bimbingan['current'] as num?)?.toInt(),
-            required: (bimbingan['required'] as num?)?.toInt(),
+          Text(
+            'Format PDF, maksimal ${overview.uploadConfig.maxFileSizeMb} MB.',
+            style: AppTextStyles.caption.copyWith(
+              color: AppColors.textSecondary,
+            ),
           ),
-          const SizedBox(height: 6),
-          _ChecklistRow(
-            label: (kehadiran['label'] ?? '-').toString(),
-            met: kehadiran['met'] == true,
-            current: (kehadiran['current'] as num?)?.toInt(),
-            required: (kehadiran['required'] as num?)?.toInt(),
-          ),
-          const SizedBox(height: 6),
-          _ChecklistRow(
-            label: (pembimbing['label'] ?? '-').toString(),
-            met: pembimbing['met'] == true,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ChecklistRow extends StatelessWidget {
-  final String label;
-  final bool met;
-  final int? current;
-  final int? required;
-
-  const _ChecklistRow({
-    required this.label,
-    required this.met,
-    this.current,
-    this.required,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final hasProgress = current != null && required != null;
-    final inProgress = !met && hasProgress && (current ?? 0) > 0;
-    final statusText = met
-        ? 'Terpenuhi'
-        : inProgress
-            ? '$current/$required'
-            : 'Menunggu';
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: met
-            ? AppColors.successLight.withValues(alpha: 0.5)
-            : AppColors.surfaceSecondary,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: met
-              ? AppColors.success.withValues(alpha: 0.4)
-              : AppColors.border,
-        ),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 22,
-            height: 22,
-            decoration: BoxDecoration(
-              color: met ? AppColors.successDark : AppColors.surface,
-              border: Border.all(
-                color: met ? AppColors.successDark : AppColors.divider,
-                width: 1.5,
+          if (!overview.requirementConfiguration.isConfigured) ...[
+            const SizedBox(height: 12),
+            _Notice(
+              message:
+                  overview.requirementConfiguration.message ??
+                  'Persyaratan belum dikonfigurasi.',
+            ),
+          ] else if (overview.requirements.isEmpty) ...[
+            const SizedBox(height: 12),
+            const _Notice(message: 'Belum ada persyaratan dokumen.'),
+          ] else ...[
+            const SizedBox(height: 12),
+            for (
+              var index = 0;
+              index < overview.requirements.length;
+              index++
+            ) ...[
+              _RequirementRow(
+                requirement: overview.requirements[index],
+                canUpload: overview.canUpload,
+                isUploading:
+                    uploadingRequirementId == overview.requirements[index].id,
+                onUpload: () => onUpload(overview.requirements[index]),
               ),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              met ? Icons.check : Icons.schedule,
-              size: 11,
-              color: met ? Colors.white : AppColors.textTertiary,
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style: AppTextStyles.bodySmall.copyWith(
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-                Text(
-                  statusText,
-                  style: AppTextStyles.caption.copyWith(
-                    color: met
-                        ? AppColors.successDark
-                        : AppColors.textSecondary,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ════════════════════════════════════════════════════════════════
-// Document upload card
-// ════════════════════════════════════════════════════════════════
-
-class _DocumentsCard extends StatelessWidget {
-  final bool allChecklistMet;
-  final String? seminarStatus;
-  final List<Map<String, dynamic>> docTypes;
-  final List<Map<String, dynamic>> documents;
-  final String? uploadingDocType;
-  final Future<void> Function(Map<String, dynamic> docType) onPickFile;
-
-  const _DocumentsCard({
-    required this.allChecklistMet,
-    required this.seminarStatus,
-    required this.docTypes,
-    required this.documents,
-    required this.uploadingDocType,
-    required this.onPickFile,
-  });
-
-  bool get _isLocked => !allChecklistMet;
-
-  @override
-  Widget build(BuildContext context) {
-    final showLockNotice = _isLocked && documents.isEmpty;
-    final pastRegistered = seminarStatus != null && seminarStatus != 'registered';
-
-    return AppCard(
-      padding: const EdgeInsets.all(16),
-      radius: 16,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text('Upload Dokumen Seminar', style: AppTextStyles.label),
-          if (showLockNotice) ...[
-            const SizedBox(height: 10),
-            Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              decoration: BoxDecoration(
-                color: AppColors.warningLight,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                    color: AppColors.warning.withValues(alpha: 0.4)),
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Icon(Icons.lock_outline,
-                      size: 14, color: AppColors.warningDark),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Lengkapi checklist persyaratan untuk mengakses fitur upload.',
-                      style: AppTextStyles.caption
-                          .copyWith(color: AppColors.warningDark),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+              if (index != overview.requirements.length - 1)
+                const Divider(height: 24),
+            ],
           ],
-          if (pastRegistered) ...[
-            const SizedBox(height: 10),
-            Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              decoration: BoxDecoration(
-                color: AppColors.infoLight,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                    color: AppColors.info.withValues(alpha: 0.4)),
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Icon(Icons.info_outline,
-                      size: 14, color: AppColors.infoDark),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Pendaftaran telah diverifikasi; perubahan dokumen tidak diizinkan.',
-                      style: AppTextStyles.caption
-                          .copyWith(color: AppColors.infoDark),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-          const SizedBox(height: 10),
-          for (final dt in docTypes)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: _DocumentRow(
-                docType: dt,
-                doc: _findDoc(dt['id']?.toString()),
-                isLocked: _isLocked || pastRegistered,
-                isUploading: uploadingDocType == (dt['name'] ?? '').toString(),
-                onPickFile: () => onPickFile(dt),
-              ),
-            ),
         ],
       ),
     );
   }
-
-  Map<String, dynamic>? _findDoc(String? docTypeId) {
-    if (docTypeId == null) return null;
-    for (final d in documents) {
-      if (d['documentTypeId']?.toString() == docTypeId) return d;
-    }
-    return null;
-  }
 }
 
-class _DocumentRow extends StatelessWidget {
-  final Map<String, dynamic> docType;
-  final Map<String, dynamic>? doc;
-  final bool isLocked;
+class _RequirementRow extends StatelessWidget {
+  final AcademicRequirement requirement;
+  final bool canUpload;
   final bool isUploading;
-  final VoidCallback onPickFile;
+  final VoidCallback onUpload;
 
-  const _DocumentRow({
-    required this.docType,
-    required this.doc,
-    required this.isLocked,
+  const _RequirementRow({
+    required this.requirement,
+    required this.canUpload,
     required this.isUploading,
-    required this.onPickFile,
+    required this.onUpload,
   });
 
   @override
   Widget build(BuildContext context) {
-    final uploaded = doc != null;
-    final status = (doc?['status'] ?? '').toString();
-    final isApproved = status == 'approved';
-    final isDeclined = status == 'declined';
-    final canUpload = !isLocked && !isApproved && !isUploading;
-    final label = (docType['label'] ?? docType['name'] ?? 'Dokumen').toString();
-
-    final (statusText, statusColor) = _statusInfo(isApproved, isDeclined, doc);
-
-    return Opacity(
-      opacity: isLocked && !uploaded ? 0.55 : 1,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: AppColors.border),
-        ),
-        child: Row(
+    final document = requirement.document;
+    final approved = document?.status == DocumentStatus.approved;
+    final uploadAllowed = canUpload && !approved && !isUploading;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                color: isApproved
-                    ? AppColors.successLight
-                    : isDeclined
-                        ? AppColors.destructiveLight
-                        : uploaded
-                            ? AppColors.infoLight
-                            : AppColors.surfaceSecondary,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(
-                Icons.description_outlined,
-                size: 16,
-                color: isApproved
-                    ? AppColors.successDark
-                    : isDeclined
-                        ? AppColors.destructiveDark
-                        : uploaded
-                            ? AppColors.infoDark
-                            : AppColors.textTertiary,
-              ),
-            ),
-            const SizedBox(width: 10),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    label,
-                    style: AppTextStyles.bodySmall.copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textPrimary,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  if (uploaded) ...[
+                  Text(requirement.name, style: AppTextStyles.label),
+                  if (requirement.description != null)
                     Text(
-                      statusText,
+                      requirement.description!,
                       style: AppTextStyles.caption.copyWith(
-                        color: statusColor,
-                        fontWeight: FontWeight.w600,
+                        color: AppColors.textSecondary,
                       ),
                     ),
-                    if ((doc!['fileName'] ?? '').toString().isNotEmpty)
-                      Text(
-                        doc!['fileName'].toString(),
-                        style: AppTextStyles.caption.copyWith(
-                          color: AppColors.textTertiary,
-                        ),
+                  if (document?.fileName != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        document!.fileName!,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
+                        style: AppTextStyles.caption,
                       ),
-                  ],
+                    ),
                 ],
               ),
             ),
             const SizedBox(width: 8),
-            SizedBox(
-              height: 30,
-              child: isUploading
-                  ? const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 12),
-                      child: SizedBox(
-                        width: 16,
-                        height: 16,
-                        child:
-                            CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                    )
-                  : OutlinedButton(
-                      onPressed: canUpload ? onPickFile : null,
-                      style: OutlinedButton.styleFrom(
-                        padding:
-                            const EdgeInsets.symmetric(horizontal: 10),
-                        foregroundColor: isDeclined
-                            ? AppColors.destructiveDark
-                            : AppColors.primaryDark,
-                        side: BorderSide(
-                          color: isDeclined
-                              ? AppColors.destructive.withValues(alpha: 0.4)
-                              : AppColors.border,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                      child: Text(
-                        uploaded
-                            ? (isDeclined ? 'Upload Ulang' : 'Ganti')
-                            : 'Upload',
-                        style: AppTextStyles.caption.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
+            AppBadge(
+              label: _documentLabel(document?.status),
+              variant: _documentVariant(document?.status),
             ),
           ],
         ),
-      ),
+        if (document?.notes != null && document!.notes!.trim().isNotEmpty) ...[
+          const SizedBox(height: 8),
+          _Notice(message: 'Catatan verifikator: ${document.notes}'),
+        ],
+        if (canUpload && !approved) ...[
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: uploadAllowed ? onUpload : null,
+              icon: isUploading
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.upload_file_outlined),
+              label: Text(document == null ? 'Unggah' : 'Unggah Ulang'),
+            ),
+          ),
+        ],
+      ],
     );
-  }
-
-  (String, Color) _statusInfo(
-      bool isApproved, bool isDeclined, Map<String, dynamic>? doc) {
-    if (isApproved) return ('✓ Terverifikasi', AppColors.successDark);
-    if (isDeclined) {
-      final notes = (doc?['notes'] ?? '').toString();
-      return (
-        notes.isEmpty ? 'Ditolak' : 'Ditolak: $notes',
-        AppColors.destructiveDark,
-      );
-    }
-    return ('Menunggu verifikasi', AppColors.warningDark);
   }
 }
 
-// ════════════════════════════════════════════════════════════════
-// History card (failed/cancelled attempts)
-// ════════════════════════════════════════════════════════════════
-
 class _HistoryCard extends StatelessWidget {
-  final List<Map<String, dynamic>> items;
-  final void Function(String id) onTap;
-  const _HistoryCard({required this.items, required this.onTap});
+  final List<SeminarHistoryItem> history;
+  final ValueChanged<String> onOpen;
+
+  const _HistoryCard({required this.history, required this.onOpen});
 
   @override
   Widget build(BuildContext context) {
     return AppCard(
-      padding: const EdgeInsets.all(16),
-      radius: 16,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Expanded(
-                  child: Text('Riwayat Percobaan', style: AppTextStyles.label)),
-              Text(
-                '${items.length} percobaan sebelumnya',
-                style: AppTextStyles.caption
-                    .copyWith(color: AppColors.textTertiary),
-              ),
-            ],
-          ),
+          const SectionHeader(title: 'Riwayat Percobaan'),
           const SizedBox(height: 12),
-          for (var i = 0; i < items.length; i++) ...[
-            _HistoryRow(
-              index: i + 1,
-              item: items[i],
-              onTap: () => onTap(items[i]['id'].toString()),
+          for (var index = 0; index < history.length; index++) ...[
+            InkWell(
+              onTap: () => onOpen(history[index].id),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _formatDate(history[index].date),
+                            style: AppTextStyles.label,
+                          ),
+                          if (history[index].cancelledReason != null)
+                            Text(
+                              history[index].cancelledReason!,
+                              style: AppTextStyles.caption.copyWith(
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    AppBadge(
+                      label: seminarStatusLabel(history[index].status.value),
+                      variant: seminarStatusVariant(
+                        history[index].status.value,
+                      ),
+                    ),
+                    const Icon(Icons.chevron_right),
+                  ],
+                ),
+              ),
             ),
-            if (i < items.length - 1) const SizedBox(height: 8),
+            if (index != history.length - 1) const Divider(),
           ],
         ],
       ),
@@ -1170,184 +564,55 @@ class _HistoryCard extends StatelessWidget {
   }
 }
 
-class _HistoryRow extends StatelessWidget {
-  final int index;
-  final Map<String, dynamic> item;
-  final VoidCallback onTap;
-  const _HistoryRow({
-    required this.index,
-    required this.item,
-    required this.onTap,
-  });
+class _StatusRow extends StatelessWidget {
+  final String label;
+  final bool complete;
+
+  const _StatusRow({required this.label, required this.complete});
 
   @override
   Widget build(BuildContext context) {
-    final examiners = ((item['examiners'] as List?) ?? const [])
-        .whereType<Map>()
-        .map((m) => Map<String, dynamic>.from(m))
-        .toList();
-    final status = (item['status'] ?? '-').toString();
-    final score = item['finalScore'];
-    final room = item['room'] is Map
-        ? Map<String, dynamic>.from(item['room'] as Map)
-        : null;
-
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(10),
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: AppColors.surfaceSecondary,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: AppColors.border),
+    return Row(
+      children: [
+        Icon(
+          complete ? Icons.check_circle : Icons.radio_button_unchecked,
+          color: complete ? AppColors.success : AppColors.textTertiary,
+          size: 20,
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  width: 24,
-                  height: 24,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: AppColors.surface,
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: AppColors.border),
-                  ),
-                  child: Text(
-                    '$index',
-                    style: AppTextStyles.caption.copyWith(
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Percobaan #$index',
-                    style: AppTextStyles.label,
-                  ),
-                ),
-                AppBadge(
-                  label: seminarStatusLabel(status),
-                  variant: seminarStatusVariant(status),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            if (examiners.isNotEmpty) ...[
-              Text(
-                'Penguji',
-                style: AppTextStyles.caption.copyWith(
-                  color: AppColors.textTertiary,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 2),
-              for (final e in examiners)
-                Text(
-                  (e['lecturerName'] ?? '-').toString(),
-                  style: AppTextStyles.caption.copyWith(
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-              const SizedBox(height: 8),
-            ],
-            Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Tanggal',
-                        style: AppTextStyles.caption.copyWith(
-                          color: AppColors.textTertiary,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      Text(
-                        _formatDate(item['date']?.toString()) ?? '-',
-                        style: AppTextStyles.caption.copyWith(
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Ruangan',
-                        style: AppTextStyles.caption.copyWith(
-                          color: AppColors.textTertiary,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      Text(
-                        room?['name']?.toString() ?? '-',
-                        style: AppTextStyles.caption.copyWith(
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      'Nilai',
-                      style: AppTextStyles.caption.copyWith(
-                        color: AppColors.textTertiary,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    Text(
-                      score is num ? score.toStringAsFixed(2) : '-',
-                      style: AppTextStyles.bodySmall.copyWith(
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
+        const SizedBox(width: 10),
+        Expanded(child: Text(label, style: AppTextStyles.bodySmall)),
+      ],
     );
-  }
-
-  static String? _formatDate(String? iso) {
-    if (iso == null || iso.isEmpty) return null;
-    try {
-      final d = DateTime.parse(iso).toLocal();
-      const months = [
-        'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
-        'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des',
-      ];
-      return '${d.day} ${months[d.month - 1]} ${d.year}';
-    } catch (_) {
-      return null;
-    }
   }
 }
 
-// ════════════════════════════════════════════════════════════════
-// Error view
-// ════════════════════════════════════════════════════════════════
+class _Notice extends StatelessWidget {
+  final String message;
+
+  const _Notice({required this.message});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: AppColors.warningLight,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Text(
+        message,
+        style: AppTextStyles.caption.copyWith(color: AppColors.warningDark),
+      ),
+    );
+  }
+}
 
 class _ErrorView extends StatelessWidget {
-  final String message;
-  final VoidCallback onRetry;
-  const _ErrorView({required this.message, required this.onRetry});
+  final String error;
+  final Future<void> Function() onRetry;
+
+  const _ErrorView({required this.error, required this.onRetry});
 
   @override
   Widget build(BuildContext context) {
@@ -1355,19 +620,20 @@ class _ErrorView extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.all(AppSpacing.pagePadding),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.error_outline,
-                size: 48, color: AppColors.destructive),
-            const SizedBox(height: 12),
-            Text('Gagal memuat data',
-                style: AppTextStyles.h4, textAlign: TextAlign.center),
+            const Icon(
+              Icons.error_outline,
+              size: 48,
+              color: AppColors.destructive,
+            ),
+            const SizedBox(height: 10),
+            Text('Gagal memuat seminar', style: AppTextStyles.h4),
             const SizedBox(height: 6),
             Text(
-              message,
-              style: AppTextStyles.bodySmall
-                  .copyWith(color: AppColors.textSecondary),
+              error,
               textAlign: TextAlign.center,
+              style: AppTextStyles.bodySmall,
             ),
             const SizedBox(height: 16),
             OutlinedButton.icon(
@@ -1380,4 +646,28 @@ class _ErrorView extends StatelessWidget {
       ),
     );
   }
+}
+
+String _formatDate(String? raw) {
+  if (raw == null || raw.isEmpty) return 'Jadwal belum ditetapkan';
+  final date = DateTime.tryParse(raw);
+  return date == null ? raw : formatDateIndonesian(date.toLocal());
+}
+
+String _documentLabel(DocumentStatus? status) {
+  return switch (status) {
+    DocumentStatus.submitted => 'Menunggu',
+    DocumentStatus.approved => 'Disetujui',
+    DocumentStatus.declined => 'Ditolak',
+    null => 'Belum diunggah',
+  };
+}
+
+BadgeVariant _documentVariant(DocumentStatus? status) {
+  return switch (status) {
+    DocumentStatus.submitted => BadgeVariant.warning,
+    DocumentStatus.approved => BadgeVariant.success,
+    DocumentStatus.declined => BadgeVariant.destructive,
+    null => BadgeVariant.secondary,
+  };
 }

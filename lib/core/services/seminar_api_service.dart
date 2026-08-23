@@ -1,312 +1,292 @@
+import '../../features/seminar/data/models/seminar_models.dart';
+import '../../features/thesis_shared/data/models/academic_requirement.dart';
+import '../../features/thesis_shared/data/models/revision_models.dart';
+import '../utils/api_contract_parser.dart';
 import 'api_client.dart';
 
-/// API surface for lecturer-facing Seminar Hasil flows.
-///
-/// Mirrors web hooks in `useThesisSeminar*` (see `website/src/hooks/thesis-seminar`)
-/// and routes in `services/src/routes/thesis-seminars.route.js`.
+class AssessmentScoreInput {
+  final String assessmentCriteriaId;
+  final num score;
+
+  const AssessmentScoreInput({
+    required this.assessmentCriteriaId,
+    required this.score,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'assessmentCriteriaId': assessmentCriteriaId,
+    'score': score,
+  };
+}
+
+/// Typed API surface for all Seminar Hasil use cases on mobile.
 class SeminarApiService {
   static final SeminarApiService _instance = SeminarApiService._internal();
+
   factory SeminarApiService() => _instance;
-  SeminarApiService._internal();
 
-  final ApiClient _api = ApiClient();
+  SeminarApiService._internal() : _api = ApiClient();
 
-  // ─── List views (lecturer) ──────────────────────────────────────
+  SeminarApiService.withApiClient(ApiClient apiClient) : _api = apiClient;
 
-  /// "Menguji Mahasiswa" tab data — seminars where the current lecturer
-  /// has been assigned as examiner.
-  Future<List<Map<String, dynamic>>> getExaminerRequests({String? search}) async {
-    final res = await _api.get(
-      '/thesis-seminars',
-      queryParams: {
-        'view': 'examiner_requests',
-        if (search != null && search.isNotEmpty) 'search': search,
-      },
-    );
-    return _unwrapList(res);
-  }
+  final ApiClient _api;
 
-  /// "Mahasiswa Bimbingan" tab data — seminars where the current lecturer
-  /// is a supervisor (Pembimbing 1 / 2 / etc.).
-  Future<List<Map<String, dynamic>>> getSupervisedStudentSeminars({
+  Future<List<LecturerSeminarListItem>> getExaminerRequests({String? search}) =>
+      _api.getData(
+        '/thesis-seminars',
+        queryParams: {
+          'view': 'examiner_requests',
+          if (search != null && search.trim().isNotEmpty)
+            'search': search.trim(),
+        },
+        decoder: (value) => requireJsonList(
+          value,
+          context: 'examinerRequests',
+        ).map(LecturerSeminarListItem.parse).toList(growable: false),
+      );
+
+  Future<List<LecturerSeminarListItem>> getSupervisedStudentSeminars({
     String? search,
-  }) async {
-    final res = await _api.get(
-      '/thesis-seminars',
-      queryParams: {
-        'view': 'supervised_students',
-        if (search != null && search.isNotEmpty) 'search': search,
-      },
-    );
-    return _unwrapList(res);
-  }
+  }) => _api.getData(
+    '/thesis-seminars',
+    queryParams: {
+      'view': 'supervised_students',
+      if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
+    },
+    decoder: (value) => requireJsonList(
+      value,
+      context: 'supervisedSeminars',
+    ).map(LecturerSeminarListItem.parse).toList(growable: false),
+  );
 
-  /// Accept / reject an examiner assignment.
-  /// [status] must be `'available'` or `'unavailable'`.
-  Future<Map<String, dynamic>> respondToExaminerAssignment(
+  Future<AssignmentResponseResult> respondToExaminerAssignment(
     String seminarId,
     String examinerId, {
-    required String status,
+    required ExaminerResponse response,
     String? unavailableReasons,
-  }) async {
-    final res = await _api.post(
+  }) {
+    final reason = unavailableReasons?.trim();
+    return _api.postData(
       '/thesis-seminars/$seminarId/examiners/$examinerId/respond',
       body: {
-        'status': status,
-        if (unavailableReasons != null && unavailableReasons.trim().isNotEmpty)
-          'unavailableReasons': unavailableReasons.trim(),
+        'status': response.value,
+        if (reason != null && reason.isNotEmpty) 'unavailableReasons': reason,
       },
+      decoder: AssignmentResponseResult.fromJson,
     );
-    return _unwrapMap(res);
   }
 
-  // ─── Detail ─────────────────────────────────────────────────────
+  Future<SeminarDetail> getSeminarDetail(String seminarId) => _api.getData(
+    '/thesis-seminars/$seminarId',
+    decoder: SeminarDetail.fromJson,
+  );
 
-  /// Full seminar detail used by the detail screen tabs.
-  /// Returns the mapped object from `getSeminarDetail` (core.service.js).
-  Future<Map<String, dynamic>> getSeminarDetail(String seminarId) async {
-    final res = await _api.get('/thesis-seminars/$seminarId');
-    return _unwrapMap(res);
-  }
+  Future<SeminarAssessmentForm> getAssessment(String seminarId) => _api.getData(
+    '/thesis-seminars/$seminarId/assessment',
+    decoder: SeminarAssessmentForm.fromJson,
+  );
 
-  // ─── Assessment ─────────────────────────────────────────────────
-
-  /// GET /:id/assessment — examiner assessment form + criteria.
-  Future<Map<String, dynamic>> getAssessment(String seminarId) async {
-    final res = await _api.get('/thesis-seminars/$seminarId/assessment');
-    return _unwrapMap(res);
-  }
-
-  /// POST /:id/assessment — examiner submits/saves their scores.
-  Future<Map<String, dynamic>> submitAssessment(
+  Future<AssessmentSubmissionResult> submitAssessment(
     String seminarId, {
-    required List<Map<String, dynamic>> scores,
+    required List<AssessmentScoreInput> scores,
     String? revisionNotes,
     required bool isDraft,
-  }) async {
-    final res = await _api.post(
-      '/thesis-seminars/$seminarId/assessment',
-      body: {
-        'scores': scores,
-        if (revisionNotes != null && revisionNotes.trim().isNotEmpty)
-          'revisionNotes': revisionNotes.trim(),
-        'isDraft': isDraft,
-      },
-    );
-    return _unwrapMap(res);
-  }
+  }) => _api.postData(
+    '/thesis-seminars/$seminarId/assessment',
+    body: {
+      'scores': scores.map((item) => item.toJson()).toList(growable: false),
+      if (revisionNotes != null) 'revisionNotes': revisionNotes.trim(),
+      'isDraft': isDraft,
+    },
+    decoder: AssessmentSubmissionResult.fromJson,
+  );
 
-  /// GET /:id/finalization — supervisor rekap + per-examiner scores matrix.
-  Future<Map<String, dynamic>> getFinalizationData(String seminarId) async {
-    final res = await _api.get('/thesis-seminars/$seminarId/finalization');
-    return _unwrapMap(res);
-  }
+  Future<SeminarFinalizationData> getFinalizationData(String seminarId) =>
+      _api.getData(
+        '/thesis-seminars/$seminarId/finalization',
+        decoder: SeminarFinalizationData.fromJson,
+      );
 
-  /// POST /:id/finalize — supervisor sets passed / passed_with_revision / failed.
-  Future<Map<String, dynamic>> finalizeSeminar(
+  Future<SeminarFinalizationResult> finalizeSeminar(
     String seminarId, {
     required bool recommendRevision,
-  }) async {
-    final res = await _api.post(
-      '/thesis-seminars/$seminarId/finalize',
-      body: {'recommendRevision': recommendRevision},
-    );
-    return _unwrapMap(res);
-  }
+  }) => _api.postData(
+    '/thesis-seminars/$seminarId/finalize',
+    body: {'recommendRevision': recommendRevision},
+    decoder: SeminarFinalizationResult.fromJson,
+  );
 
-  // ─── Audience (Peserta) ─────────────────────────────────────────
+  Future<List<SeminarAudience>> getAudiences(String seminarId) => _api.getData(
+    '/thesis-seminars/$seminarId/audiences',
+    decoder: (value) => requireJsonList(
+      value,
+      context: 'seminarAudiences',
+    ).map(SeminarAudience.fromJson).toList(growable: false),
+  );
 
-  /// GET /:id/audiences — list of registered audience members.
-  Future<List<Map<String, dynamic>>> getAudiences(String seminarId) async {
-    final res = await _api.get('/thesis-seminars/$seminarId/audiences');
-    return _unwrapList(res);
-  }
-
-  /// PATCH /:id/audiences/:studentId — supervisor approves/unapproves presence.
-  /// [action] is `'approve'` or `'unapprove'`.
-  Future<Map<String, dynamic>> updateAudience(
+  Future<void> updateAudience(
     String seminarId,
     String studentId, {
-    required String action,
-  }) async {
-    final res = await _api.patch(
-      '/thesis-seminars/$seminarId/audiences/$studentId',
-      body: {'action': action},
-    );
-    return _unwrapMap(res);
-  }
+    required AudienceAction action,
+  }) => _api.patchData<void>(
+    '/thesis-seminars/$seminarId/audiences/$studentId',
+    body: {'action': action.value},
+    decoder: (value) {
+      requireJsonMap(value, context: 'audienceMutation');
+    },
+  );
 
-  // ─── Revisions ──────────────────────────────────────────────────
+  Future<RevisionBoard> getRevisions(String seminarId) => _api.getData(
+    '/thesis-seminars/$seminarId/revisions',
+    decoder: RevisionBoard.fromJson,
+  );
 
-  /// GET /:id/revisions — revision board.
-  Future<Map<String, dynamic>> getRevisions(String seminarId) async {
-    final res = await _api.get('/thesis-seminars/$seminarId/revisions');
-    return _unwrapMap(res);
-  }
-
-  /// PATCH /:id/revisions/:revisionId — multi-action revision update.
-  /// [action] is one of: `save_action`, `submit`, `cancel_submit`,
-  /// `approve`, `unapprove`.
-  Future<Map<String, dynamic>> updateRevision(
+  Future<void> updateRevision(
     String seminarId,
     String revisionId, {
-    required String action,
+    required SeminarRevisionAction action,
     String? description,
     String? revisionAction,
-  }) async {
-    final res = await _api.patch(
-      '/thesis-seminars/$seminarId/revisions/$revisionId',
-      body: {
-        'action': action,
-        if (description != null) 'description': description,
-        if (revisionAction != null) 'revisionAction': revisionAction,
-      },
-    );
-    return _unwrapMap(res);
-  }
+  }) => _api.patchData<void>(
+    '/thesis-seminars/$seminarId/revisions/$revisionId',
+    body: {
+      'action': action.value,
+      if (description != null) 'description': description.trim(),
+      if (revisionAction != null) 'revisionAction': revisionAction.trim(),
+    },
+    decoder: (value) {
+      requireJsonMap(value, context: 'revisionMutation');
+    },
+  );
 
-  /// POST /:id/revisions — student creates a new revision item.
-  Future<Map<String, dynamic>> createRevision(
+  Future<void> createRevision(
     String seminarId, {
     required String seminarExaminerId,
     required String description,
     String? revisionAction,
-  }) async {
-    final res = await _api.post(
-      '/thesis-seminars/$seminarId/revisions',
-      body: {
-        'seminarExaminerId': seminarExaminerId,
-        'description': description.trim(),
-        if (revisionAction != null && revisionAction.trim().isNotEmpty)
-          'revisionAction': revisionAction.trim(),
-      },
-    );
-    return _unwrapMap(res);
-  }
+  }) => _api.postData<void>(
+    '/thesis-seminars/$seminarId/revisions',
+    body: {
+      'seminarExaminerId': seminarExaminerId,
+      'description': description.trim(),
+      if (revisionAction != null) 'revisionAction': revisionAction.trim(),
+    },
+    decoder: (value) {
+      requireJsonMap(value, context: 'revisionCreate');
+    },
+  );
 
-  /// DELETE /:id/revisions/:revisionId — student deletes an unsubmitted item.
-  Future<Map<String, dynamic>> deleteRevision(
-    String seminarId,
-    String revisionId,
-  ) async {
-    final res = await _api.delete(
-      '/thesis-seminars/$seminarId/revisions/$revisionId',
-    );
-    return _unwrapMap(res);
-  }
+  Future<void> deleteRevision(String seminarId, String revisionId) =>
+      _api.deleteData<void>(
+        '/thesis-seminars/$seminarId/revisions/$revisionId',
+        decoder: (value) {
+          requireJsonMap(value, context: 'revisionDelete');
+        },
+      );
 
-  /// POST /:id/revisions/finalize — supervisor finalises the revision board.
-  Future<Map<String, dynamic>> finalizeRevisions(String seminarId) async {
-    final res = await _api.post(
-      '/thesis-seminars/$seminarId/revisions/finalize',
-    );
-    return _unwrapMap(res);
-  }
+  Future<void> finalizeRevisions(String seminarId) => _api.postData<void>(
+    '/thesis-seminars/$seminarId/revisions/finalize',
+    decoder: (value) {
+      requireJsonMap(value, context: 'revisionFinalize');
+    },
+  );
 
-  /// POST /:id/revisions/unfinalize — supervisor undoes revision finalisation.
-  Future<Map<String, dynamic>> unfinalizeRevisions(String seminarId) async {
-    final res = await _api.post(
-      '/thesis-seminars/$seminarId/revisions/unfinalize',
-    );
-    return _unwrapMap(res);
-  }
+  Future<void> unfinalizeRevisions(String seminarId) => _api.postData<void>(
+    '/thesis-seminars/$seminarId/revisions/unfinalize',
+    decoder: (value) {
+      requireJsonMap(value, context: 'revisionUnfinalize');
+    },
+  );
 
-  // ═══════════════════════════════════════════════════════════════
-  // STUDENT-FACING ENDPOINTS
-  // ═══════════════════════════════════════════════════════════════
+  Future<StudentSeminarOverview> getStudentOverview() => _api.getData(
+    '/thesis-seminars/me/overview',
+    decoder: StudentSeminarOverview.fromJson,
+  );
 
-  /// GET /me/overview — registration checklist, milestones, current seminar.
-  Future<Map<String, dynamic>> getStudentOverview() async {
-    final res = await _api.get('/thesis-seminars/me/overview');
-    return _unwrapMap(res);
-  }
+  Future<AttendanceHistory> getStudentAttendanceHistory() => _api.getData(
+    '/thesis-seminars/me/attendance',
+    decoder: AttendanceHistory.fromJson,
+  );
 
-  /// GET /me/attendance — student's seminar attendance history.
-  Future<Map<String, dynamic>> getStudentAttendanceHistory() async {
-    final res = await _api.get('/thesis-seminars/me/attendance');
-    return _unwrapMap(res);
-  }
+  Future<List<SeminarHistoryItem>> getStudentSeminarHistory() => _api.getData(
+    '/thesis-seminars/me/history',
+    decoder: (value) => requireJsonList(
+      value,
+      context: 'seminarHistory',
+    ).map(SeminarHistoryItem.fromJson).toList(growable: false),
+  );
 
-  /// GET /me/history — student's previous failed/cancelled seminar attempts.
-  Future<List<Map<String, dynamic>>> getStudentSeminarHistory() async {
-    final res = await _api.get('/thesis-seminars/me/history');
-    return _unwrapList(res);
-  }
+  Future<List<SeminarAnnouncement>> getSeminarAnnouncements() => _api.getData(
+    '/thesis-seminars/announcements',
+    decoder: (value) => requireJsonList(
+      value,
+      context: 'seminarAnnouncements',
+    ).map(SeminarAnnouncement.fromJson).toList(growable: false),
+  );
 
-  /// GET /announcements — public list of announced seminars.
-  ///
-  /// Endpoint is now ALL_ROLES on the backend; students get audience context
-  /// (isOwn / isRegistered / isPresent), other roles get the same payload
-  /// with those flags set to `false` and an empty `audiences` view.
-  Future<List<Map<String, dynamic>>> getSeminarAnnouncements() async {
-    final res = await _api.get('/thesis-seminars/announcements');
-    return _unwrapList(res);
-  }
-
-  /// GET /documents/types — list of expected seminar document types.
-  Future<List<Map<String, dynamic>>> getSeminarDocumentTypes() async {
-    final res = await _api.get('/thesis-seminars/documents/types');
-    return _unwrapList(res);
-  }
-
-  /// POST /:id/documents — multipart upload by student.
-  /// [documentTypeName] identifies which document slot to fill.
-  Future<Map<String, dynamic>> uploadStudentDocument(
-    String seminarId, {
+  Future<RequirementDocument> uploadStudentDocument(
+    String? seminarId, {
     required String filePath,
     required String fileName,
-    required String documentTypeName,
+    required String requirementId,
   }) async {
-    final res = await _api.postMultipart(
-      '/thesis-seminars/$seminarId/documents',
-      fields: {'documentTypeName': documentTypeName},
+    final raw = await _api.postMultipart(
+      '/thesis-seminars/${seminarId ?? 'active'}/documents',
+      fields: {'requirementId': requirementId},
       filePath: filePath,
       fileName: fileName,
       fileField: 'file',
     );
-    return _unwrapMap(res);
+    return _decodeMultipartData(raw, RequirementDocument.fromJson);
   }
 
-  /// POST /:id/audience-register — student registers as audience for another's seminar.
-  Future<Map<String, dynamic>> registerAsAudience(String seminarId) async {
-    final res = await _api.post(
-      '/thesis-seminars/$seminarId/audience-register',
-    );
-    return _unwrapMap(res);
-  }
+  Future<void> registerAsAudience(String seminarId) => _api.postData<void>(
+    '/thesis-seminars/$seminarId/audience-register',
+    decoder: (value) {
+      requireJsonMap(value, context: 'audienceRegistration');
+    },
+  );
 
-  /// DELETE /:id/audience-register — student unregisters from audience.
-  Future<Map<String, dynamic>> unregisterFromAudience(String seminarId) async {
-    final res = await _api.delete(
-      '/thesis-seminars/$seminarId/audience-register',
-    );
-    return _unwrapMap(res);
-  }
+  Future<void> unregisterFromAudience(String seminarId) =>
+      _api.deleteData<void>(
+        '/thesis-seminars/$seminarId/audience-register',
+        decoder: (value) {
+          requireJsonMap(value, context: 'audienceRegistration');
+        },
+      );
 
-  // ─── Helpers ────────────────────────────────────────────────────
+  Future<ApiBinaryResponse> downloadInvitationLetter(
+    String seminarId, {
+    String? letterNumber,
+  }) => _api.getBinary(
+    '/thesis-seminars/$seminarId/invitation-letter',
+    queryParams: {
+      if (letterNumber != null && letterNumber.trim().isNotEmpty)
+        'nomorSurat': letterNumber.trim(),
+    },
+  );
 
-  // Backend returns either a bare list or `{ data: [...] }`.
-  List<Map<String, dynamic>> _unwrapList(dynamic res) {
-    final raw = res is List
-        ? res
-        : res is Map<String, dynamic>
-            ? (res['data'] ?? res['items'] ?? const [])
-            : const [];
-    if (raw is! List) return const [];
-    return raw
-        .whereType<Map>()
-        .map((m) => Map<String, dynamic>.from(m))
-        .toList();
-  }
+  Future<ApiBinaryResponse> downloadDocument(
+    String seminarId,
+    String requirementId,
+  ) => _api.getBinary('/thesis-seminars/$seminarId/documents/$requirementId');
 
-  // Backend returns either a bare map or `{ data: {...} }`.
-  Map<String, dynamic> _unwrapMap(dynamic res) {
-    if (res is Map<String, dynamic>) {
-      final data = res['data'];
-      if (data is Map) return Map<String, dynamic>.from(data);
-      return Map<String, dynamic>.from(res);
+  Future<ApiBinaryResponse> downloadAssessmentResult(String seminarId) =>
+      _api.getBinary('/thesis-seminars/$seminarId/assessment-result');
+
+  T _decodeMultipartData<T>(dynamic value, T Function(dynamic) decoder) {
+    final envelope = requireJsonMap(value, context: 'multipartResponse');
+    if (envelope['success'] is! bool || envelope['success'] != true) {
+      throw ApiContractException(
+        envelope['message']?.toString() ??
+            'Respons upload tidak memiliki envelope sukses.',
+      );
     }
-    if (res is Map) return Map<String, dynamic>.from(res);
-    return const {};
+    if (!envelope.containsKey('data')) {
+      throw const ApiContractException(
+        'Respons upload tidak memiliki field data.',
+      );
+    }
+    return decoder(envelope['data']);
   }
 }

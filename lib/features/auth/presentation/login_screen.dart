@@ -110,10 +110,9 @@ class _LoginScreenState extends State<LoginScreen>
     }
   }
 
-
   Future<void> _handleEmailLogin() async {
     if (!_formKey.currentState!.validate()) return;
-    
+
     setState(() {
       _isLoading = true;
       _errorMessage = null;
@@ -134,10 +133,12 @@ class _LoginScreenState extends State<LoginScreen>
 
       if (!mounted) return;
 
+      final role = result.user.appRole;
       Navigator.of(context).pushReplacement(
         PageRouteBuilder(
-          pageBuilder: (_, __, ___) =>
-              MainShell(userRole: result.user.appRole, user: result.user),
+          pageBuilder: (_, __, ___) => role == UserRole.admin
+              ? AdminShell(user: result.user)
+              : MainShell(userRole: role, user: result.user),
           transitionsBuilder: (_, animation, __, child) =>
               FadeTransition(opacity: animation, child: child),
           transitionDuration: const Duration(milliseconds: 400),
@@ -151,6 +152,7 @@ class _LoginScreenState extends State<LoginScreen>
       });
     }
   }
+
   String _friendlyError(String raw) => friendlyAuthError(raw);
 
   @override
@@ -214,7 +216,7 @@ class _LoginScreenState extends State<LoginScreen>
                             textAlign: TextAlign.center,
                           ),
                           const SizedBox(height: AppSpacing.xxl),
-                          
+
                           // --- Email / Password Form ---
                           Form(
                             key: _formKey,
@@ -227,11 +229,18 @@ class _LoginScreenState extends State<LoginScreen>
                                   decoration: InputDecoration(
                                     labelText: 'Email',
                                     hintText: 'Masukkan email Anda',
-                                    prefixIcon: const Icon(Icons.email_outlined),
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(AppSpacing.buttonRadius),
+                                    prefixIcon: const Icon(
+                                      Icons.email_outlined,
                                     ),
-                                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(
+                                        AppSpacing.buttonRadius,
+                                      ),
+                                    ),
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 16,
+                                    ),
                                   ),
                                   validator: (value) {
                                     if (value == null || value.isEmpty) {
@@ -261,14 +270,20 @@ class _LoginScreenState extends State<LoginScreen>
                                       ),
                                       onPressed: () {
                                         setState(() {
-                                          _isPasswordVisible = !_isPasswordVisible;
+                                          _isPasswordVisible =
+                                              !_isPasswordVisible;
                                         });
                                       },
                                     ),
                                     border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(AppSpacing.buttonRadius),
+                                      borderRadius: BorderRadius.circular(
+                                        AppSpacing.buttonRadius,
+                                      ),
                                     ),
-                                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 16,
+                                    ),
                                   ),
                                   validator: (value) {
                                     if (value == null || value.isEmpty) {
@@ -282,12 +297,16 @@ class _LoginScreenState extends State<LoginScreen>
                                   width: double.infinity,
                                   height: 54,
                                   child: ElevatedButton(
-                                    onPressed: _isLoading ? null : _handleEmailLogin,
+                                    onPressed: _isLoading
+                                        ? null
+                                        : _handleEmailLogin,
                                     style: ElevatedButton.styleFrom(
                                       backgroundColor: AppColors.primary,
                                       foregroundColor: AppColors.white,
                                       shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(AppSpacing.buttonRadius),
+                                        borderRadius: BorderRadius.circular(
+                                          AppSpacing.buttonRadius,
+                                        ),
                                       ),
                                       elevation: 0,
                                     ),
@@ -297,35 +316,44 @@ class _LoginScreenState extends State<LoginScreen>
                                             width: 22,
                                             child: CircularProgressIndicator(
                                               strokeWidth: 2,
-                                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                              valueColor:
+                                                  AlwaysStoppedAnimation<Color>(
+                                                    Colors.white,
+                                                  ),
                                             ),
                                           )
                                         : Text(
                                             'Masuk',
-                                            style: AppTextStyles.label.copyWith(color: AppColors.white),
+                                            style: AppTextStyles.label.copyWith(
+                                              color: AppColors.white,
+                                            ),
                                           ),
                                   ),
                                 ),
                               ],
                             ),
                           ),
-                          
+
                           const SizedBox(height: AppSpacing.xl),
                           Row(
                             children: [
                               Expanded(child: Divider(color: AppColors.border)),
                               Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 16),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                ),
                                 child: Text(
                                   'ATAU',
-                                  style: AppTextStyles.caption.copyWith(color: AppColors.textSecondary),
+                                  style: AppTextStyles.caption.copyWith(
+                                    color: AppColors.textSecondary,
+                                  ),
                                 ),
                               ),
                               Expanded(child: Divider(color: AppColors.border)),
                             ],
                           ),
                           const SizedBox(height: AppSpacing.xl),
-                          
+
                           _MicrosoftLoginButton(
                             onPressed: _handleMicrosoftLogin,
                             isLoading: _isLoading,

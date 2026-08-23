@@ -152,11 +152,12 @@ class _InternshipStudentGuidanceDetailScreenState
   }
 
   Widget _buildGuidanceTab() {
-    if (_timeline.isEmpty)
+    if (_timeline.isEmpty) {
       return _buildEmptyState(
         'Belum ada jadwal bimbingan',
         Icons.forum_outlined,
       );
+    }
 
     return RefreshIndicator(
       onRefresh: _loadData,
@@ -271,11 +272,12 @@ class _InternshipStudentGuidanceDetailScreenState
   }
 
   Widget _buildSeminarTab() {
-    if (_seminar == null)
+    if (_seminar == null) {
       return _buildEmptyState(
         'Belum ada pengajuan seminar',
         Icons.groups_outlined,
       );
+    }
 
     final status = _seminar!['status'] ?? 'REQUESTED';
     final date = _seminar!['seminarDate']?.toString().split('T').first ?? '-';
@@ -466,26 +468,6 @@ class _InternshipStudentGuidanceDetailScreenState
     );
   }
 
-  Widget _buildRoleBadge(bool isStudent) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(
-        color: (isStudent ? Colors.amber : AppColors.primary).withValues(
-          alpha: 0.1,
-        ),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Text(
-        isStudent ? 'MAHASISWA' : 'DOSEN',
-        style: TextStyle(
-          fontSize: 9,
-          fontWeight: FontWeight.bold,
-          color: isStudent ? Colors.amber[800] : AppColors.primary,
-        ),
-      ),
-    );
-  }
-
   Widget _buildInfoRow(IconData icon, String label, String value) {
     return Row(
       children: [
@@ -548,10 +530,11 @@ class _InternshipStudentGuidanceDetailScreenState
       await _api.approveSeminar(id);
       _loadData();
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('Gagal: $e')));
+      }
     }
   }
 
@@ -582,10 +565,11 @@ class _InternshipStudentGuidanceDetailScreenState
         await _api.rejectSeminar(id, controller.text);
         _loadData();
       } catch (e) {
-        if (mounted)
+        if (mounted) {
           ScaffoldMessenger.of(
             context,
           ).showSnackBar(SnackBar(content: Text('Gagal: $e')));
+        }
       }
     }
   }
@@ -843,7 +827,7 @@ class _InternshipStudentGuidanceDetailScreenState
                                 Icon(
                                   Icons.timer_outlined,
                                   size: 48,
-                                  color: Colors.grey.withOpacity(0.5),
+                                  color: Colors.grey.withValues(alpha: 0.5),
                                 ),
                                 const SizedBox(height: 12),
                                 const Text(
@@ -888,38 +872,38 @@ class _InternshipStudentGuidanceDetailScreenState
                             };
                           }
 
-                          try {
-                            Navigator.pop(context); // Close sheet
-                            showDialog(
-                              context: context,
-                              barrierDismissible: false,
-                              builder: (context) => const Center(
-                                child: CircularProgressIndicator(),
-                              ),
-                            );
+                          final navigator = Navigator.of(this.context);
+                          final messenger = ScaffoldMessenger.of(this.context);
+                          Navigator.pop(context); // Close sheet
+                          showDialog(
+                            context: this.context,
+                            barrierDismissible: false,
+                            builder: (context) => const Center(
+                              child: CircularProgressIndicator(),
+                            ),
+                          );
 
+                          try {
                             await _api.submitLecturerEvaluation(
                               widget.internshipId,
                               weekNumber,
                               evaluations,
                             );
 
-                            if (mounted) {
-                              Navigator.pop(context); // Close loading
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Evaluasi berhasil disimpan'),
-                                ),
-                              );
-                              _loadData();
-                            }
+                            if (!mounted) return;
+                            navigator.pop(); // Close loading
+                            messenger.showSnackBar(
+                              const SnackBar(
+                                content: Text('Evaluasi berhasil disimpan'),
+                              ),
+                            );
+                            _loadData();
                           } catch (err) {
-                            if (mounted) {
-                              Navigator.pop(context);
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('Gagal: $err')),
-                              );
-                            }
+                            if (!mounted) return;
+                            navigator.pop();
+                            messenger.showSnackBar(
+                              SnackBar(content: Text('Gagal: $err')),
+                            );
                           }
                         },
                         style: ElevatedButton.styleFrom(

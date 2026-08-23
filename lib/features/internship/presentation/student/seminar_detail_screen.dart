@@ -71,6 +71,7 @@ class _InternshipSeminarDetailScreenState
       final res = isAlreadyRegistered
           ? await _api.unregisterAttendance(widget.seminarId)
           : await _api.registerAttendance(widget.seminarId);
+      if (!mounted) return;
 
       if (res['success'] == true) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -89,6 +90,7 @@ class _InternshipSeminarDetailScreenState
         throw Exception(res['message'] ?? 'Gagal memproses kehadiran');
       }
     } catch (e) {
+      if (!mounted) return;
       String errorMessage = e.toString().replaceAll('Exception: ', '');
       if (e is ApiException) {
         errorMessage = e.message;
@@ -101,7 +103,9 @@ class _InternshipSeminarDetailScreenState
         ),
       );
     } finally {
-      setState(() => _isSubmitting = false);
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
     }
   }
 

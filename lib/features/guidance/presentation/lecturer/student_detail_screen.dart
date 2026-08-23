@@ -68,7 +68,9 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
             final Map<String, dynamic> updatedC = Map<String, dynamic>.from(c);
             updatedC['calculatedStatus'] = status;
 
-            if (status == 'in_progress' || status == 'pending_review' || status == 'revision_needed') {
+            if (status == 'in_progress' ||
+                status == 'pending_review' ||
+                status == 'revision_needed') {
               inProgress.add(updatedC);
             } else if (status == 'not_started') {
               notStarted.add(updatedC);
@@ -323,7 +325,8 @@ class _SummaryCard extends StatelessWidget {
               ),
             ],
           ),
-          if (student['thesisRating'] == 'SLOW' || student['thesisRating'] == 'AT_RISK') ...[
+          if (student['thesisRating'] == 'SLOW' ||
+              student['thesisRating'] == 'AT_RISK') ...[
             const SizedBox(height: 20),
             _ReminderButton(student: student),
           ],
@@ -458,7 +461,8 @@ class _MilestoneSection extends StatelessWidget {
             )
           else
             ...components.map((c) {
-              final status = (c['calculatedStatus'] ?? 'not_started').toString();
+              final status = (c['calculatedStatus'] ?? 'not_started')
+                  .toString();
               return _MilestoneTile(
                 title: (c['name'] ?? c['title'] ?? '-').toString(),
                 status: status,
@@ -508,20 +512,27 @@ class _MilestoneTileState extends State<_MilestoneTile> {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('Tentukan hasil validasi untuk milestone "${widget.title}"',
-                  style: AppTextStyles.bodySmall),
-              const SizedBox(height: 16),
-              RadioListTile<int>(
-                title: const Text('Setujui (Selesai)'),
-                value: 0,
-                groupValue: selectedAction,
-                onChanged: (v) => setState(() => selectedAction = v!),
+              Text(
+                'Tentukan hasil validasi untuk milestone "${widget.title}"',
+                style: AppTextStyles.bodySmall,
               ),
-              RadioListTile<int>(
-                title: const Text('Perlu Revisi'),
-                value: 1,
+              const SizedBox(height: 16),
+              RadioGroup<int>(
                 groupValue: selectedAction,
-                onChanged: (v) => setState(() => selectedAction = v!),
+                onChanged: (value) {
+                  if (value != null) {
+                    setState(() => selectedAction = value);
+                  }
+                },
+                child: const Column(
+                  children: [
+                    RadioListTile<int>(
+                      title: Text('Setujui (Selesai)'),
+                      value: 0,
+                    ),
+                    RadioListTile<int>(title: Text('Perlu Revisi'), value: 1),
+                  ],
+                ),
               ),
               const SizedBox(height: 8),
               TextField(
@@ -543,7 +554,8 @@ class _MilestoneTileState extends State<_MilestoneTile> {
             ),
             ElevatedButton(
               onPressed: () {
-                if (selectedAction == 1 && notesController.text.trim().isEmpty) {
+                if (selectedAction == 1 &&
+                    notesController.text.trim().isEmpty) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('Catatan revisi wajib diisi')),
                   );
@@ -552,8 +564,9 @@ class _MilestoneTileState extends State<_MilestoneTile> {
                 Navigator.pop(ctx, true);
               },
               style: ElevatedButton.styleFrom(
-                backgroundColor:
-                    selectedAction == 0 ? AppColors.success : AppColors.warning,
+                backgroundColor: selectedAction == 0
+                    ? AppColors.success
+                    : AppColors.warning,
                 foregroundColor: Colors.white,
               ),
               child: Text(selectedAction == 0 ? 'Setujui' : 'Minta Revisi'),
@@ -567,18 +580,22 @@ class _MilestoneTileState extends State<_MilestoneTile> {
       setState(() => _isProcessing = true);
       try {
         if (selectedAction == 0) {
-          await _api.validateMilestone(widget.milestoneId,
-              notes: notesController.text.trim());
+          await _api.validateMilestone(
+            widget.milestoneId,
+            notes: notesController.text.trim(),
+          );
         } else {
           await _api.requestMilestoneRevision(
-              widget.milestoneId, notesController.text.trim());
+            widget.milestoneId,
+            notesController.text.trim(),
+          );
         }
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(selectedAction == 0
-                  ? 'Milestone disetujui'
-                  : 'Revisi diminta'),
+              content: Text(
+                selectedAction == 0 ? 'Milestone disetujui' : 'Revisi diminta',
+              ),
               backgroundColor: AppColors.success,
             ),
           );
@@ -604,7 +621,8 @@ class _MilestoneTileState extends State<_MilestoneTile> {
     final status = widget.status;
     final title = widget.title;
     final isDone = status == 'completed';
-    final isCurrent = status == 'in_progress' ||
+    final isCurrent =
+        status == 'in_progress' ||
         status == 'pending_review' ||
         status == 'revision_needed';
     final isPending = status == 'pending_review';
@@ -614,18 +632,18 @@ class _MilestoneTileState extends State<_MilestoneTile> {
     final BadgeVariant variant = isDone
         ? BadgeVariant.success
         : (isPending
-            ? BadgeVariant.warning
-            : (isRevision
-                ? BadgeVariant.destructive
-                : (isCurrent ? BadgeVariant.primary : BadgeVariant.outline)));
+              ? BadgeVariant.warning
+              : (isRevision
+                    ? BadgeVariant.destructive
+                    : (isCurrent
+                          ? BadgeVariant.primary
+                          : BadgeVariant.outline)));
 
     final String label = isDone
         ? 'Selesai'
         : (isPending
-            ? 'Review'
-            : (isRevision
-                ? 'Revisi'
-                : (isCurrent ? 'Progress' : 'Belum')));
+              ? 'Review'
+              : (isRevision ? 'Revisi' : (isCurrent ? 'Progress' : 'Belum')));
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
@@ -635,16 +653,18 @@ class _MilestoneTileState extends State<_MilestoneTile> {
             isDone
                 ? Icons.check_circle
                 : (isPending
-                    ? Icons.pending_actions
-                    : (isCurrent
-                        ? Icons.radio_button_on
-                        : Icons.circle_outlined)),
+                      ? Icons.pending_actions
+                      : (isCurrent
+                            ? Icons.radio_button_on
+                            : Icons.circle_outlined)),
             size: 18,
             color: isDone
                 ? AppColors.success
                 : (isPending
-                    ? AppColors.warning
-                    : (isCurrent ? AppColors.primary : AppColors.textTertiary)),
+                      ? AppColors.warning
+                      : (isCurrent
+                            ? AppColors.primary
+                            : AppColors.textTertiary)),
           ),
           const SizedBox(width: 10),
           Expanded(child: Text(title, style: AppTextStyles.body)),
@@ -661,8 +681,10 @@ class _MilestoneTileState extends State<_MilestoneTile> {
               InkWell(
                 onTap: _showValidationDialog,
                 child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: isPending
                         ? AppColors.warningLight

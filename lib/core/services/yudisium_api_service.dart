@@ -1,78 +1,96 @@
+import '../../features/yudisium/data/models/yudisium_models.dart';
+import '../utils/api_contract_parser.dart';
 import 'api_client.dart';
 
-/// API surface for Yudisium flows on mobile.
-///
-/// Endpoints (see services/src/routes/yudisiums.route.js):
-///   GET  /yudisiums/announcements
-///   GET  /yudisiums/me/overview
-///   GET  /yudisiums/me/requirements
-///   POST /yudisiums/me/requirements/upload  (multipart, fields: file, requirementId)
+/// Typed API surface for the student and announcement Yudisium flows.
 class YudisiumApiService {
   static final YudisiumApiService _instance = YudisiumApiService._internal();
+
   factory YudisiumApiService() => _instance;
-  YudisiumApiService._internal();
 
-  final ApiClient _api = ApiClient();
+  YudisiumApiService._internal() : _api = ApiClient();
 
-  /// GET /announcements — yudisium events whose registration window has
-  /// closed, each with the list of appointed / finalized participants.
-  Future<List<Map<String, dynamic>>> getYudisiumAnnouncements() async {
-    final res = await _api.get('/yudisiums/announcements');
-    return _unwrapList(res);
-  }
+  YudisiumApiService.withApiClient(ApiClient apiClient) : _api = apiClient;
 
-  /// GET /me/overview — student dashboard: current yudisium, checklist,
-  /// participant status, CPL scores, requirements, history (rejected attempts).
-  Future<Map<String, dynamic>> getStudentYudisiumOverview() async {
-    final res = await _api.get('/yudisiums/me/overview');
-    return _unwrapMap(res);
-  }
+  final ApiClient _api;
 
-  /// GET /me/requirements — per-requirement upload status for the current
-  /// participant in the active yudisium period.
-  Future<Map<String, dynamic>> getStudentYudisiumRequirements() async {
-    final res = await _api.get('/yudisiums/me/requirements');
-    return _unwrapMap(res);
-  }
+  Future<List<YudisiumAnnouncement>> getYudisiumAnnouncements() => _api.getData(
+    '/yudisiums/announcements',
+    decoder: (value) => requireJsonList(
+      value,
+      context: 'yudisiumAnnouncements',
+    ).map(YudisiumAnnouncement.fromJson).toList(growable: false),
+  );
 
-  /// POST /me/requirements/upload — multipart upload by student.
-  Future<Map<String, dynamic>> uploadStudentYudisiumDocument({
+  Future<StudentYudisiumOverview> getStudentYudisiumOverview() => _api.getData(
+    '/yudisiums/me/overview',
+    decoder: StudentYudisiumOverview.fromJson,
+  );
+
+  Future<StudentYudisiumRequirements> getStudentYudisiumRequirements() =>
+      _api.getData(
+        '/yudisiums/me/requirements',
+        decoder: StudentYudisiumRequirements.fromJson,
+      );
+
+  Future<StudentYudisiumExitSurvey> getStudentExitSurvey() => _api.getData(
+    '/yudisiums/me/exit-survey',
+    decoder: StudentYudisiumExitSurvey.fromJson,
+  );
+
+  Future<YudisiumExitSurveySubmissionResult> submitStudentExitSurvey(
+    List<YudisiumSurveyAnswerInput> answers,
+  ) => _api.postData(
+    '/yudisiums/me/exit-survey',
+    body: {'answers': answers.map((answer) => answer.toJson()).toList()},
+    decoder: YudisiumExitSurveySubmissionResult.fromJson,
+  );
+
+  Future<YudisiumDocumentUploadResult> uploadStudentYudisiumDocument({
     required String filePath,
     required String fileName,
     required String requirementId,
   }) async {
-    final res = await _api.postMultipart(
+    final response = await _api.postMultipart(
       '/yudisiums/me/requirements/upload',
       fields: {'requirementId': requirementId},
       filePath: filePath,
       fileName: fileName,
       fileField: 'file',
     );
-    return _unwrapMap(res);
+    return _decodeMultipartData(
+      response,
+      YudisiumDocumentUploadResult.fromJson,
+    );
   }
 
-  // ── helpers ──────────────────────────────────────────────────
+  Future<ApiBinaryResponse> downloadStudentRequirement({
+    required String yudisiumId,
+    required String participantId,
+    required String itemId,
+  }) => _api.getBinary(
+    '/yudisiums/$yudisiumId/participants/$participantId/requirements/$itemId/file',
+  );
 
-  List<Map<String, dynamic>> _unwrapList(dynamic res) {
-    final raw = res is List
-        ? res
-        : res is Map<String, dynamic>
-            ? (res['data'] ?? res['items'] ?? const [])
-            : const [];
-    if (raw is! List) return const [];
-    return raw
-        .whereType<Map>()
-        .map((m) => Map<String, dynamic>.from(m))
-        .toList();
-  }
+  Future<ApiBinaryResponse> downloadStudentCplReport() =>
+      _api.getBinary('/yudisiums/me/cpl-report');
 
-  Map<String, dynamic> _unwrapMap(dynamic res) {
-    if (res is Map<String, dynamic>) {
-      final data = res['data'];
-      if (data is Map) return Map<String, dynamic>.from(data);
-      return res;
+  Future<ApiBinaryResponse> downloadStudentCertificate() =>
+      _api.getBinary('/yudisiums/me/certificate');
+
+  T _decodeMultipartData<T>(dynamic value, T Function(dynamic) decoder) {
+    final envelope = requireJsonMap(value, context: 'multipartResponse');
+    if (envelope['success'] is! bool || envelope['success'] != true) {
+      throw ApiContractException(
+        envelope['message']?.toString() ??
+            'Respons upload tidak memiliki envelope sukses.',
+      );
     }
-    if (res is Map) return Map<String, dynamic>.from(res);
-    return const {};
+    if (!envelope.containsKey('data')) {
+      throw const ApiContractException(
+        'Respons upload tidak memiliki field data.',
+      );
+    }
+    return decoder(envelope['data']);
   }
 }

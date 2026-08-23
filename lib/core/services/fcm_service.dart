@@ -106,7 +106,10 @@ class FcmService {
       // shell's Navigator.push is not issued while the transition is still
       // running — Flutter can silently drop a push made mid-transition.
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        Future.delayed(const Duration(milliseconds: 400), () => listener(pending));
+        Future.delayed(
+          const Duration(milliseconds: 400),
+          () => listener(pending),
+        );
       });
     }
   }
@@ -138,7 +141,7 @@ class FcmService {
     // ── 3. Get FCM token & register with backend ──
     final token = await _messaging.getToken();
     if (token != null) {
-      debugPrint('[FCM] Token obtained: ${token.substring(0, 20)}...');
+      debugPrint('[FCM] Token obtained');
       await _registerTokenWithBackend(token);
     } else {
       debugPrint('[FCM] WARNING: Token is null!');
@@ -188,13 +191,11 @@ class FcmService {
     await _localNotif.initialize(
       initSettings,
       onDidReceiveNotificationResponse: (response) {
-        debugPrint('[LocalNotif] Tapped: ${response.payload}');
+        debugPrint('[LocalNotif] Notification tapped');
         _handleNotificationAction(response);
         // Fire open-listeners so the UI switches to the relevant screen
         final data = response.payload != null
-            ? Map<String, dynamic>.from(
-                (jsonDecode(response.payload!) as Map),
-              )
+            ? Map<String, dynamic>.from((jsonDecode(response.payload!) as Map))
             : <String, dynamic>{};
         for (final listener in List.of(_openListeners)) {
           listener(data);
@@ -335,10 +336,6 @@ class FcmService {
 
   void _handleForegroundMessage(RemoteMessage message) {
     debugPrint('[FCM] ──── Foreground message received ────');
-    debugPrint('[FCM] data: ${message.data}');
-    debugPrint(
-      '[FCM] notification: ${message.notification?.title} / ${message.notification?.body}',
-    );
 
     // Extract title/body from data (backend sends dataOnly=true)
     final data = message.data;
@@ -357,7 +354,7 @@ class FcmService {
   }
 
   void _handleMessageOpen(RemoteMessage message) {
-    debugPrint('[FCM] Message opened: ${message.data}');
+    debugPrint('[FCM] Message opened');
 
     final data = message.data;
     // If no listener is registered yet (cold-start: AuthGate has called
@@ -382,7 +379,7 @@ class FcmService {
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  debugPrint('[FCM] Background message: ${message.data}');
+  debugPrint('[FCM] Background message received');
 
   // Show local notification for data-only background messages
   final data = message.data;

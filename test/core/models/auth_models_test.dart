@@ -40,10 +40,7 @@ void main() {
     });
 
     test('handles missing optional fields with defaults', () {
-      final json = {
-        'id': 'u2',
-        'roles': <dynamic>[],
-      };
+      final json = {'id': 'u2', 'roles': <dynamic>[]};
 
       final user = UserModel.fromJson(json);
 
@@ -123,9 +120,7 @@ void main() {
         fullName: 'Student',
         email: 'student@unand.ac.id',
         isVerified: true,
-        roles: [
-          const UserRoleEntry(id: 'r1', name: 'Mahasiswa'),
-        ],
+        roles: [const UserRoleEntry(id: 'r1', name: 'Mahasiswa')],
       );
 
       expect(user.appRole, UserRole.student);
@@ -137,9 +132,7 @@ void main() {
         fullName: 'Student',
         email: 'student@unand.ac.id',
         isVerified: true,
-        roles: [
-          const UserRoleEntry(id: 'r1', name: 'student'),
-        ],
+        roles: [const UserRoleEntry(id: 'r1', name: 'student')],
       );
 
       expect(user.appRole, UserRole.student);
@@ -151,9 +144,7 @@ void main() {
         fullName: 'Lecturer',
         email: 'dosen@unand.ac.id',
         isVerified: true,
-        roles: [
-          const UserRoleEntry(id: 'r2', name: 'Dosen Pembimbing'),
-        ],
+        roles: [const UserRoleEntry(id: 'r2', name: 'Dosen Pembimbing')],
       );
 
       expect(user.appRole, UserRole.lecturer);
@@ -165,9 +156,7 @@ void main() {
         fullName: 'Lecturer',
         email: 'dosen@unand.ac.id',
         isVerified: true,
-        roles: [
-          const UserRoleEntry(id: 'r2', name: 'lecturer'),
-        ],
+        roles: [const UserRoleEntry(id: 'r2', name: 'lecturer')],
       );
 
       expect(user.appRole, UserRole.lecturer);
@@ -211,7 +200,7 @@ void main() {
       expect(user.appRole, UserRole.student);
     });
 
-    test('first matching role wins (student before lecturer)', () {
+    test('lecturer role takes priority over student for multi-role users', () {
       final user = UserModel(
         id: 'u6',
         fullName: 'Both',
@@ -223,7 +212,7 @@ void main() {
         ],
       );
 
-      expect(user.appRole, UserRole.student);
+      expect(user.appRole, UserRole.lecturer);
     });
   });
 
@@ -307,10 +296,7 @@ void main() {
 
   group('LecturerData', () {
     test('fromJson parses science group', () {
-      final data = LecturerData.fromJson({
-        'id': 'l1',
-        'scienceGroup': 'RPL',
-      });
+      final data = LecturerData.fromJson({'id': 'l1', 'scienceGroup': 'RPL'});
       expect(data.id, 'l1');
       expect(data.scienceGroup, 'RPL');
     });
