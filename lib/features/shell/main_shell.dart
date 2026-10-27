@@ -86,7 +86,7 @@ class _MainShellState extends State<MainShell> {
     NavigationDestination(
       icon: Icon(Icons.check_circle_outline),
       selectedIcon: Icon(Icons.check_circle),
-      label: 'Approval',
+      label: 'Persetujuan',
     ),
     NavigationDestination(
       icon: Icon(Icons.group_outlined),

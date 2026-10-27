@@ -5,12 +5,14 @@ import '../../../../core/constants/app_text_styles.dart';
 import '../../../../core/models/auth_models.dart';
 import '../../../../core/services/fcm_service.dart';
 import '../../../../core/services/lecturer_api_service.dart';
+import '../../../../core/utils/thesis_labels.dart';
 import '../../../../core/services/notification_api_service.dart';
 import '../../../notifications/presentation/notification_screen.dart'
     show NotificationScreen;
 
 import '../../../../core/widgets/app_drawer.dart';
 import '../../../internship/presentation/internship_shell.dart';
+import '../../../../core/utils/error_message.dart';
 
 /// Lecturer main dashboard – shows pending approval stats + quick actions
 class LecturerDashboardScreen extends StatefulWidget {
@@ -91,7 +93,7 @@ class _LecturerDashboardScreenState extends State<LecturerDashboardScreen> {
       if (!mounted) return;
       setState(() {
         _isLoading = false;
-        _error = e.toString();
+        _error = errorMessageOf(e, fallback: 'Data tidak dapat dimuat.');
       });
     }
   }
@@ -515,7 +517,7 @@ class _LecturerDashboardScreenState extends State<LecturerDashboardScreen> {
                     final name = (s['fullName'] ?? s['studentName'] ?? '-')
                         .toString();
                     final thesis = (s['thesisTitle'] ?? '-').toString();
-                    final rating = (s['thesisRating'] ?? 'ONGOING').toString();
+                    final rating = studentProgressBadge(s);
 
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 20),
@@ -577,32 +579,23 @@ class _LecturerDashboardScreenState extends State<LecturerDashboardScreen> {
     );
   }
 
-  Widget _buildRatingBadge(String rating) {
-    Color bgColor;
-    Color textColor;
-    String label;
-
-    switch (rating) {
-      case 'AT_RISK':
-        bgColor = AppColors.destructiveLight;
-        textColor = AppColors.destructiveDark;
-        label = 'Beresiko';
-        break;
-      case 'SLOW':
-        bgColor = AppColors.warningLight;
-        textColor = AppColors.warningDark;
-        label = 'Lambat';
-        break;
-      case 'ONGOING':
-        bgColor = AppColors.successLight;
-        textColor = AppColors.successDark;
-        label = 'On Track';
-        break;
-      default:
-        bgColor = AppColors.borderLight;
-        textColor = AppColors.textSecondary;
-        label = rating;
-    }
+  Widget _buildRatingBadge(StudentProgressBadge rating) {
+    final (Color bgColor, Color textColor) = switch (rating) {
+      StudentProgressBadge.atRisk || StudentProgressBadge.failed => (
+        AppColors.destructiveLight,
+        AppColors.destructiveDark,
+      ),
+      StudentProgressBadge.slow || StudentProgressBadge.onLeave => (
+        AppColors.warningLight,
+        AppColors.warningDark,
+      ),
+      StudentProgressBadge.active || StudentProgressBadge.completed => (
+        AppColors.successLight,
+        AppColors.successDark,
+      ),
+      _ => (AppColors.borderLight, AppColors.textSecondary),
+    };
+    final label = rating.label;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),

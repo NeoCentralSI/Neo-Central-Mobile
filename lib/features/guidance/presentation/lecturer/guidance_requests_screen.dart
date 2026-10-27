@@ -6,6 +6,7 @@ import '../../../../core/services/api_client.dart';
 import '../../../../core/services/lecturer_api_service.dart';
 import '../../../../shared/widgets/shared_widgets.dart';
 import 'guidance_session_detail_screen.dart';
+import '../../../../core/utils/error_message.dart';
 
 /// Tabbed screen for all lecturer approval actions:
 /// 0. Permintaan Bimbingan (guidance requests – approve/reject)
@@ -87,7 +88,7 @@ class _GuidanceRequestsScreenState extends State<GuidanceRequestsScreen>
                             onPressed: () => Navigator.maybePop(context),
                           ),
                         Text(
-                          'Approval Bimbingan',
+                          'Persetujuan Bimbingan',
                           style: AppTextStyles.h4.copyWith(
                             color: AppColors.white,
                           ),
@@ -169,7 +170,7 @@ class _GuidanceRequestsTabState extends State<_GuidanceRequestsTab> {
       if (!mounted) return;
       setState(() {
         _isLoading = false;
-        _error = e.toString();
+        _error = errorMessageOf(e, fallback: 'Data tidak dapat dimuat.');
       });
     }
   }
@@ -276,6 +277,8 @@ class _GuidanceRequestsTabState extends State<_GuidanceRequestsTab> {
                         ],
                       ),
                       const SizedBox(height: 4),
+                      PhaseBadge(phase: req['phase']),
+                      const SizedBox(height: 4),
                       Text(
                         topic,
                         style: AppTextStyles.body,
@@ -350,7 +353,7 @@ class _SessionSummaryTabState extends State<_SessionSummaryTab> {
       if (!mounted) return;
       setState(() {
         _isLoading = false;
-        _error = e.toString();
+        _error = errorMessageOf(e, fallback: 'Data tidak dapat dimuat.');
       });
     }
   }
@@ -379,7 +382,7 @@ class _SessionSummaryTabState extends State<_SessionSummaryTab> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Gagal menyetujui: $e'),
+          content: Text(errorMessageOf(e, fallback: 'Gagal menyetujui.')),
           backgroundColor: AppColors.destructive,
         ),
       );
@@ -472,11 +475,13 @@ class _SessionSummaryTabState extends State<_SessionSummaryTab> {
                         children: [
                           Text(name, style: AppTextStyles.label),
                           Text(dateStr, style: AppTextStyles.caption),
+                          const SizedBox(height: 4),
+                          PhaseBadge(phase: s['phase']),
                         ],
                       ),
                     ),
                     const AppBadge(
-                      label: 'Perlu Approval',
+                      label: 'Menunggu Persetujuan',
                       variant: BadgeVariant.warning,
                     ),
                   ],
@@ -577,7 +582,7 @@ class _MilestoneApprovalTabState extends State<_MilestoneApprovalTab> {
       if (!mounted) return;
       setState(() {
         _isLoading = false;
-        _error = e.toString();
+        _error = errorMessageOf(e, fallback: 'Data tidak dapat dimuat.');
       });
     }
   }
@@ -631,7 +636,7 @@ class _MilestoneApprovalTabState extends State<_MilestoneApprovalTab> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Gagal: $e'),
+          content: Text(errorMessageOf(e, fallback: 'Gagal.')),
           backgroundColor: AppColors.destructive,
         ),
       );
@@ -713,7 +718,7 @@ class _MilestoneApprovalTabState extends State<_MilestoneApprovalTab> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Gagal: $e'),
+          content: Text(errorMessageOf(e, fallback: 'Gagal.')),
           backgroundColor: AppColors.destructive,
         ),
       );
@@ -801,11 +806,13 @@ class _MilestoneApprovalTabState extends State<_MilestoneApprovalTab> {
                           Text(studentName, style: AppTextStyles.label),
                           if (studentNim.isNotEmpty)
                             Text(studentNim, style: AppTextStyles.caption),
+                          const SizedBox(height: 4),
+                          PhaseBadge(phase: m['phase']),
                         ],
                       ),
                     ),
                     const AppBadge(
-                      label: 'Pending Review',
+                      label: 'Menunggu Review',
                       variant: BadgeVariant.warning,
                     ),
                   ],

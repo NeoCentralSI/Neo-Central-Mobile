@@ -9,6 +9,8 @@ import '../../../../core/services/notification_api_service.dart';
 import '../../../notifications/presentation/notification_screen.dart'
     show NotificationScreen;
 import '../../../../core/widgets/app_drawer.dart';
+import '../../../../core/utils/error_message.dart';
+import '../../../../core/utils/thesis_labels.dart';
 import 'milestone_progress_screen.dart';
 
 /// Student dashboard – shows a summary of their active thesis.
@@ -28,6 +30,9 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
 
   bool _isLoading = true;
   String? _error;
+
+  /// The backend has no thesis for this student (404).
+  bool _notFound = false;
 
   int _unreadCount = 0;
 
@@ -64,9 +69,11 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
     }
 
     try {
+      // /progress answers 404 once the thesis is finished or stopped, while
+      // /my-thesis still returns it: keep the dashboard, without milestones.
       final results = await Future.wait([
         _api.getMyThesis(),
-        _api.getProgress(),
+        _api.getProgress().catchError((_) => <String, dynamic>{}),
       ]);
 
       final thesisData = results[0];
@@ -124,7 +131,11 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
       if (!mounted) return;
       setState(() {
         _isLoading = false;
-        _error = e.toString();
+        _notFound = isNotFoundError(e);
+        _error = errorMessageOf(
+          e,
+          fallback: 'Data tugas akhir tidak dapat dimuat.',
+        );
       });
     }
   }
@@ -170,7 +181,7 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
                     child: Center(
                       child: Padding(
                         padding: const EdgeInsets.all(AppSpacing.pagePadding),
-                        child: _error!.contains('Active thesis not found')
+                        child: _notFound
                             ? _buildRequirementsNotMet()
                             : _buildErrorState(),
                       ),
@@ -262,13 +273,13 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
         ),
         const SizedBox(height: 24),
         Text(
-          'Syarat Mata Kuliah Belum Terpenuhi',
+          'Belum Ada Tugas Akhir',
           style: AppTextStyles.h3,
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 12),
         Text(
-          'Anda belum memenuhi persyaratan untuk mengambil mata kuliah Tugas Akhir. Anda harus tercatat mengambil mata kuliah Tugas Akhir (proposal disetujui).',
+          _error ?? 'Tugas akhir aktif tidak ditemukan',
           style: AppTextStyles.body.copyWith(
             color: AppColors.textSecondary,
             height: 1.5,
@@ -519,9 +530,14 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
       }
     }
 
-    final isActive =
-        status.toString().toLowerCase().contains('aktif') ||
-        status.toString().toLowerCase().contains('berlangsung');
+    // Cuti follows the student status; the backend reports it as a paused
+    // supervision clock. actionBlock.reason says why actions are refused.
+    final clock = _thesis?['supervisionClock'];
+    final isOnLeave = clock is Map && clock['isPaused'] == true;
+    final actionBlock = _thesis?['actionBlock'];
+    final blockReason = actionBlock is Map
+        ? actionBlock['reason']?.toString()
+        : null;
 
     return Container(
       decoration: BoxDecoration(
@@ -568,7 +584,9 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
                         border: Border.all(color: const Color(0xFFFFEDD5)),
                       ),
                       child: Text(
-                        isActive ? 'AKTIF' : status.toString().toUpperCase(),
+                        isOnLeave
+                            ? '${thesisStatusLabel(status)} · Cuti'
+                            : thesisStatusLabel(status),
                         style: AppTextStyles.label.copyWith(
                           color: AppColors.primaryDark,
                           fontSize: 10,
@@ -586,6 +604,28 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
                     height: 1.5,
                   ),
                 ),
+                if (blockReason != null && blockReason.trim().isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(
+                        Icons.info_outline,
+                        size: 16,
+                        color: AppColors.warningDark,
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          blockReason,
+                          style: AppTextStyles.bodySmall.copyWith(
+                            color: AppColors.warningDark,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
                 const SizedBox(height: 24),
                 // Supervisors mapped dynamically
                 if (supervisors.isNotEmpty)

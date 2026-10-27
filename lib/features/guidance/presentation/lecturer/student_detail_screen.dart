@@ -3,7 +3,9 @@ import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_spacing.dart';
 import '../../../../core/constants/app_text_styles.dart';
 import '../../../../core/services/lecturer_api_service.dart';
+import '../../../../core/utils/thesis_labels.dart';
 import '../../../../shared/widgets/shared_widgets.dart';
+import '../../../../core/utils/error_message.dart';
 
 /// Per-student detail screen for lecturers
 class StudentDetailScreen extends StatefulWidget {
@@ -325,8 +327,8 @@ class _SummaryCard extends StatelessWidget {
               ),
             ],
           ),
-          if (student['thesisRating'] == 'SLOW' ||
-              student['thesisRating'] == 'AT_RISK') ...[
+          if (studentProgressBadge(student) == StudentProgressBadge.slow ||
+              studentProgressBadge(student) == StudentProgressBadge.atRisk) ...[
             const SizedBox(height: 20),
             _ReminderButton(student: student),
           ],
@@ -392,7 +394,7 @@ class _ReminderButtonState extends State<_ReminderButton> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Gagal mengirim pengingat: $e'),
+              content: Text(errorMessageOf(e, fallback: 'Gagal mengirim pengingat.')),
               backgroundColor: AppColors.destructive,
             ),
           );
@@ -412,7 +414,8 @@ class _ReminderButtonState extends State<_ReminderButton> {
         icon: Icons.notifications_active_outlined,
         isLoading: _isSending,
         onPressed: _sendReminder,
-        color: widget.student['thesisRating'] == 'AT_RISK'
+        color: studentProgressBadge(widget.student) ==
+                StudentProgressBadge.atRisk
             ? AppColors.destructive
             : AppColors.primary,
       ),
@@ -467,6 +470,7 @@ class _MilestoneSection extends StatelessWidget {
                 title: (c['name'] ?? c['title'] ?? '-').toString(),
                 status: status,
                 milestoneId: (c['id'] ?? '').toString(),
+                phase: c['phase'],
                 userRole: userRole,
                 onRefresh: onRefresh,
               );
@@ -481,6 +485,7 @@ class _MilestoneTile extends StatefulWidget {
   final String title;
   final String status;
   final String milestoneId;
+  final Object? phase;
   final String? userRole;
   final VoidCallback onRefresh;
 
@@ -488,6 +493,7 @@ class _MilestoneTile extends StatefulWidget {
     required this.title,
     required this.status,
     required this.milestoneId,
+    this.phase,
     this.userRole,
     required this.onRefresh,
   });
@@ -605,7 +611,7 @@ class _MilestoneTileState extends State<_MilestoneTile> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Gagal: $e'),
+              content: Text(errorMessageOf(e, fallback: 'Gagal.')),
               backgroundColor: AppColors.destructive,
             ),
           );
@@ -639,11 +645,7 @@ class _MilestoneTileState extends State<_MilestoneTile> {
                           ? BadgeVariant.primary
                           : BadgeVariant.outline)));
 
-    final String label = isDone
-        ? 'Selesai'
-        : (isPending
-              ? 'Review'
-              : (isRevision ? 'Revisi' : (isCurrent ? 'Progress' : 'Belum')));
+    final String label = milestoneStatusLabel(status);
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
@@ -667,7 +669,18 @@ class _MilestoneTileState extends State<_MilestoneTile> {
                             : AppColors.textTertiary)),
           ),
           const SizedBox(width: 10),
-          Expanded(child: Text(title, style: AppTextStyles.body)),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: AppTextStyles.body),
+                if (isKnownThesisPhase(widget.phase)) ...[
+                  const SizedBox(height: 2),
+                  PhaseBadge(phase: widget.phase),
+                ],
+              ],
+            ),
+          ),
           if (_isProcessing)
             const SizedBox(
               width: 16,
@@ -692,7 +705,7 @@ class _MilestoneTileState extends State<_MilestoneTile> {
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
-                    isPending ? 'Review' : 'Validasi',
+                    isPending ? 'Tinjau' : 'Validasi',
                     style: AppTextStyles.caption.copyWith(
                       color: isPending
                           ? AppColors.warningDark
@@ -793,6 +806,10 @@ class _GuidanceHistorySection extends StatelessWidget {
                             dateStr.toString(),
                             style: AppTextStyles.caption,
                           ),
+                          if (isKnownThesisPhase(s['phase'])) ...[
+                            const SizedBox(height: 2),
+                            PhaseBadge(phase: s['phase']),
+                          ],
                         ],
                       ),
                     ),
@@ -800,7 +817,7 @@ class _GuidanceHistorySection extends StatelessWidget {
                       AppBadge(label: 'Selesai', variant: BadgeVariant.success),
                     if (isPending)
                       AppBadge(
-                        label: 'Menunggu',
+                        label: guidanceStatusLabel(status),
                         variant: BadgeVariant.warning,
                       ),
                   ],

@@ -8,6 +8,8 @@ import '../../../../core/services/student_api_service.dart';
 import '../../../../shared/widgets/shared_widgets.dart';
 import '../../../../core/widgets/app_drawer.dart';
 import '../../../../core/models/auth_models.dart';
+import '../../../../core/utils/error_message.dart';
+import '../../../../core/utils/thesis_labels.dart';
 import 'session_summary_screen.dart';
 
 /// Student guidance history screen – fetches sessions from backend
@@ -39,14 +41,18 @@ class _GuidanceHistoryScreenState extends State<GuidanceHistoryScreen> {
       _error = null;
     });
     try {
-      _sessions = await _api.getGuidanceHistory();
+      // /guidance carries notes, summaries and the phase of each session.
+      _sessions = await _api.getMyGuidances();
       if (!mounted) return;
       setState(() => _isLoading = false);
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _isLoading = false;
-        _error = e.toString();
+        _error = errorMessageOf(
+          e,
+          fallback: 'Riwayat bimbingan tidak dapat dimuat.',
+        );
       });
     }
   }
@@ -392,14 +398,22 @@ class _GuidanceSessionItemState extends State<_GuidanceSessionItem> {
   /// Whether the session is in a state that can be cancelled.
   bool get _canCancel {
     final status = (widget.session['status'] ?? '').toString();
-    return status == 'requested' || status == 'accepted';
+    return status == 'requested' ||
+        status == 'accepted' ||
+        status == 'rescheduled';
   }
 
   /// Whether the student can fill in session notes.
   /// Only for accepted (scheduled) sessions that have occurred.
   bool get _canFillNotes {
     final status = (widget.session['status'] ?? '').toString();
-    if (status != 'accepted') return false;
+    if (status != 'accepted' &&
+        status != 'rescheduled' &&
+        status != 'summary_rejected') {
+      return false;
+    }
+    // A rejected summary is written again.
+    if (status == 'summary_rejected') return true;
     // Check if session summary already exists
     final summary = widget.session['sessionSummary'];
     if (summary != null && summary.toString().trim().isNotEmpty) return false;
@@ -613,7 +627,9 @@ class _GuidanceSessionItemState extends State<_GuidanceSessionItem> {
       setState(() => _isRescheduling = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Gagal menjadwal ulang: $e'),
+          content: Text(
+            errorMessageOf(e, fallback: 'Gagal menjadwal ulang.'),
+          ),
           backgroundColor: AppColors.destructive,
         ),
       );
@@ -744,7 +760,7 @@ class _GuidanceSessionItemState extends State<_GuidanceSessionItem> {
       setState(() => _isCancelling = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Gagal membatalkan: $e'),
+          content: Text(errorMessageOf(e, fallback: 'Gagal membatalkan.')),
           backgroundColor: AppColors.destructive,
         ),
       );
@@ -767,41 +783,18 @@ class _GuidanceSessionItemState extends State<_GuidanceSessionItem> {
   @override
   Widget build(BuildContext context) {
     final status = (widget.session['status'] ?? '').toString();
-    final BadgeVariant variant;
-    final String badgeLabel;
-
-    switch (status) {
-      case 'completed':
-        variant = BadgeVariant.success;
-        badgeLabel = 'Selesai';
-        break;
-      case 'accepted':
-        variant = BadgeVariant.primary;
-        badgeLabel = 'Dijadwalkan';
-        break;
-      case 'requested':
-        variant = BadgeVariant.warning;
-        badgeLabel = 'Menunggu';
-        break;
-      case 'rejected':
-        variant = BadgeVariant.destructive;
-        badgeLabel = 'Ditolak';
-        break;
-      case 'cancelled':
-        variant = BadgeVariant.outline;
-        badgeLabel = 'Dibatalkan';
-        break;
-      case 'summary_submitted':
-        variant = BadgeVariant.warning;
-        badgeLabel = 'Catatan Dikirim';
-        break;
-      default:
-        variant = BadgeVariant.outline;
-        badgeLabel = status;
-    }
+    final BadgeVariant variant = switch (status) {
+      'completed' => BadgeVariant.success,
+      'accepted' || 'rescheduled' => BadgeVariant.primary,
+      'requested' || 'summary_pending' => BadgeVariant.warning,
+      'rejected' || 'summary_rejected' => BadgeVariant.destructive,
+      _ => BadgeVariant.outline,
+    };
+    final badgeLabel = guidanceStatusLabel(status);
 
     // Use formatted date from backend, or raw requestedDate
     final dateStr =
+        widget.session['scheduledAtFormatted'] ??
         widget.session['requestedDateFormatted'] ??
         widget.session['approvedDateFormatted'] ??
         _formatDate(widget.session['requestedDate']) ??
@@ -857,6 +850,8 @@ class _GuidanceSessionItemState extends State<_GuidanceSessionItem> {
                         AppBadge(label: badgeLabel, variant: variant),
                       ],
                     ),
+                    const SizedBox(height: 4),
+                    PhaseBadge(phase: widget.session['phase']),
                     const SizedBox(height: 6),
                     Text(
                       supervisorName,

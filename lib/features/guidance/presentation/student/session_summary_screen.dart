@@ -7,6 +7,7 @@ import '../../../../core/services/api_client.dart';
 import '../../../../core/services/student_api_service.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../shared/widgets/shared_widgets.dart';
+import '../../../../core/utils/error_message.dart';
 
 /// Screen for student to submit session summary (catatan bimbingan)
 /// after a guidance session has taken place.
@@ -116,7 +117,7 @@ class _SessionSummaryScreenState extends State<SessionSummaryScreen> {
       setState(() => _isSubmitting = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Gagal mengirim catatan: $e'),
+          content: Text(errorMessageOf(e, fallback: 'Gagal mengirim catatan.')),
           backgroundColor: AppColors.destructive,
         ),
       );

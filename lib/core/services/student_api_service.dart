@@ -7,11 +7,14 @@ import '../models/milestone_list.dart';
 ///
 /// Base path: /thesisGuidance/student
 class StudentApiService {
-  static final StudentApiService _instance = StudentApiService._internal();
+  static final StudentApiService _instance = StudentApiService._(ApiClient());
   factory StudentApiService() => _instance;
-  StudentApiService._internal();
+  StudentApiService._(this._api);
 
-  final ApiClient _api = ApiClient();
+  /// For tests.
+  StudentApiService.withClient(ApiClient api) : _api = api;
+
+  final ApiClient _api;
   static const _base = '/thesisGuidance/student';
 
   // ── Dashboard ───────────────────────────────────────────────

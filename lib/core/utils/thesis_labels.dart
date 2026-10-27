@@ -61,3 +61,42 @@ String milestoneStatusLabel(Object? value) =>
 /// True for a phase value the app knows how to label.
 bool isKnownThesisPhase(Object? value) =>
     thesisPhaseLabels.containsKey(value?.toString());
+
+/// What the badge on a supervised student's row shows.
+enum StudentProgressBadge {
+  onLeave('Cuti'),
+  completed('Selesai'),
+  failed('Gagal'),
+  proposal('Proposal'),
+  atRisk('Berisiko'),
+  slow('Lambat'),
+  active('Lancar'),
+  unknown('-');
+
+  final String label;
+  const StudentProgressBadge(this.label);
+}
+
+/// Badge for a row of `GET /thesisGuidance/lecturer/my-students`: leave
+/// first, then a closed thesis, then the activity level.
+StudentProgressBadge studentProgressBadge(Map<dynamic, dynamic> student) {
+  if (student['isOnLeave'] == true) return StudentProgressBadge.onLeave;
+  switch (student['thesisStatus']?.toString()) {
+    case 'completed':
+      return StudentProgressBadge.completed;
+    case 'failed':
+      return StudentProgressBadge.failed;
+  }
+  switch (student['activityLevel']?.toString()) {
+    case 'at_risk':
+      return StudentProgressBadge.atRisk;
+    case 'slow':
+      return StudentProgressBadge.slow;
+    case 'active':
+      return StudentProgressBadge.active;
+  }
+  if (student['thesisStatus']?.toString() == 'proposal') {
+    return StudentProgressBadge.proposal;
+  }
+  return StudentProgressBadge.unknown;
+}

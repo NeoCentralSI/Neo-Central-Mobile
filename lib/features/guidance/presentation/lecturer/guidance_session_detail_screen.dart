@@ -8,6 +8,7 @@ import '../../../../core/services/api_client.dart';
 import '../../../../core/services/lecturer_api_service.dart';
 import '../../../../core/services/secure_storage_service.dart';
 import '../../../../shared/widgets/shared_widgets.dart';
+import '../../../../core/utils/error_message.dart';
 
 /// Guidance session detail screen for lecturer to approve or reject a request.
 /// Loads full detail from backend and supports file/document download.
@@ -86,7 +87,7 @@ class _GuidanceSessionDetailScreenState
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Gagal menyetujui: $e'),
+            content: Text(errorMessageOf(e, fallback: 'Gagal menyetujui.')),
             backgroundColor: AppColors.destructive,
           ),
         );
@@ -167,7 +168,7 @@ class _GuidanceSessionDetailScreenState
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Gagal menolak: $e'),
+              content: Text(errorMessageOf(e, fallback: 'Gagal menolak.')),
               backgroundColor: AppColors.destructive,
             ),
           );

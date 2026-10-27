@@ -3,8 +3,10 @@ import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_spacing.dart';
 import '../../../../core/constants/app_text_styles.dart';
 import '../../../../core/services/lecturer_api_service.dart';
+import '../../../../core/utils/thesis_labels.dart';
 import '../../../../shared/widgets/shared_widgets.dart';
 import 'student_detail_screen.dart';
+import '../../../../core/utils/error_message.dart';
 
 /// List of supervised students for a lecturer - fetches from backend
 class StudentListScreen extends StatefulWidget {
@@ -42,7 +44,7 @@ class _StudentListScreenState extends State<StudentListScreen> {
       if (!mounted) return;
       setState(() {
         _isLoading = false;
-        _error = e.toString();
+        _error = errorMessageOf(e, fallback: 'Data tidak dapat dimuat.');
       });
     }
   }
@@ -231,7 +233,7 @@ class _StudentCard extends StatelessWidget {
     final nim = (student['identityNumber'] ?? student['studentNim'] ?? '-')
         .toString();
     final thesis = (student['thesisTitle'] ?? '-').toString();
-    final rating = (student['thesisRating'] ?? 'ONGOING').toString();
+    final rating = studentProgressBadge(student);
     final milestoneProgressRaw = student['milestoneProgress'];
     final double milestone = milestoneProgressRaw is int
         ? milestoneProgressRaw / 100
@@ -336,29 +338,16 @@ class _StudentCard extends StatelessWidget {
     );
   }
 
-  BadgeVariant _ratingVariant(String rating) {
-    switch (rating) {
-      case 'AT_RISK':
-        return BadgeVariant.destructive;
-      case 'SLOW':
-        return BadgeVariant.warning;
-      case 'ONGOING':
-        return BadgeVariant.success;
-      default:
-        return BadgeVariant.outline;
-    }
-  }
+  BadgeVariant _ratingVariant(StudentProgressBadge rating) => switch (rating) {
+    StudentProgressBadge.atRisk ||
+    StudentProgressBadge.failed => BadgeVariant.destructive,
+    StudentProgressBadge.slow ||
+    StudentProgressBadge.onLeave => BadgeVariant.warning,
+    StudentProgressBadge.active ||
+    StudentProgressBadge.completed => BadgeVariant.success,
+    StudentProgressBadge.proposal ||
+    StudentProgressBadge.unknown => BadgeVariant.outline,
+  };
 
-  String _ratingLabel(String rating) {
-    switch (rating) {
-      case 'AT_RISK':
-        return 'Beresiko';
-      case 'SLOW':
-        return 'Lambat';
-      case 'ONGOING':
-        return 'On Track';
-      default:
-        return rating;
-    }
-  }
+  String _ratingLabel(StudentProgressBadge rating) => rating.label;
 }
