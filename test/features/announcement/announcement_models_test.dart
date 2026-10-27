@@ -124,7 +124,10 @@ void main() {
       'approvedByName': 'Dosen',
     });
     expect(a.isPresent, isTrue);
-    expect(SeminarAudience.fromJson({'approvedByName': '-'}).approvedByName, isNull);
+    expect(
+      SeminarAudience.fromJson({'approvedByName': '-'}).approvedByName,
+      isNull,
+    );
   });
 
   test('YudisiumAnnouncement sorts participants by registration', () {
@@ -133,8 +136,16 @@ void main() {
       'name': 'Yudisium Oktober',
       'eventDate': '2026-10-30T00:00:00.000Z',
       'participants': [
-        {'id': 'p2', 'studentName': 'B', 'registeredAt': '2026-10-02T00:00:00Z'},
-        {'id': 'p1', 'studentName': 'A', 'registeredAt': '2026-10-01T00:00:00Z'},
+        {
+          'id': 'p2',
+          'studentName': 'B',
+          'registeredAt': '2026-10-02T00:00:00Z',
+        },
+        {
+          'id': 'p1',
+          'studentName': 'A',
+          'registeredAt': '2026-10-01T00:00:00Z',
+        },
         {'id': 'p3', 'studentName': 'C'},
       ],
     })!;

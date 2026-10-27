@@ -73,8 +73,10 @@ void main() {
       ).getGuidanceHistory('s1');
 
       expect(items.single['phase'], 'proposal');
-      expect(backend.requests.single.url.path,
-          '/thesisGuidance/lecturer/guidance-history/s1');
+      expect(
+        backend.requests.single.url.path,
+        '/thesisGuidance/lecturer/guidance-history/s1',
+      );
     });
 
     test('a rejection keeps the backend reason', () async {
@@ -90,7 +92,9 @@ void main() {
       );
 
       await expectLater(
-        LecturerApiService.withClient(backend.client).approveGuidanceRequest('g1'),
+        LecturerApiService.withClient(
+          backend.client,
+        ).approveGuidanceRequest('g1'),
         throwsA(
           isA<Exception>().having(
             (e) => e.toString(),
@@ -119,7 +123,10 @@ void main() {
       ).getMyGuidances();
 
       expect(items.map((g) => g['phase']), ['proposal', 'research']);
-      expect(backend.requests.single.url.path, '/thesisGuidance/student/guidance');
+      expect(
+        backend.requests.single.url.path,
+        '/thesisGuidance/student/guidance',
+      );
     });
 
     test('getMilestoneList passes the phase and reads data + phase', () async {
@@ -140,7 +147,9 @@ void main() {
       ).getMilestoneList('t1', phase: 'proposal');
 
       expect(backend.requests.single.url.path, '/milestones/thesis/t1');
-      expect(backend.requests.single.url.queryParameters, {'phase': 'proposal'});
+      expect(backend.requests.single.url.queryParameters, {
+        'phase': 'proposal',
+      });
       expect(list.milestones.single['id'], 'm1');
       expect(list.phase, 'proposal');
       expect(list.currentPhase, 'research');

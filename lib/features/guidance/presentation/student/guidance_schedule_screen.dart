@@ -371,7 +371,7 @@ class _GuidanceScheduleScreenState extends State<GuidanceScheduleScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.surfaceSecondary,
-      drawer: AppDrawer(user: widget.user, activeRoute: 'metopel'), // Metopel is often the 'Schedule' context here
+      drawer: AppDrawer(user: widget.user, activeRoute: 'tugas_akhir'),
       body: Column(
         children: [
           _buildHeader(),

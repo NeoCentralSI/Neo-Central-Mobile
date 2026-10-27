@@ -61,6 +61,10 @@ class NotificationRouter {
 
   void _onOpen(Map<String, dynamic> data) => open(data);
 
+  /// Sets the user without listening to FCM (tests only).
+  @visibleForTesting
+  void debugSetUser(UserModel? user) => _user = user;
+
   /// Destination for a notification payload with the current user's role.
   NotificationDestination destinationFor(
     Map<String, dynamic>? data, {

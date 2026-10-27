@@ -30,7 +30,7 @@
         </activity>
 
 
-        <!-- aad_oauth menggunakan WebView internal untuk OAuth flow.
+        <!-- Login Microsoft memakai WebView di dalam aplikasi (alur OAuth backend).
              Tidak perlu mendaftarkan activity callback di sini. -->
 
         <!-- Don't delete the meta-data below.

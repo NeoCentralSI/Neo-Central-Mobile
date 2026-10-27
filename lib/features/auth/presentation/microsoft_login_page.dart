@@ -32,8 +32,9 @@ MicrosoftLoginOutcome? outcomeForNavigation(
   final path = uri.path;
   if (path.endsWith('/auth/microsoft/callback')) {
     final code = uri.queryParameters['code'];
-    if (code != null && code.isNotEmpty)
+    if (code != null && code.isNotEmpty) {
       return MicrosoftLoginOutcome.code(code);
+    }
     return const MicrosoftLoginOutcome.error(
       'Login Microsoft gagal. Coba lagi.',
     );
