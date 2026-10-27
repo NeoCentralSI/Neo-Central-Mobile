@@ -677,7 +677,7 @@ class _GuidanceSessionItemState extends State<_GuidanceSessionItem> {
               maxLines: 3,
               maxLength: 1000,
               decoration: InputDecoration(
-                hintText: 'Alasan pembatalan (opsional)',
+                hintText: 'Alasan pembatalan',
                 hintStyle: AppTextStyles.body.copyWith(
                   color: AppColors.textTertiary,
                 ),
