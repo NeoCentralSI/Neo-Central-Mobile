@@ -8,7 +8,7 @@ import '../../../core/services/auth_service.dart';
 import '../../../shared/widgets/shared_widgets.dart';
 import '../../auth/presentation/login_screen.dart';
 import '../../notifications/presentation/notification_screen.dart';
-import '../../placeholder/presentation/placeholder_screens.dart';
+import '../../about/presentation/about_screen.dart';
 import '../../../core/widgets/app_drawer.dart';
 
 import '../../../core/services/preferences_service.dart';
@@ -51,7 +51,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final isLecturer = role == UserRole.lecturer;
     final isAdmin = role == UserRole.admin;
 
-    final name = widget.user?.fullName ??
+    final name =
+        widget.user?.fullName ??
         (isAdmin ? 'Admin' : (isLecturer ? 'Dosen' : 'Mahasiswa'));
     final email = widget.user?.email ?? '-';
     final identityNumber = widget.user?.identityNumber ?? '-';
@@ -156,7 +157,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     CircleAvatar(
                       radius: 50,
                       backgroundColor: Colors.white.withValues(alpha: 0.2),
-                      child: const Icon(Icons.person, color: Colors.white, size: 50),
+                      child: const Icon(
+                        Icons.person,
+                        color: Colors.white,
+                        size: 50,
+                      ),
                     ),
                     Positioned(
                       bottom: 0,
@@ -186,7 +191,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 const SizedBox(height: 14),
                 Text(
                   name,
-                  style: AppTextStyles.h1.copyWith(color: Colors.white, fontSize: 24),
+                  style: AppTextStyles.h1.copyWith(
+                    color: Colors.white,
+                    fontSize: 24,
+                  ),
                 ),
                 const SizedBox(height: 6),
                 Text(
@@ -212,9 +220,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     String identityNumber,
     String email,
   ) {
-    final identityLabel = isAdmin
-        ? 'ID'
-        : (isLecturer ? 'NIP' : 'NIM');
+    final identityLabel = isAdmin ? 'ID' : (isLecturer ? 'NIP' : 'NIM');
 
     return Padding(
       padding: const EdgeInsets.all(24),
@@ -250,8 +256,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
     );
   }
-
-
 
   Widget _buildMenuCard(BuildContext context, bool isLecturer, bool isAdmin) {
     return Padding(
@@ -291,29 +295,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
             Divider(height: 1, color: AppColors.divider),
           ],
 
-          _buildPlainMenuItem(
-            icon: Icons.notifications_outlined,
-            label: 'Notifikasi',
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const NotificationScreen()),
-              );
-            },
-          ),
-          Divider(height: 1, color: AppColors.divider),
-          
-          _buildPlainMenuItem(
-            icon: Icons.help_outline,
-            label: 'Bantuan',
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const HelpScreen()),
-              );
-            },
-          ),
-          Divider(height: 1, color: AppColors.divider),
+          // Admin reaches Notifikasi from the bottom tabs.
+          if (!isAdmin) ...[
+            _buildPlainMenuItem(
+              icon: Icons.notifications_outlined,
+              label: 'Notifikasi',
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const NotificationScreen()),
+                );
+              },
+            ),
+            Divider(height: 1, color: AppColors.divider),
+          ],
 
           _buildPlainMenuItem(
             icon: Icons.info_outline,
@@ -354,12 +349,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(label, style: AppTextStyles.label),
-                      Text(value, style: AppTextStyles.bodySmall.copyWith(color: AppColors.primary, fontWeight: FontWeight.bold)),
+                      Text(
+                        value,
+                        style: AppTextStyles.bodySmall.copyWith(
+                          color: AppColors.primary,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ],
                   ),
                 ),
                 Icon(
-                  isExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                  isExpanded
+                      ? Icons.keyboard_arrow_up
+                      : Icons.keyboard_arrow_down,
                   size: 20,
                   color: AppColors.textTertiary,
                 ),
@@ -423,9 +426,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           children: [
             _buildMenuIcon(icon),
             const SizedBox(width: 14),
-            Expanded(
-              child: Text(label, style: AppTextStyles.label),
-            ),
+            Expanded(child: Text(label, style: AppTextStyles.label)),
             const Icon(
               Icons.chevron_right,
               size: 18,
@@ -444,11 +445,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         color: AppColors.primary.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(8),
       ),
-      child: Icon(
-        icon,
-        size: 18,
-        color: AppColors.primary,
-      ),
+      child: Icon(icon, size: 18, color: AppColors.primary),
     );
   }
 
