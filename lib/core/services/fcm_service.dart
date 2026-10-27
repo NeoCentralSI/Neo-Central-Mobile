@@ -194,12 +194,7 @@ class FcmService {
         debugPrint('[LocalNotif] Notification tapped');
         _handleNotificationAction(response);
         // Fire open-listeners so the UI switches to the relevant screen
-        final data = response.payload != null
-            ? Map<String, dynamic>.from((jsonDecode(response.payload!) as Map))
-            : <String, dynamic>{};
-        for (final listener in List.of(_openListeners)) {
-          listener(data);
-        }
+        _dispatchOpen(_decodePayload(response.payload));
       },
       onDidReceiveBackgroundNotificationResponse:
           localNotificationTapBackground,
@@ -357,19 +352,36 @@ class FcmService {
     debugPrint('[FCM] Message opened');
 
     final data = message.data;
-    // If no listener is registered yet (cold-start: AuthGate has called
-    // getInitialMessage before any shell mounted), stash for replay.
-    if (_openListeners.isEmpty) {
-      _pendingOpenData = data;
-    } else {
-      for (final listener in List.of(_openListeners)) {
-        listener(data);
-      }
-    }
+    _dispatchOpen(data);
     // Data-refresh listeners always fire (no replay — they just refresh data).
     for (final listener in List.of(_listeners)) {
       listener(data);
     }
+  }
+
+  /// Hands a tap to the open listeners. With none registered yet (cold start,
+  /// before login finished), the tap is kept and replayed to the first one.
+  void _dispatchOpen(Map<String, dynamic> data) {
+    if (_openListeners.isEmpty) {
+      _pendingOpenData = data;
+      return;
+    }
+    for (final listener in List.of(_openListeners)) {
+      try {
+        listener(data);
+      } catch (e) {
+        debugPrint('[FCM] Open listener error (ignored): $e');
+      }
+    }
+  }
+
+  static Map<String, dynamic> _decodePayload(String? payload) {
+    if (payload == null || payload.isEmpty) return <String, dynamic>{};
+    try {
+      final decoded = jsonDecode(payload);
+      if (decoded is Map) return Map<String, dynamic>.from(decoded);
+    } catch (_) {}
+    return <String, dynamic>{};
   }
 }
 
