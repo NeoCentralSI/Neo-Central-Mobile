@@ -78,7 +78,10 @@ class LecturerApiService {
     if (feedback != null && feedback.trim().isNotEmpty) {
       body['feedback'] = feedback;
     }
-    final res = await _api.patch('$_base/requests/$guidanceId/approve', body: body);
+    final res = await _api.patch(
+      '$_base/requests/$guidanceId/approve',
+      body: body,
+    );
     if (res is Map<String, dynamic>) return res;
     return {'success': true};
   }
@@ -93,7 +96,10 @@ class LecturerApiService {
     if (feedback != null && feedback.trim().isNotEmpty) {
       body['feedback'] = feedback;
     }
-    final res = await _api.patch('$_base/requests/$guidanceId/reject', body: body);
+    final res = await _api.patch(
+      '$_base/requests/$guidanceId/reject',
+      body: body,
+    );
     if (res is Map<String, dynamic>) return res;
     return {'success': true};
   }
@@ -176,7 +182,9 @@ class LecturerApiService {
 
   /// GET /thesisGuidance/lecturer/progress/:studentId
   /// Returns detailed milestone progress for a specific student.
-  Future<Map<String, dynamic>> getStudentProgressDetail(String studentId) async {
+  Future<Map<String, dynamic>> getStudentProgressDetail(
+    String studentId,
+  ) async {
     final res = await _api.get('$_base/progress/$studentId');
     return res as Map<String, dynamic>;
   }
@@ -185,77 +193,6 @@ class LecturerApiService {
   /// Approves the student's 100% completion for seminar readiness.
   Future<void> finalApproval(String studentId) async {
     await _api.patch('$_base/progress/$studentId/final-approval', body: {});
-  }
-
-  // ── Transfers ───────────────────────────────────────────────
-
-  /// GET /thesisGuidance/lecturer/transfer/incoming
-  /// Returns list of incoming student transfer requests.
-  Future<List<dynamic>> getIncomingTransfers() async {
-    final res = await _api.get('$_base/transfer/incoming');
-    if (res is List) return res;
-    if (res is Map) {
-      if (res.containsKey('data') && res['data'] is List) {
-        return res['data'] as List;
-      }
-      if (res.containsKey('items') && res['items'] is List) {
-        return res['items'] as List;
-      }
-      if (res.containsKey('requests') && res['requests'] is List) {
-        return res['requests'] as List;
-      }
-    }
-    return [];
-  }
-
-  /// PATCH /thesisGuidance/lecturer/transfer/:notificationId/approve
-  Future<void> approveTransfer(String notificationId) async {
-    await _api.patch('$_base/transfer/$notificationId/approve', body: {});
-  }
-
-  /// PATCH /thesisGuidance/lecturer/transfer/:notificationId/reject
-  Future<void> rejectTransfer(String notificationId, String reason) async {
-    await _api.patch(
-      '$_base/transfer/$notificationId/reject',
-      body: {'reviewNotes': reason},
-    );
-  }
-
-  // ── Topic Changes ───────────────────────────────────────────
-
-  /// GET /thesis-change-requests/lecturer/pending
-  /// Returns all topic change requests pending for this lecturer.
-  Future<List<dynamic>> getPendingTopicChanges() async {
-    final res = await _api.get('/thesis-change-requests/lecturer/pending');
-    if (res is List) return res;
-    if (res is Map) {
-      if (res.containsKey('data') && res['data'] is List) {
-        return res['data'] as List;
-      }
-      if (res.containsKey('items') && res['items'] is List) {
-        return res['items'] as List;
-      }
-      if (res.containsKey('requests') && res['requests'] is List) {
-        return res['requests'] as List;
-      }
-    }
-    return [];
-  }
-
-  /// POST /thesis-change-requests/:requestId/review
-  Future<void> approveTopicChange(String requestId, String notes) async {
-    await _api.post(
-      '/thesis-change-requests/$requestId/review',
-      body: {'status': 'approved', 'notes': notes},
-    );
-  }
-
-  /// POST /thesis-change-requests/:requestId/review
-  Future<void> rejectTopicChange(String requestId, String notes) async {
-    await _api.post(
-      '/thesis-change-requests/$requestId/review',
-      body: {'status': 'rejected', 'notes': notes},
-    );
   }
 
   // ── Session Summary Actions ─────────────────────────────────
@@ -331,7 +268,10 @@ class LecturerApiService {
     if (notes != null && notes.trim().isNotEmpty) {
       body['supervisorNotes'] = notes;
     }
-    final res = await _api.post('/milestones/$milestoneId/validate', body: body);
+    final res = await _api.post(
+      '/milestones/$milestoneId/validate',
+      body: body,
+    );
     if (res is Map<String, dynamic>) return res;
     return {'success': true};
   }

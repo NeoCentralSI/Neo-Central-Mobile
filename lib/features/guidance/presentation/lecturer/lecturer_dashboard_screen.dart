@@ -37,7 +37,6 @@ class _LecturerDashboardScreenState extends State<LecturerDashboardScreen> {
   List<dynamic> _requests = [];
   List<dynamic> _pendingApproval = [];
   List<dynamic> _pendingMilestones = [];
-  List<dynamic> _topicChanges = [];
 
   @override
   void initState() {
@@ -74,7 +73,6 @@ class _LecturerDashboardScreenState extends State<LecturerDashboardScreen> {
         _api.getPendingReviewMilestones().catchError(
           (_) => <Map<String, dynamic>>[],
         ),
-        _api.getPendingTopicChanges().catchError((_) => <dynamic>[]),
       ]);
       if (!mounted) return;
       setState(() {
@@ -82,7 +80,6 @@ class _LecturerDashboardScreenState extends State<LecturerDashboardScreen> {
         _requests = results[1];
         _pendingApproval = results[2];
         _pendingMilestones = results[3];
-        _topicChanges = results[4];
         _isLoading = false;
       });
 
@@ -176,10 +173,7 @@ class _LecturerDashboardScreenState extends State<LecturerDashboardScreen> {
 
   Widget _buildHeaderBackground(BuildContext context, String name) {
     final totalActionNeeded =
-        _requests.length +
-        _pendingApproval.length +
-        _pendingMilestones.length +
-        _topicChanges.length;
+        _requests.length + _pendingApproval.length + _pendingMilestones.length;
 
     return Container(
       width: double.infinity,
@@ -248,51 +242,51 @@ class _LecturerDashboardScreenState extends State<LecturerDashboardScreen> {
                 ),
               ),
               Stack(
-                        children: [
-                          Container(
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.2),
-                              shape: BoxShape.circle,
-                            ),
-                            child: IconButton(
-                              icon: const Icon(
-                                Icons.notifications_none_outlined,
-                                color: Colors.white,
-                                size: 26,
-                              ),
-                              onPressed: () async {
-                                await Navigator.of(context).push(
-                                  MaterialPageRoute(
-                                    builder: (_) => const NotificationScreen(),
-                                  ),
-                                );
-                                final count = await _notifApi.getUnreadCount();
-                                if (mounted) {
-                                  setState(() => _unreadCount = count);
-                                }
-                              },
-                            ),
-                          ),
-                          if (_unreadCount > 0)
-                            Positioned(
-                              right: 6,
-                              top: 6,
-                              child: Container(
-                                padding: const EdgeInsets.all(4),
-                                decoration: const BoxDecoration(
-                                  color: Colors.red,
-                                  shape: BoxShape.circle,
-                                ),
-                                constraints: const BoxConstraints(
-                                  minWidth: 12,
-                                  minHeight: 12,
-                                ),
-                              ),
-                            ),
-                        ],
+                children: [
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.2),
+                      shape: BoxShape.circle,
+                    ),
+                    child: IconButton(
+                      icon: const Icon(
+                        Icons.notifications_none_outlined,
+                        color: Colors.white,
+                        size: 26,
                       ),
-                    ],
+                      onPressed: () async {
+                        await Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const NotificationScreen(),
+                          ),
+                        );
+                        final count = await _notifApi.getUnreadCount();
+                        if (mounted) {
+                          setState(() => _unreadCount = count);
+                        }
+                      },
+                    ),
                   ),
+                  if (_unreadCount > 0)
+                    Positioned(
+                      right: 6,
+                      top: 6,
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: const BoxDecoration(
+                          color: Colors.red,
+                          shape: BoxShape.circle,
+                        ),
+                        constraints: const BoxConstraints(
+                          minWidth: 12,
+                          minHeight: 12,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ],
+          ),
           const SizedBox(height: 32),
           // OVERALL STATS
           Container(
@@ -455,17 +449,6 @@ class _LecturerDashboardScreenState extends State<LecturerDashboardScreen> {
                       ? '${_pendingMilestones.length}'
                       : null,
                   onTap: () => widget.onSwitchTab?.call(1, initialTab: 2),
-                  isLast: false,
-                ),
-                _QuickActionItem(
-                  icon: Icons.edit_note_outlined,
-                  label: 'Perubahan Topik/Judul',
-                  subtitle: '${_topicChanges.length} perlu review',
-                  color: AppColors.primary,
-                  badge: _topicChanges.isNotEmpty
-                      ? '${_topicChanges.length}'
-                      : null,
-                  onTap: () => widget.onSwitchTab?.call(1, initialTab: 3),
                   isLast: false,
                 ),
                 _QuickActionItem(

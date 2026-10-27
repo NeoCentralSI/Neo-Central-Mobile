@@ -33,9 +33,9 @@ class _GuidanceRequestsScreenState extends State<GuidanceRequestsScreen>
   void initState() {
     super.initState();
     _tabController = TabController(
-      length: 4,
+      length: 3,
       vsync: this,
-      initialIndex: widget.initialTab.clamp(0, 3),
+      initialIndex: widget.initialTab.clamp(0, 2),
     );
   }
 
@@ -79,8 +79,11 @@ class _GuidanceRequestsScreenState extends State<GuidanceRequestsScreen>
                       children: [
                         if (!widget.isTab)
                           IconButton(
-                            icon: const Icon(Icons.arrow_back_ios_new,
-                                size: 20, color: AppColors.white),
+                            icon: const Icon(
+                              Icons.arrow_back_ios_new,
+                              size: 20,
+                              color: AppColors.white,
+                            ),
                             onPressed: () => Navigator.maybePop(context),
                           ),
                         Text(
@@ -97,19 +100,19 @@ class _GuidanceRequestsScreenState extends State<GuidanceRequestsScreen>
                       isScrollable: true,
                       tabAlignment: TabAlignment.start,
                       labelColor: AppColors.white,
-                      unselectedLabelColor:
-                          AppColors.white.withValues(alpha: 0.6),
+                      unselectedLabelColor: AppColors.white.withValues(
+                        alpha: 0.6,
+                      ),
                       indicatorColor: AppColors.white,
                       indicatorWeight: 3,
-                      labelStyle:
-                          AppTextStyles.label.copyWith(fontSize: 13),
-                      unselectedLabelStyle:
-                          AppTextStyles.body.copyWith(fontSize: 13),
+                      labelStyle: AppTextStyles.label.copyWith(fontSize: 13),
+                      unselectedLabelStyle: AppTextStyles.body.copyWith(
+                        fontSize: 13,
+                      ),
                       tabs: const [
                         Tab(text: 'Permintaan'),
                         Tab(text: 'Catatan'),
                         Tab(text: 'Milestone'),
-                        Tab(text: 'Topik'),
                       ],
                     ),
                   ],
@@ -124,7 +127,6 @@ class _GuidanceRequestsScreenState extends State<GuidanceRequestsScreen>
                 _GuidanceRequestsTab(),
                 _SessionSummaryTab(),
                 _MilestoneApprovalTab(),
-                _TopicChangeTab(),
               ],
             ),
           ),
@@ -212,115 +214,104 @@ class _GuidanceRequestsTabState extends State<_GuidanceRequestsTab> {
     return RefreshIndicator(
       onRefresh: _loadData,
       child: ListView.separated(
-              padding: const EdgeInsets.all(AppSpacing.pagePadding),
-              itemCount: _requests.length,
-              separatorBuilder: (_, __) =>
-                  const SizedBox(height: AppSpacing.sm),
-              itemBuilder: (context, index) {
-                final req = _requests[index];
-                final name = (req['studentName'] ?? req['name'] ?? '-')
-                    .toString();
-                final nim = (req['studentNim'] ?? req['nim'] ?? '').toString();
-                final topic = (req['studentNotes'] ?? req['topic'] ?? '-')
-                    .toString();
-                final dateStr =
-                    (req['requestedDateFormatted'] ?? req['date'] ?? '-')
-                        .toString();
-                final supervisorRole =
-                    (req['supervisorRole'] ?? req['supervisor'] ?? '')
-                        .toString();
+        padding: const EdgeInsets.all(AppSpacing.pagePadding),
+        itemCount: _requests.length,
+        separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.sm),
+        itemBuilder: (context, index) {
+          final req = _requests[index];
+          final name = (req['studentName'] ?? req['name'] ?? '-').toString();
+          final nim = (req['studentNim'] ?? req['nim'] ?? '').toString();
+          final topic = (req['studentNotes'] ?? req['topic'] ?? '-').toString();
+          final dateStr = (req['requestedDateFormatted'] ?? req['date'] ?? '-')
+              .toString();
+          final supervisorRole =
+              (req['supervisorRole'] ?? req['supervisor'] ?? '').toString();
 
-                // Build session map for detail screen
-                final sessionMap = <String, String>{
-                  'name': name,
-                  'nim': nim,
-                  'topic': topic,
-                  'date': dateStr,
-                  'supervisor': supervisorRole,
-                  if (req['id'] != null) 'id': req['id'].toString(),
-                };
+          // Build session map for detail screen
+          final sessionMap = <String, String>{
+            'name': name,
+            'nim': nim,
+            'topic': topic,
+            'date': dateStr,
+            'supervisor': supervisorRole,
+            if (req['id'] != null) 'id': req['id'].toString(),
+          };
 
-                return AppCard(
-                  onTap: () async {
-                    final result = await Navigator.push<bool>(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) =>
-                            GuidanceSessionDetailScreen(session: sessionMap),
-                      ),
-                    );
-                    // Reload when approved/rejected
-                    if (result == true) _loadData();
-                  },
-                  child: Row(
+          return AppCard(
+            onTap: () async {
+              final result = await Navigator.push<bool>(
+                context,
+                MaterialPageRoute(
+                  builder: (_) =>
+                      GuidanceSessionDetailScreen(session: sessionMap),
+                ),
+              );
+              // Reload when approved/rejected
+              if (result == true) _loadData();
+            },
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  margin: const EdgeInsets.only(top: 6),
+                  decoration: const BoxDecoration(
+                    color: AppColors.primary,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Container(
-                        width: 8,
-                        height: 8,
-                        margin: const EdgeInsets.only(top: 6),
-                        decoration: const BoxDecoration(
-                          color: AppColors.primary,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Text(name, style: AppTextStyles.label),
-                                if (nim.isNotEmpty) ...[
-                                  const SizedBox(width: 6),
-                                  AppBadge(
-                                    label: nim,
-                                    variant: BadgeVariant.outline,
-                                  ),
-                                ],
-                              ],
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              topic,
-                              style: AppTextStyles.body,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: 6),
-                            Row(
-                              children: [
-                                const Icon(
-                                  Icons.calendar_today_outlined,
-                                  size: 13,
-                                  color: AppColors.textTertiary,
-                                ),
-                                const SizedBox(width: 4),
-                                Text(dateStr, style: AppTextStyles.caption),
-                                if (supervisorRole.isNotEmpty) ...[
-                                  const SizedBox(width: 10),
-                                  const Icon(
-                                    Icons.person_outline,
-                                    size: 13,
-                                    color: AppColors.textTertiary,
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    supervisorRole,
-                                    style: AppTextStyles.caption,
-                                  ),
-                                ],
-                              ],
-                            ),
+                      Row(
+                        children: [
+                          Text(name, style: AppTextStyles.label),
+                          if (nim.isNotEmpty) ...[
+                            const SizedBox(width: 6),
+                            AppBadge(label: nim, variant: BadgeVariant.outline),
                           ],
-                        ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        topic,
+                        style: AppTextStyles.body,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.calendar_today_outlined,
+                            size: 13,
+                            color: AppColors.textTertiary,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(dateStr, style: AppTextStyles.caption),
+                          if (supervisorRole.isNotEmpty) ...[
+                            const SizedBox(width: 10),
+                            const Icon(
+                              Icons.person_outline,
+                              size: 13,
+                              color: AppColors.textTertiary,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(supervisorRole, style: AppTextStyles.caption),
+                          ],
+                        ],
                       ),
                     ],
                   ),
-                );
-              },
+                ),
+              ],
             ),
+          );
+        },
+      ),
     );
   }
 }
@@ -446,13 +437,14 @@ class _SessionSummaryTabState extends State<_SessionSummaryTab> {
           final s = _summaries[index];
           final id = (s['id'] ?? '').toString();
           final name = (s['studentName'] ?? s['name'] ?? '-').toString();
-          final dateStr = (s['approvedDateFormatted'] ??
-                  s['summarySubmittedAtFormatted'] ??
-                  s['date'] ??
-                  '-')
+          final dateStr =
+              (s['approvedDateFormatted'] ??
+                      s['summarySubmittedAtFormatted'] ??
+                      s['date'] ??
+                      '-')
+                  .toString();
+          final summary = (s['sessionSummary'] ?? s['summary'] ?? '-')
               .toString();
-          final summary =
-              (s['sessionSummary'] ?? s['summary'] ?? '-').toString();
           final actionItems = (s['actionItems'] ?? '').toString();
           final milestone = (s['milestoneName'] ?? '').toString();
           final isApproving = _approvingIds.contains(id);
@@ -465,8 +457,7 @@ class _SessionSummaryTabState extends State<_SessionSummaryTab> {
                   children: [
                     CircleAvatar(
                       radius: 18,
-                      backgroundColor:
-                          AppColors.primary.withValues(alpha: 0.1),
+                      backgroundColor: AppColors.primary.withValues(alpha: 0.1),
                       child: Text(
                         name.isNotEmpty ? name[0] : '?',
                         style: AppTextStyles.label.copyWith(
@@ -494,8 +485,11 @@ class _SessionSummaryTabState extends State<_SessionSummaryTab> {
                 if (milestone.isNotEmpty) ...[
                   Row(
                     children: [
-                      const Icon(Icons.flag_outlined,
-                          size: 14, color: AppColors.textTertiary),
+                      const Icon(
+                        Icons.flag_outlined,
+                        size: 14,
+                        color: AppColors.textTertiary,
+                      ),
                       const SizedBox(width: 4),
                       Expanded(
                         child: Text(
@@ -537,9 +531,7 @@ class _SessionSummaryTabState extends State<_SessionSummaryTab> {
                     icon: Icons.check_circle_outline,
                     color: AppColors.success,
                     isLoading: isApproving,
-                    onPressed: isApproving
-                        ? null
-                        : () => _handleApprove(id),
+                    onPressed: isApproving ? null : () => _handleApprove(id),
                   ),
                 ),
               ],
@@ -793,8 +785,7 @@ class _MilestoneApprovalTabState extends State<_MilestoneApprovalTab> {
                   children: [
                     CircleAvatar(
                       radius: 18,
-                      backgroundColor:
-                          AppColors.primary.withValues(alpha: 0.1),
+                      backgroundColor: AppColors.primary.withValues(alpha: 0.1),
                       child: Text(
                         studentName.isNotEmpty ? studentName[0] : '?',
                         style: AppTextStyles.label.copyWith(
@@ -822,8 +813,11 @@ class _MilestoneApprovalTabState extends State<_MilestoneApprovalTab> {
                 const AppDivider(),
                 Row(
                   children: [
-                    const Icon(Icons.flag_outlined,
-                        size: 16, color: AppColors.primary),
+                    const Icon(
+                      Icons.flag_outlined,
+                      size: 16,
+                      color: AppColors.primary,
+                    ),
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
@@ -838,8 +832,11 @@ class _MilestoneApprovalTabState extends State<_MilestoneApprovalTab> {
                 const SizedBox(height: 8),
                 Row(
                   children: [
-                    const Icon(Icons.trending_up,
-                        size: 14, color: AppColors.success),
+                    const Icon(
+                      Icons.trending_up,
+                      size: 14,
+                      color: AppColors.success,
+                    ),
                     const SizedBox(width: 4),
                     Text(
                       'Progress: $progress%',
@@ -888,321 +885,6 @@ class _MilestoneApprovalTabState extends State<_MilestoneApprovalTab> {
                         onPressed: isProcessing
                             ? null
                             : () => _handleRevision(milestoneId),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          );
-        },
-      ),
-    );
-  }
-}
-
-// ─── Tab 4: Topic Change Approval ────────────────────────────
-class _TopicChangeTab extends StatefulWidget {
-  const _TopicChangeTab();
-
-  @override
-  State<_TopicChangeTab> createState() => _TopicChangeTabState();
-}
-
-class _TopicChangeTabState extends State<_TopicChangeTab> {
-  final _api = LecturerApiService();
-  bool _isLoading = true;
-  String? _error;
-  List<dynamic> _requests = [];
-  final Set<String> _processingIds = {};
-
-  @override
-  void initState() {
-    super.initState();
-    _loadData();
-  }
-
-  Future<void> _loadData() async {
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
-    try {
-      _requests = await _api.getPendingTopicChanges();
-      if (!mounted) return;
-      setState(() => _isLoading = false);
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _isLoading = false;
-        _error = e.toString();
-      });
-    }
-  }
-
-  Future<void> _handleApprove(String id, String studentName) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Setujui Perubahan Topik'),
-        content: Text(
-          'Setujui perubahan topik/judul TA untuk $studentName?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Batal'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.success,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('Setujui'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
-
-    setState(() => _processingIds.add(id));
-    try {
-      await _api.approveTopicChange(id, 'Disetujui oleh pembimbing');
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Perubahan topik disetujui'),
-          backgroundColor: AppColors.success,
-        ),
-      );
-      _loadData();
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Gagal: $e'),
-          backgroundColor: AppColors.destructive,
-        ),
-      );
-    } finally {
-      if (mounted) setState(() => _processingIds.remove(id));
-    }
-  }
-
-  Future<void> _handleReject(String id) async {
-    final notesController = TextEditingController();
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Tolak Perubahan Topik'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('Berikan alasan penolakan:'),
-            const SizedBox(height: 12),
-            TextField(
-              controller: notesController,
-              decoration: const InputDecoration(
-                hintText: 'Alasan penolakan...',
-                border: OutlineInputBorder(),
-              ),
-              maxLines: 3,
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Batal'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.destructive,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('Tolak'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
-
-    final notes = notesController.text.trim();
-    setState(() => _processingIds.add(id));
-    try {
-      await _api.rejectTopicChange(
-        id,
-        notes.isNotEmpty ? notes : 'Ditolak oleh pembimbing',
-      );
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Perubahan topik ditolak'),
-          backgroundColor: AppColors.destructive,
-        ),
-      );
-      _loadData();
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Gagal: $e'),
-          backgroundColor: AppColors.destructive,
-        ),
-      );
-    } finally {
-      if (mounted) setState(() => _processingIds.remove(id));
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (_isLoading) return const Center(child: CircularProgressIndicator());
-    if (_error != null) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('Gagal memuat data', style: AppTextStyles.h4),
-            const SizedBox(height: 12),
-            AppButton(
-              label: 'Coba Lagi',
-              icon: Icons.refresh,
-              onPressed: _loadData,
-            ),
-          ],
-        ),
-      );
-    }
-    if (_requests.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(
-              Icons.edit_note_outlined,
-              size: 64,
-              color: AppColors.textTertiary,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Tidak ada permintaan perubahan topik',
-              style: AppTextStyles.body,
-            ),
-          ],
-        ),
-      );
-    }
-
-    return RefreshIndicator(
-      onRefresh: _loadData,
-      child: ListView.separated(
-        padding: const EdgeInsets.all(AppSpacing.pagePadding),
-        itemCount: _requests.length,
-        separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.sm),
-        itemBuilder: (context, index) {
-          final r = _requests[index];
-          final id = (r['id'] ?? '').toString();
-          final currentThesis = r['thesis'] ?? {};
-          final student = currentThesis['student'] ?? {};
-          final name = (student['user']?['fullName'] ?? '-').toString();
-          final currentTitle = (currentThesis['title'] ?? '-').toString();
-          final proposedTitle =
-              (r['proposedThesis']?['title'] ?? r['proposedTitle'] ?? '-')
-                  .toString();
-          final reason = (r['reason'] ?? '').toString();
-          final isProcessing = _processingIds.contains(id);
-
-          return AppCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    CircleAvatar(
-                      radius: 18,
-                      backgroundColor:
-                          AppColors.primary.withValues(alpha: 0.1),
-                      child: Text(
-                        name.isNotEmpty ? name[0] : '?',
-                        style: AppTextStyles.label.copyWith(
-                          color: AppColors.primary,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(name, style: AppTextStyles.label),
-                          Text(
-                            'Perubahan Judul/Topik',
-                            style: AppTextStyles.caption.copyWith(
-                              color: AppColors.primary,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const AppBadge(
-                      label: 'Menunggu',
-                      variant: BadgeVariant.warning,
-                    ),
-                  ],
-                ),
-                const AppDivider(),
-                Text('Judul Lama:', style: AppTextStyles.caption),
-                const SizedBox(height: 2),
-                Text(
-                  currentTitle,
-                  style: AppTextStyles.bodySmall.copyWith(
-                    decoration: TextDecoration.lineThrough,
-                    color: AppColors.textTertiary,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Text('Judul Baru:', style: AppTextStyles.caption),
-                const SizedBox(height: 2),
-                Text(
-                  proposedTitle,
-                  style: AppTextStyles.body.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                if (reason.isNotEmpty) ...[
-                  const SizedBox(height: 10),
-                  Text('Alasan:', style: AppTextStyles.caption),
-                  const SizedBox(height: 2),
-                  Text(reason, style: AppTextStyles.bodySmall),
-                ],
-                const SizedBox(height: AppSpacing.md),
-                Row(
-                  children: [
-                    Expanded(
-                      child: AppButton(
-                        label: 'Setujui',
-                        icon: Icons.check,
-                        color: AppColors.success,
-                        isLoading: isProcessing,
-                        onPressed: isProcessing
-                            ? null
-                            : () => _handleApprove(id, name),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: AppButton(
-                        label: 'Tolak',
-                        icon: Icons.close,
-                        isOutline: true,
-                        color: AppColors.destructive,
-                        isLoading: isProcessing,
-                        onPressed: isProcessing
-                            ? null
-                            : () => _handleReject(id),
                       ),
                     ),
                   ],
