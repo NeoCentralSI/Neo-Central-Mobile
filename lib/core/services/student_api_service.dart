@@ -1,5 +1,8 @@
 import 'api_client.dart';
 
+export '../models/milestone_list.dart';
+import '../models/milestone_list.dart';
+
 /// API service for student-facing thesis guidance endpoints.
 ///
 /// Base path: /thesisGuidance/student
@@ -33,15 +36,8 @@ class StudentApiService {
   /// Returns list of all guidance sessions with status.
   Future<List<dynamic>> getGuidanceHistory() async {
     final res = await _api.get('$_base/history');
-    if (res is List) {
-      return res;
-    }
-    if (res is Map && res.containsKey('items')) {
-      return res['items'] as List;
-    }
-    if (res is Map && res.containsKey('data')) {
-      return res['data'] as List;
-    }
+    // Backend: { success, count, items }
+    if (res is Map && res['items'] is List) return res['items'] as List;
     return [];
   }
 
@@ -54,12 +50,8 @@ class StudentApiService {
     if (res is List) {
       return res;
     }
-    if (res is Map && res.containsKey('guidances')) {
-      return res['guidances'] as List;
-    }
-    if (res is Map && res.containsKey('data')) {
-      return res['data'] as List;
-    }
+    // Backend: { success, count, items }
+    if (res is Map && res['items'] is List) return res['items'] as List;
     return [];
   }
 
@@ -93,21 +85,36 @@ class StudentApiService {
 
   // ── Milestones ──────────────────────────────────────────────
 
-  /// GET /milestones/thesis/:thesisId
-  /// Returns milestones for a specific thesis.
-  Future<List<dynamic>> getMilestones(String thesisId) async {
-    final res = await _api.get('/milestones/thesis/$thesisId');
-    if (res is Map && res.containsKey('milestones')) {
-      return res['milestones'] as List;
+  /// Id of the student's thesis (`GET /thesisGuidance/student/my-thesis`).
+  Future<String> getMyThesisId() async {
+    final res = await getMyThesis();
+    final thesis = res['thesis'];
+    final id = thesis is Map ? thesis['id']?.toString() : null;
+    if (id == null || id.isEmpty) {
+      throw const NotFoundApiException('Tugas akhir aktif tidak ditemukan');
     }
-    if (res is Map && res.containsKey('data')) {
-      return res['data'] as List;
-    }
-    if (res is List) {
-      return res;
-    }
-    return [];
+    return id;
   }
+
+  /// GET /milestones/thesis/:thesisId?phase=
+  ///
+  /// The backend lists one phase at a time: the running phase by default.
+  /// Response: `{ success, data: [...], progress, phase, currentPhase,
+  /// readOnlyReason }`.
+  Future<MilestoneList> getMilestoneList(
+    String thesisId, {
+    String? phase,
+  }) async {
+    final res = await _api.get(
+      '/milestones/thesis/$thesisId',
+      queryParams: phase == null ? null : {'phase': phase},
+    );
+    return MilestoneList.fromResponse(res);
+  }
+
+  /// Milestones of the running phase.
+  Future<List<dynamic>> getMilestones(String thesisId) async =>
+      (await getMilestoneList(thesisId)).milestones;
 
   // ── Supervisor Availability ─────────────────────────────────
 
@@ -233,9 +240,7 @@ class StudentApiService {
     required String sessionSummary,
     String? actionItems,
   }) async {
-    final body = <String, dynamic>{
-      'sessionSummary': sessionSummary,
-    };
+    final body = <String, dynamic>{'sessionSummary': sessionSummary};
     if (actionItems != null && actionItems.trim().isNotEmpty) {
       body['actionItems'] = actionItems;
     }
@@ -274,10 +279,7 @@ class StudentApiService {
     if (notes != null && notes.trim().isNotEmpty) {
       body['notes'] = notes;
     }
-    final res = await _api.patch(
-      '/milestones/$milestoneId/status',
-      body: body,
-    );
+    final res = await _api.patch('/milestones/$milestoneId/status', body: body);
     if (res is Map<String, dynamic>) return res;
     return {'success': true};
   }
