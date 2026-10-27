@@ -4,35 +4,27 @@ import '../../../core/constants/app_text_styles.dart';
 import '../../../core/models/auth_models.dart';
 import '../../../core/enums/user_role.dart';
 import '../../features/internship/presentation/internship_shell.dart';
-import '../../features/placeholder/presentation/placeholder_screens.dart';
 import '../../features/shell/main_shell.dart';
 import '../../features/auth/presentation/login_screen.dart';
 import '../../features/announcement/presentation/announcement_screen.dart';
-import '../../features/hod/presentation/assign_examiner_screen.dart';
-import '../../features/defence/presentation/lecturer_defence_screen.dart';
-import '../../features/defence/presentation/student_defence_screen.dart';
-import '../../features/seminar/presentation/lecturer_seminar_screen.dart';
-import '../../features/seminar/presentation/student_seminar_screen.dart';
-import '../../features/yudisium/presentation/yudisium_overview_screen.dart';
+import '../../features/guidance/presentation/student/milestone_progress_screen.dart';
+import '../../features/notifications/presentation/notification_screen.dart';
 import '../services/auth_service.dart';
 
+/// Side menu for students and lecturers (Admin has its own tabs).
+///
+/// Students: Bimbingan, Milestone, Kerja Praktek, Pengumuman, Notifikasi.
+/// Lecturers (also Kadep, Sekdep, ...): Mahasiswa Bimbingan, Milestone,
+/// Kerja Praktek, Pengumuman, Notifikasi. Profil lives in the bottom tabs.
 class AppDrawer extends StatelessWidget {
   final UserModel? user;
   final String activeRoute;
 
-  const AppDrawer({
-    super.key,
-    required this.user,
-    required this.activeRoute,
-  });
+  const AppDrawer({super.key, required this.user, required this.activeRoute});
 
   @override
   Widget build(BuildContext context) {
-    // Determine user role.
     final isStudent = user?.appRole == UserRole.student;
-    final isLecturerLike =
-        user?.appRole == UserRole.lecturer ||
-        user?.appRole == UserRole.headOfDepartment;
 
     final topPadding = MediaQuery.of(context).padding.top;
 
@@ -44,9 +36,7 @@ class AppDrawer extends StatelessWidget {
           Container(
             width: double.infinity,
             padding: EdgeInsets.fromLTRB(24, topPadding + 32, 24, 32),
-            decoration: const BoxDecoration(
-              color: AppColors.primary,
-            ),
+            decoration: const BoxDecoration(color: AppColors.primary),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -85,231 +75,94 @@ class AppDrawer extends StatelessWidget {
           const SizedBox(height: 16),
           Expanded(
             child: ListView(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                children: [
-                  // Order differs for students vs lecturers per spec
-                  _buildMenuItem(
-                    context,
-                    title: 'Kerja Praktek',
-                    icon: Icons.work_outline,
-                    isActive: activeRoute == 'internship',
-                    onTap: () {
-                      Navigator.pop(context);
-                      if (activeRoute == 'internship') return;
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              children: [
+                _buildMenuItem(
+                  context,
+                  title: isStudent ? 'Bimbingan' : 'Mahasiswa Bimbingan',
+                  icon: Icons.school_outlined,
+                  isActive: activeRoute == 'tugas_akhir',
+                  onTap: () => _openShell(context, 'tugas_akhir'),
+                ),
+                _buildMenuItem(
+                  context,
+                  title: 'Milestone',
+                  icon: Icons.flag_outlined,
+                  isActive: activeRoute == 'milestone',
+                  onTap: () {
+                    Navigator.pop(context);
+                    if (activeRoute == 'milestone') return;
+                    if (isStudent) {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (_) => InternshipShell(user: user),
+                          builder: (_) => const MilestoneProgressScreen(),
                         ),
                       );
-                    },
-                  ),
-
-                  if (isStudent) ...[
-                    _buildMenuItem(
-                      context,
-                      title: 'Metopel',
-                      icon: Icons.menu_book_outlined,
-                      isActive: activeRoute == 'metopel',
-                      onTap: () {
-                        Navigator.pop(context);
-                        if (activeRoute == 'metopel') return;
-
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => MetopelScreen(user: user),
+                    } else {
+                      // Approval Bimbingan ▸ Milestone
+                      Navigator.of(context).pushAndRemoveUntil(
+                        MaterialPageRoute(
+                          builder: (_) => MainShell(
+                            userRole: UserRole.lecturer,
+                            user: user,
+                            initialIndex: 1,
+                            initialSubTab: 2,
                           ),
-                        );
-                      },
-                    ),
-
-                    _buildMenuItem(
+                        ),
+                        (route) => false,
+                      );
+                    }
+                  },
+                ),
+                _buildMenuItem(
+                  context,
+                  title: 'Kerja Praktek',
+                  icon: Icons.work_outline,
+                  isActive: activeRoute == 'internship',
+                  onTap: () {
+                    Navigator.pop(context);
+                    if (activeRoute == 'internship') return;
+                    Navigator.push(
                       context,
-                      title: 'Tugas Akhir',
-                      icon: Icons.school_outlined,
-                      isActive: activeRoute == 'tugas_akhir',
-                      onTap: () {
-                        Navigator.pop(context);
-                        if (activeRoute == 'tugas_akhir') return;
-                        Navigator.of(context).pushAndRemoveUntil(
-                          MaterialPageRoute(
-                            builder: (_) => MainShell(
-                              userRole: UserRole.student,
-                              user: user,
-                            ),
-                          ),
-                          (route) => false,
-                        );
-                      },
-                    ),
-
-                    _buildMenuItem(
-                      context,
-                      title: 'Seminar Hasil',
-                      icon: Icons.groups_outlined,
-                      isActive: activeRoute == 'seminar_hasil',
-                      onTap: () {
-                        Navigator.pop(context);
-                        if (activeRoute == 'seminar_hasil') return;
-
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => StudentSeminarScreen(user: user),
-                          ),
-                        );
-                      },
-                    ),
-
-                    _buildMenuItem(
-                      context,
-                      title: 'Sidang TA',
-                      icon: Icons.school_outlined,
-                      isActive: activeRoute == 'sidang_ta',
-                      onTap: () {
-                        Navigator.pop(context);
-                        if (activeRoute == 'sidang_ta') return;
-
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => StudentDefenceScreen(user: user),
-                          ),
-                        );
-                      },
-                    ),
-
-                    _buildMenuItem(
-                      context,
-                      title: 'Yudisium',
-                      icon: Icons.emoji_events_outlined,
-                      isActive: activeRoute == 'yudisium',
-                      onTap: () {
-                        Navigator.pop(context);
-                        if (activeRoute == 'yudisium') return;
-
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => YudisiumOverviewScreen(user: user),
-                          ),
-                        );
-                      },
-                    ),
-
-                    _buildMenuItem(
-                      context,
-                      title: 'Pengumuman',
-                      icon: Icons.campaign_outlined,
-                      isActive: activeRoute == 'pengumuman',
-                      onTap: () {
-                        Navigator.pop(context);
-                        if (activeRoute == 'pengumuman') return;
-
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => AnnouncementScreen(user: user),
-                          ),
-                        );
-                      },
-                    ),
-                  ] else ...[
-                    // Lecturer order
-                    _buildMenuItem(
-                      context,
-                      title: 'Tugas Akhir',
-                      icon: Icons.school_outlined,
-                      isActive: activeRoute == 'tugas_akhir',
-                      onTap: () {
-                        Navigator.pop(context);
-                        if (activeRoute == 'tugas_akhir') return;
-                        Navigator.of(context).pushAndRemoveUntil(
-                          MaterialPageRoute(
-                            builder: (_) => MainShell(
-                              userRole: UserRole.lecturer,
-                              user: user,
-                            ),
-                          ),
-                          (route) => false,
-                        );
-                      },
-                    ),
-
-                    _buildMenuItem(
-                      context,
-                      title: 'Seminar Hasil',
-                      icon: Icons.groups_outlined,
-                      isActive: activeRoute == 'seminar_hasil',
-                      onTap: () {
-                        Navigator.pop(context);
-                        if (activeRoute == 'seminar_hasil') return;
-
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => LecturerSeminarScreen(user: user),
-                          ),
-                        );
-                      },
-                    ),
-
-                    _buildMenuItem(
-                      context,
-                      title: 'Sidang TA',
-                      icon: Icons.school_outlined,
-                      isActive: activeRoute == 'sidang_ta',
-                      onTap: () {
-                        Navigator.pop(context);
-                        if (activeRoute == 'sidang_ta') return;
-
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => LecturerDefenceScreen(user: user),
-                          ),
-                        );
-                      },
-                    ),
-
-                    if (isLecturerLike && user?.appRole == UserRole.headOfDepartment)
-                      _buildMenuItem(
-                        context,
-                        title: 'Tetapkan Penguji',
-                        icon: Icons.fact_check_outlined,
-                        isActive: activeRoute == 'assign_examiner',
-                        onTap: () {
-                          Navigator.pop(context);
-                          if (activeRoute == 'assign_examiner') return;
-
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => AssignExaminerScreen(user: user),
-                            ),
-                          );
-                        },
+                      MaterialPageRoute(
+                        builder: (_) => InternshipShell(user: user),
                       ),
-
-                    _buildMenuItem(
+                    );
+                  },
+                ),
+                _buildMenuItem(
+                  context,
+                  title: 'Pengumuman',
+                  icon: Icons.campaign_outlined,
+                  isActive: activeRoute == 'pengumuman',
+                  onTap: () {
+                    Navigator.pop(context);
+                    if (activeRoute == 'pengumuman') return;
+                    Navigator.push(
                       context,
-                      title: 'Pengumuman',
-                      icon: Icons.campaign_outlined,
-                      isActive: activeRoute == 'pengumuman',
-                      onTap: () {
-                        Navigator.pop(context);
-                        if (activeRoute == 'pengumuman') return;
-
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => AnnouncementScreen(user: user),
-                          ),
-                        );
-                      },
-                    ),
-                  ],
+                      MaterialPageRoute(
+                        builder: (_) => AnnouncementScreen(user: user),
+                      ),
+                    );
+                  },
+                ),
+                _buildMenuItem(
+                  context,
+                  title: 'Notifikasi',
+                  icon: Icons.notifications_outlined,
+                  isActive: activeRoute == 'notifikasi',
+                  onTap: () {
+                    Navigator.pop(context);
+                    if (activeRoute == 'notifikasi') return;
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const NotificationScreen(),
+                      ),
+                    );
+                  },
+                ),
               ],
             ),
           ),
@@ -329,6 +182,18 @@ class AppDrawer extends StatelessWidget {
     );
   }
 
+  void _openShell(BuildContext context, String route) {
+    Navigator.pop(context);
+    if (activeRoute == route) return;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(
+        builder: (_) =>
+            MainShell(userRole: user?.appRole ?? UserRole.student, user: user),
+      ),
+      (route) => false,
+    );
+  }
+
   void _showLogoutConfirmation(BuildContext context) {
     showDialog(
       context: context,
@@ -344,11 +209,11 @@ class AppDrawer extends StatelessWidget {
             onPressed: () async {
               // Capture the navigator before popping the dialog or use the outer context
               final navigator = Navigator.of(context);
-              
+
               Navigator.pop(dialogContext); // Close dialog
-              
+
               await AuthService().logout();
-              
+
               if (context.mounted) {
                 navigator.pushAndRemoveUntil(
                   MaterialPageRoute(builder: (_) => const LoginScreen()),
@@ -374,8 +239,10 @@ class AppDrawer extends StatelessWidget {
     Color? color,
     required VoidCallback onTap,
   }) {
-    final effectiveColor = color ?? (isActive ? AppColors.primary : AppColors.textSecondary);
-    final textColor = color ?? (isActive ? AppColors.primaryDark : AppColors.textPrimary);
+    final effectiveColor =
+        color ?? (isActive ? AppColors.primary : AppColors.textSecondary);
+    final textColor =
+        color ?? (isActive ? AppColors.primaryDark : AppColors.textPrimary);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -386,10 +253,7 @@ class AppDrawer extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
       ),
       child: ListTile(
-        leading: Icon(
-          icon,
-          color: effectiveColor,
-        ),
+        leading: Icon(icon, color: effectiveColor),
         title: Text(
           title,
           style: AppTextStyles.body.copyWith(
