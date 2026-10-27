@@ -14,7 +14,7 @@ dan API-nya di [services](https://github.com/NeoCentralSI/services).
 | Admin | Pengumuman, Notifikasi, Profil |
 
 - **Bimbingan dan Milestone Tugas Akhir.** Sesi dan milestone fase Proposal
-  dan Tugas Akhir tampil bersama, masing-masing dengan badge Jenis.
+  dan Penelitian tampil bersama, masing-masing dengan badge Jenis.
   Aksi yang ditolak backend (misalnya selama Cuti atau bila mahasiswa tidak
   mengambil mata kuliah Tugas Akhir) menampilkan pesan dari backend apa adanya.
 - **Kerja Praktek.**

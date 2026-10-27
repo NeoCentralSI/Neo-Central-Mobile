@@ -13,10 +13,11 @@ const Map<String, String> thesisStatusLabels = {
   'failed': 'Gagal',
 };
 
-/// Phase of a guidance session or milestone, shown as the "Jenis" badge.
+/// Phase of a guidance session or milestone, shown as the "Jenis" badge
+/// (same labels as the web app).
 const Map<String, String> thesisPhaseLabels = {
   'proposal': 'Proposal',
-  'research': 'Tugas Akhir',
+  'research': 'Penelitian',
 };
 
 /// Guidance session status (`GuidanceStatus`).

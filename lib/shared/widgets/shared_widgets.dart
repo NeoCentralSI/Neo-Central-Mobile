@@ -646,7 +646,7 @@ class ScrollableCenter extends StatelessWidget {
 }
 
 // ─── PhaseBadge ──────────────────────────────────────────────
-/// "Jenis" badge of a guidance session or milestone: Proposal or Tugas Akhir.
+/// "Jenis" badge of a guidance session or milestone: Proposal or Penelitian.
 /// Renders nothing for a missing or unknown phase.
 class PhaseBadge extends StatelessWidget {
   final Object? phase;
