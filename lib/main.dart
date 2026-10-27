@@ -3,17 +3,13 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 
 import 'firebase_options.dart';
+import 'core/navigation/navigator_key.dart';
 import 'core/theme/app_theme.dart';
 import 'core/services/auth_service.dart';
 import 'core/services/fcm_service.dart';
-
-import 'core/enums/user_role.dart';
 import 'features/splash/presentation/splash_screen.dart';
 import 'features/auth/presentation/login_screen.dart';
-import 'features/shell/main_shell.dart';
-import 'features/internship/presentation/internship_shell.dart';
-import 'features/admin/presentation/admin_shell.dart';
-import 'core/services/preferences_service.dart';
+import 'features/shell/session_start.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -27,9 +23,6 @@ void main() async {
   runApp(const NeoCentralApp());
 }
 
-/// Global navigator key — required by aad_oauth to show OAuth WebView
-final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
-
 /// Root application widget
 class NeoCentralApp extends StatelessWidget {
   const NeoCentralApp({super.key});
@@ -40,7 +33,7 @@ class NeoCentralApp extends StatelessWidget {
       title: 'NeoCentral',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
-      navigatorKey: navigatorKey, // required by aad_oauth
+      navigatorKey: navigatorKey,
       home: const _AuthGate(),
     );
   }
@@ -57,7 +50,6 @@ class _AuthGate extends StatefulWidget {
 
 class _AuthGateState extends State<_AuthGate> {
   final _authService = AuthService();
-  final _fcmService = FcmService();
 
   @override
   void initState() {
@@ -76,42 +68,12 @@ class _AuthGateState extends State<_AuthGate> {
       if (!mounted) return;
 
       if (result != null) {
-        // Initialize FCM — non-blocking; don't let FCM failure block login
-        try {
-          await _fcmService.init();
-          await _fcmService.registerAfterLogin();
-        } catch (e) {
-          debugPrint('[AuthGate] FCM init error (non-fatal): $e');
-        }
-
+        await startSession(result.user);
+        final targetScreen = await homeFor(result.user);
         if (!mounted) return;
-
-        // Admin role always lands on the AdminShell — admin-targeted features
-        // live on the web; the mobile experience is intentionally minimal.
-        final role = result.user.appRole;
-
-        if (!mounted) return;
-
-        Widget targetScreen;
-        if (role == UserRole.admin) {
-          targetScreen = AdminShell(user: result.user);
-        } else {
-          // Check preferred default home for non-admin users
-          final prefs = PreferencesService();
-          final defaultHome = await prefs.getDefaultHome();
-
-          if (!mounted) return;
-
-          if (defaultHome == 'internship') {
-            targetScreen = InternshipShell(user: result.user);
-          } else {
-            targetScreen = MainShell(userRole: role, user: result.user);
-          }
-        }
-
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => targetScreen),
-        );
+        Navigator.of(
+          context,
+        ).pushReplacement(MaterialPageRoute(builder: (_) => targetScreen));
       } else {
         // Not logged in – show login screen
         Navigator.of(context).pushReplacement(

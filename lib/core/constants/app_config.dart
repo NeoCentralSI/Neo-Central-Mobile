@@ -1,43 +1,48 @@
-/// App-wide configuration constants
+/// App-wide configuration, set per build with `--dart-define`.
+///
+/// ```sh
+/// # Production API (default)
+/// flutter run
+///
+/// # Local backend from the Android emulator
+/// flutter run --dart-define=API_BASE_URL=http://10.0.2.2:3000
+/// ```
+///
+/// See README for every available key.
 abstract class AppConfig {
   AppConfig._();
 
-  /// Base URL of the backend API.
-  /// Change this to your server IP when running on a physical device.
-  /// For emulator use 10.0.2.2 (Android) or localhost (iOS simulator).
-  // static const String baseUrl = 'http://10.44.9.138:3000';
-  //   static const String baseUrl = 'https://crisp-ape-immense.ngrok-free.app';
-  // static const String baseUrl = 'https://api.neocentral.dev';
-  // static const String baseUrl = 'http://10.0.2.2:3000';
-  // static const String baseUrl = 'http://172.22.64.1:3000';
-  // static const String baseUrl = 'http://10.0.2.2:3000';
-  // static const String baseUrl = 'https://api.neocentral.dev';
-  // static const String baseUrl = 'https://api-neocentral.fathur.tech';
-  static const String baseUrl = 'https://api-neocentral.fathur.site';
+  /// Base URL of the backend API, without a trailing slash.
+  static const String baseUrl = String.fromEnvironment(
+    'API_BASE_URL',
+    defaultValue: 'https://api-neocentral.fathur.site',
+  );
 
-  // ── Microsoft Azure OAuth2 credentials ──────────────────────
-  /// Application (client) ID from Azure portal
-  static const String msClientId = 'c7b60d58-43f3-48cd-90a6-f74c87f1b324';
+  /// App version shown on Tentang Aplikasi. Keep the default equal to
+  /// `version` in pubspec.yaml (a test checks it).
+  static const String appVersion = String.fromEnvironment(
+    'APP_VERSION',
+    defaultValue: '1.0.0',
+  );
 
-  /// Azure AD Tenant ID
-  static const String msTenantId = '281f26cd-2904-4669-935e-018857035410';
+  // ── Microsoft Entra ID (Azure AD) ───────────────────────────
+  // Public identifiers of the NeoCentral app registration, not secrets.
+  // Sign-in runs through the backend's Microsoft OAuth flow, which uses the
+  // backend's own registration; these values document it and can be
+  // overridden per build.
 
-  /// Discovery document URL for OpenID Connect metadata
-  static const String msDiscoveryUrl =
-      'https://login.microsoftonline.com/281f26cd-2904-4669-935e-018857035410/v2.0/.well-known/openid-configuration';
+  /// Application (client) ID.
+  static const String msClientId = String.fromEnvironment(
+    'MS_CLIENT_ID',
+    defaultValue: 'c7b60d58-43f3-48cd-90a6-f74c87f1b324',
+  );
 
-  /// Redirect URI – standard MSAL mobile redirect format.
-  /// Azure auto-registers msal{clientId}://auth for Mobile/Desktop platforms.
-  /// No manual Azure portal configuration needed.
-  static const String msRedirectUri =
-      'msalc7b60d58-43f3-48cd-90a6-f74c87f1b324://auth';
+  /// Directory (tenant) ID.
+  static const String msTenantId = String.fromEnvironment(
+    'MS_TENANT_ID',
+    defaultValue: '281f26cd-2904-4669-935e-018857035410',
+  );
 
-  /// OAuth scopes requested from Microsoft
-  static const List<String> msScopes = [
-    'openid',
-    'profile',
-    'email',
-    'User.Read',
-    'offline_access',
-  ];
+  /// Backend endpoint that starts Microsoft sign-in.
+  static String get microsoftLoginUrl => '$baseUrl/auth/microsoft/login';
 }
