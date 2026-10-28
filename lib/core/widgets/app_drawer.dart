@@ -7,15 +7,13 @@ import '../../features/internship/presentation/internship_shell.dart';
 import '../../features/shell/main_shell.dart';
 import '../../features/auth/presentation/login_screen.dart';
 import '../../features/announcement/presentation/announcement_screen.dart';
-import '../../features/guidance/presentation/student/milestone_progress_screen.dart';
-import '../../features/notifications/presentation/notification_screen.dart';
 import '../services/auth_service.dart';
 
 /// Side menu for students and lecturers (Admin has its own tabs).
 ///
-/// Students: Bimbingan, Milestone, Kerja Praktek, Pengumuman, Notifikasi.
-/// Lecturers (also Kadep, Sekdep, ...): Mahasiswa Bimbingan, Milestone,
-/// Kerja Praktek, Pengumuman, Notifikasi. Profil lives in the bottom tabs.
+/// Students and lecturers (also Kadep, Sekdep, ...): Tugas Akhir,
+/// Kerja Praktek, Pengumuman. Notifikasi is opened from Profil, which lives
+/// in the bottom tabs.
 class AppDrawer extends StatelessWidget {
   final UserModel? user;
   final String activeRoute;
@@ -24,8 +22,6 @@ class AppDrawer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isStudent = user?.appRole == UserRole.student;
-
     final topPadding = MediaQuery.of(context).padding.top;
 
     return Drawer(
@@ -79,41 +75,10 @@ class AppDrawer extends StatelessWidget {
               children: [
                 _buildMenuItem(
                   context,
-                  title: isStudent ? 'Bimbingan' : 'Mahasiswa Bimbingan',
+                  title: 'Tugas Akhir',
                   icon: Icons.school_outlined,
                   isActive: activeRoute == 'tugas_akhir',
                   onTap: () => _openShell(context, 'tugas_akhir'),
-                ),
-                _buildMenuItem(
-                  context,
-                  title: 'Milestone',
-                  icon: Icons.flag_outlined,
-                  isActive: activeRoute == 'milestone',
-                  onTap: () {
-                    Navigator.pop(context);
-                    if (activeRoute == 'milestone') return;
-                    if (isStudent) {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const MilestoneProgressScreen(),
-                        ),
-                      );
-                    } else {
-                      // Approval Bimbingan ▸ Milestone
-                      Navigator.of(context).pushAndRemoveUntil(
-                        MaterialPageRoute(
-                          builder: (_) => MainShell(
-                            userRole: UserRole.lecturer,
-                            user: user,
-                            initialIndex: 1,
-                            initialSubTab: 2,
-                          ),
-                        ),
-                        (route) => false,
-                      );
-                    }
-                  },
                 ),
                 _buildMenuItem(
                   context,
@@ -143,22 +108,6 @@ class AppDrawer extends StatelessWidget {
                       context,
                       MaterialPageRoute(
                         builder: (_) => AnnouncementScreen(user: user),
-                      ),
-                    );
-                  },
-                ),
-                _buildMenuItem(
-                  context,
-                  title: 'Notifikasi',
-                  icon: Icons.notifications_outlined,
-                  isActive: activeRoute == 'notifikasi',
-                  onTap: () {
-                    Navigator.pop(context);
-                    if (activeRoute == 'notifikasi') return;
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const NotificationScreen(),
                       ),
                     );
                   },

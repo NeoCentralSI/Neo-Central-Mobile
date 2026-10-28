@@ -9,9 +9,11 @@ dan API-nya di [services](https://github.com/NeoCentralSI/services).
 
 | Peran | Menu |
 |---|---|
-| Mahasiswa | Bimbingan, Milestone, Kerja Praktek, Pengumuman, Notifikasi, Profil |
-| Dosen (termasuk Ketua/Sekretaris Departemen) | Mahasiswa Bimbingan, Milestone, Kerja Praktek, Pengumuman, Notifikasi, Profil |
-| Admin | Pengumuman, Notifikasi, Profil |
+| Mahasiswa | Drawer: Tugas Akhir, Kerja Praktek, Pengumuman. Tab bawah: Beranda, Bimbingan, Ajukan Bimbingan (tombol tengah), Milestone, Profil |
+| Dosen (termasuk Ketua/Sekretaris Departemen) | Drawer: Tugas Akhir, Kerja Praktek, Pengumuman. Tab bawah: Beranda, Persetujuan (Permintaan, Catatan, Milestone), Mahasiswa, Profil |
+| Admin | Tab bawah: Pengumuman, Notifikasi, Profil |
+
+Notifikasi mahasiswa dan dosen dibuka dari Profil (dan ikon lonceng di Beranda).
 
 - **Bimbingan dan Milestone Tugas Akhir.** Sesi dan milestone fase Proposal
   dan Penelitian tampil bersama, masing-masing dengan badge Jenis.
