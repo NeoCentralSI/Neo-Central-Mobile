@@ -200,6 +200,50 @@ void main() {
       expect(user.appRole, UserRole.student);
     });
 
+    test('Ketua Departemen is a lecturer on mobile', () {
+      final user = UserModel(
+        id: 'u7',
+        fullName: 'Kadep',
+        email: 'kadep@unand.ac.id',
+        isVerified: true,
+        roles: [
+          const UserRoleEntry(id: 'r1', name: 'Ketua Departemen'),
+          const UserRoleEntry(id: 'r2', name: 'Pembimbing 1'),
+        ],
+        lecturer: const LecturerData(id: 'l1'),
+      );
+
+      expect(user.appRole, UserRole.lecturer);
+    });
+
+    test('Sekretaris Departemen alone is a lecturer', () {
+      final user = UserModel(
+        id: 'u8',
+        fullName: 'Sekdep',
+        email: 'sekdep@unand.ac.id',
+        isVerified: true,
+        roles: [const UserRoleEntry(id: 'r1', name: 'Sekretaris Departemen')],
+      );
+
+      expect(user.appRole, UserRole.lecturer);
+    });
+
+    test('Admin wins over other roles', () {
+      final user = UserModel(
+        id: 'u9',
+        fullName: 'Admin',
+        email: 'admin@unand.ac.id',
+        isVerified: true,
+        roles: [
+          const UserRoleEntry(id: 'r1', name: 'Mahasiswa'),
+          const UserRoleEntry(id: 'r2', name: 'Admin'),
+        ],
+        student: const StudentData(id: 's1'),
+      );
+
+      expect(user.appRole, UserRole.admin);
+    });
+
     test('lecturer role takes priority over student for multi-role users', () {
       final user = UserModel(
         id: 'u6',

@@ -2,18 +2,14 @@ import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/models/auth_models.dart';
-import '../../../core/services/fcm_service.dart';
+import '../../announcement/presentation/announcement_screen.dart';
+import '../../notifications/presentation/notification_screen.dart';
 import '../../profile/presentation/profile_screen.dart';
-import 'admin_dashboard_screen.dart';
 
-/// Shell for the Admin role on mobile.
+/// Shell for the Admin role on mobile: Pengumuman, Notifikasi and Profil.
 ///
-/// Admin on mobile is intentionally minimal — only two tabs:
-///   0. Dashboard  — notification overview + inbox (FCM driven)
-///   1. Profile    — reused [ProfileScreen] in admin-aware mode
-///
-/// Admin-targeted feature work happens on the web app; the mobile experience
-/// for Admin is a thin notification surface.
+/// Every other admin feature lives on the web app. Notification taps are
+/// routed app-wide by `NotificationRouter`.
 class AdminShell extends StatefulWidget {
   final UserModel? user;
   const AdminShell({super.key, this.user});
@@ -24,28 +20,12 @@ class AdminShell extends StatefulWidget {
 
 class _AdminShellState extends State<AdminShell> {
   int _currentIndex = 0;
-  final _fcm = FcmService();
-
-  @override
-  void initState() {
-    super.initState();
-    _fcm.addOpenListener(_onNotificationOpened);
-  }
-
-  @override
-  void dispose() {
-    _fcm.removeOpenListener(_onNotificationOpened);
-    super.dispose();
-  }
-
-  void _onNotificationOpened(Map<String, dynamic> _) {
-    if (mounted) setState(() => _currentIndex = 0);
-  }
 
   @override
   Widget build(BuildContext context) {
     final pages = <Widget>[
-      AdminDashboardScreen(user: widget.user),
+      AnnouncementScreen(user: widget.user, showDrawer: false),
+      const NotificationScreen(isTab: true),
       ProfileScreen(user: widget.user),
     ];
 
@@ -78,9 +58,14 @@ class _AdminShellState extends State<AdminShell> {
             labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
             destinations: const [
               NavigationDestination(
-                icon: Icon(Icons.dashboard_outlined),
-                selectedIcon: Icon(Icons.dashboard),
-                label: 'Dashboard',
+                icon: Icon(Icons.campaign_outlined),
+                selectedIcon: Icon(Icons.campaign),
+                label: 'Pengumuman',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.notifications_outlined),
+                selectedIcon: Icon(Icons.notifications),
+                label: 'Notifikasi',
               ),
               NavigationDestination(
                 icon: Icon(Icons.person_outline),

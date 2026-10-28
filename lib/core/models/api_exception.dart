@@ -14,23 +14,23 @@ class ApiException implements Exception {
 }
 
 class UnauthorizedApiException extends ApiException {
-  const UnauthorizedApiException(String message, {Object? details})
-    : super(401, message, details: details);
+  const UnauthorizedApiException(String message, {super.details})
+    : super(401, message);
 }
 
 class ForbiddenApiException extends ApiException {
-  const ForbiddenApiException(String message, {Object? details})
-    : super(403, message, details: details);
+  const ForbiddenApiException(String message, {super.details})
+    : super(403, message);
 }
 
 class NotFoundApiException extends ApiException {
-  const NotFoundApiException(String message, {Object? details})
-    : super(404, message, details: details);
+  const NotFoundApiException(String message, {super.details})
+    : super(404, message);
 }
 
 class ConflictApiException extends ApiException {
-  const ConflictApiException(String message, {Object? details})
-    : super(409, message, details: details);
+  const ConflictApiException(String message, {super.details})
+    : super(409, message);
 }
 
 class ValidationApiException extends ApiException {
@@ -47,12 +47,12 @@ class ServerApiException extends ApiException {
 
 /// A transport failure for which no valid HTTP response was received.
 class NetworkApiException extends ApiException {
-  const NetworkApiException(String message, {Object? details})
-    : super(0, message, details: details);
+  const NetworkApiException(String message, {super.details})
+    : super(0, message);
 }
 
 /// The server replied, but its JSON shape does not match the agreed contract.
 class ApiContractException extends ApiException {
-  const ApiContractException(String message, {Object? details})
-    : super(0, message, details: details);
+  const ApiContractException(String message, {super.details})
+    : super(0, message);
 }

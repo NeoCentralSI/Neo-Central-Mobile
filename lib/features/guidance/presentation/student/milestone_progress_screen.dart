@@ -3,26 +3,52 @@ import 'package:flutter/services.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_spacing.dart';
 import '../../../../core/constants/app_text_styles.dart';
-import '../../../../core/services/api_client.dart';
+import '../../../../core/models/auth_models.dart';
+import '../../../../core/utils/error_message.dart';
+import '../../../../core/widgets/app_drawer.dart';
+import '../../../../core/utils/thesis_labels.dart';
 import '../../../../core/services/student_api_service.dart';
 import '../../../../shared/widgets/shared_widgets.dart';
 
 /// Screen for student to view and update milestone progress.
+///
+/// Milestones of both phases are listed, each with its Jenis badge: the
+/// running phase first (editable), then the other phase (read-only), as on
+/// web. Without [thesisId] the screen looks up the student's thesis.
 class MilestoneProgressScreen extends StatefulWidget {
-  final String thesisId;
-  const MilestoneProgressScreen({super.key, required this.thesisId});
+  final String? thesisId;
+
+  /// Shown as a bottom tab: menu button and drawer instead of a back arrow.
+  final bool isTab;
+  final UserModel? user;
+
+  /// For tests; defaults to the app service.
+  final StudentApiService? api;
+
+  const MilestoneProgressScreen({
+    super.key,
+    this.thesisId,
+    this.isTab = false,
+    this.user,
+    this.api,
+  });
 
   @override
   State<MilestoneProgressScreen> createState() =>
       _MilestoneProgressScreenState();
 }
 
+const _addOnWebNote = 'Tambah milestone melalui NeoCentral versi web';
+
 class _MilestoneProgressScreenState extends State<MilestoneProgressScreen> {
-  final _api = StudentApiService();
+  late final StudentApiService _api = widget.api ?? StudentApiService();
 
   bool _isLoading = true;
   String? _error;
   List<dynamic> _milestones = [];
+
+  /// Milestones of the phase that is not running; listed read-only.
+  List<dynamic> _otherMilestones = [];
 
   @override
   void initState() {
@@ -36,14 +62,27 @@ class _MilestoneProgressScreenState extends State<MilestoneProgressScreen> {
       _error = null;
     });
     try {
-      _milestones = await _api.getMilestones(widget.thesisId);
+      final thesisId = widget.thesisId ?? await _api.getMyThesisId();
+      final current = await _api.getMilestoneList(thesisId);
+      final currentPhase = current.phase ?? 'research';
+      final otherPhase = currentPhase == 'proposal' ? 'research' : 'proposal';
+      MilestoneList other;
+      try {
+        other = await _api.getMilestoneList(thesisId, phase: otherPhase);
+      } catch (_) {
+        other = const MilestoneList(milestones: []);
+      }
       if (!mounted) return;
-      setState(() => _isLoading = false);
+      setState(() {
+        _milestones = current.milestones;
+        _otherMilestones = other.milestones;
+        _isLoading = false;
+      });
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _isLoading = false;
-        _error = e.toString();
+        _error = errorMessageOf(e, fallback: 'Milestone tidak dapat dimuat.');
       });
     }
   }
@@ -60,12 +99,27 @@ class _MilestoneProgressScreenState extends State<MilestoneProgressScreen> {
   int get _completedCount =>
       _milestones.where((m) => m['status'] == 'completed').length;
 
+  List<Widget> _timeline(List<dynamic> items, {required bool readOnly}) => [
+    for (int i = 0; i < items.length; i++)
+      _MilestoneTimelineItem(
+        milestone: items[i],
+        index: i + 1,
+        isLast: i == items.length - 1,
+        readOnly: readOnly,
+        api: _api,
+        onUpdate: _loadData,
+      ),
+  ];
+
   @override
   Widget build(BuildContext context) {
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.light,
       child: Scaffold(
         backgroundColor: AppColors.surfaceSecondary,
+        drawer: widget.isTab
+            ? AppDrawer(user: widget.user, activeRoute: 'tugas_akhir')
+            : null,
         body: Column(
           children: [
             _buildHeader(),
@@ -73,54 +127,62 @@ class _MilestoneProgressScreenState extends State<MilestoneProgressScreen> {
               child: _isLoading
                   ? const Center(child: CircularProgressIndicator())
                   : _error != null
-                      ? _buildErrorState()
-                      : RefreshIndicator(
-                          onRefresh: _loadData,
-                          child: _milestones.isEmpty
-                              ? ListView(
-                                  children: [
-                                    SizedBox(
-                                      height:
-                                          MediaQuery.of(context).size.height *
-                                              0.4,
-                                      child: Center(
-                                        child: Text(
-                                          'Belum ada milestone',
-                                          style: AppTextStyles.body,
-                                        ),
-                                      ),
+                  ? _buildErrorState()
+                  : RefreshIndicator(
+                      onRefresh: _loadData,
+                      child: _milestones.isEmpty && _otherMilestones.isEmpty
+                          ? ListView(
+                              children: [
+                                SizedBox(
+                                  height:
+                                      MediaQuery.of(context).size.height * 0.4,
+                                  child: Center(
+                                    child: Text(
+                                      'Belum ada milestone',
+                                      style: AppTextStyles.body,
                                     ),
-                                  ],
-                                )
-                              : ListView(
-                                  padding: const EdgeInsets.fromLTRB(
-                                    AppSpacing.pagePadding,
-                                    AppSpacing.md,
-                                    AppSpacing.pagePadding,
-                                    100,
                                   ),
-                                  children: [
-                                    AppCard(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          for (int i = 0;
-                                              i < _milestones.length;
-                                              i++)
-                                            _MilestoneTimelineItem(
-                                              milestone: _milestones[i],
-                                              index: i + 1,
-                                              isLast:
-                                                  i == _milestones.length - 1,
-                                              onUpdate: _loadData,
-                                            ),
-                                        ],
+                                ),
+                                const FootnoteText(_addOnWebNote),
+                              ],
+                            )
+                          : ListView(
+                              padding: const EdgeInsets.fromLTRB(
+                                AppSpacing.pagePadding,
+                                AppSpacing.md,
+                                AppSpacing.pagePadding,
+                                100,
+                              ),
+                              children: [
+                                if (_milestones.isNotEmpty)
+                                  AppCard(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: _timeline(
+                                        _milestones,
+                                        readOnly: false,
                                       ),
                                     ),
-                                  ],
-                                ),
-                        ),
+                                  ),
+                                if (_otherMilestones.isNotEmpty) ...[
+                                  const SizedBox(height: AppSpacing.lg),
+                                  AppCard(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: _timeline(
+                                        _otherMilestones,
+                                        readOnly: true,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                                // Milestones are added on the web only.
+                                const FootnoteText(_addOnWebNote),
+                              ],
+                            ),
+                    ),
             ),
           ],
         ),
@@ -153,14 +215,26 @@ class _MilestoneProgressScreenState extends State<MilestoneProgressScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              GestureDetector(
-                onTap: () => Navigator.pop(context),
-                child: const Icon(
-                  Icons.arrow_back_ios_new,
-                  color: AppColors.white,
-                  size: 20,
+              if (widget.isTab)
+                Builder(
+                  builder: (context) => GestureDetector(
+                    onTap: () => Scaffold.of(context).openDrawer(),
+                    child: const Icon(
+                      Icons.menu,
+                      color: AppColors.white,
+                      size: 24,
+                    ),
+                  ),
+                )
+              else
+                GestureDetector(
+                  onTap: () => Navigator.pop(context),
+                  child: const Icon(
+                    Icons.arrow_back_ios_new,
+                    color: AppColors.white,
+                    size: 20,
+                  ),
                 ),
-              ),
               const SizedBox(height: AppSpacing.md),
               Row(
                 children: [
@@ -170,8 +244,9 @@ class _MilestoneProgressScreenState extends State<MilestoneProgressScreen> {
                       children: [
                         Text(
                           'Milestone',
-                          style:
-                              AppTextStyles.h2.copyWith(color: AppColors.white),
+                          style: AppTextStyles.h2.copyWith(
+                            color: AppColors.white,
+                          ),
                         ),
                         const SizedBox(height: 4),
                         Text(
@@ -201,10 +276,12 @@ class _MilestoneProgressScreenState extends State<MilestoneProgressScreen> {
                             value: _overallProgress / 100,
                             strokeWidth: 4,
                             strokeCap: StrokeCap.round,
-                            backgroundColor:
-                                AppColors.white.withValues(alpha: 0.25),
+                            backgroundColor: AppColors.white.withValues(
+                              alpha: 0.25,
+                            ),
                             valueColor: const AlwaysStoppedAnimation<Color>(
-                                AppColors.white),
+                              AppColors.white,
+                            ),
                           ),
                         ),
                         Text(
@@ -231,10 +308,24 @@ class _MilestoneProgressScreenState extends State<MilestoneProgressScreen> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.error_outline,
-              size: 48, color: AppColors.textTertiary),
+          const Icon(
+            Icons.error_outline,
+            size: 48,
+            color: AppColors.textTertiary,
+          ),
           const SizedBox(height: 12),
           Text('Gagal memuat data', style: AppTextStyles.h4),
+          if (_error != null) ...[
+            const SizedBox(height: 4),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32),
+              child: Text(
+                _error!,
+                style: AppTextStyles.bodySmall,
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ],
           const SizedBox(height: 8),
           AppButton(
             label: 'Coba Lagi',
@@ -253,6 +344,10 @@ class _MilestoneTimelineItem extends StatefulWidget {
   final dynamic milestone;
   final int index;
   final bool isLast;
+
+  /// Milestone of the phase that is not running: shown, not editable.
+  final bool readOnly;
+  final StudentApiService api;
   final VoidCallback onUpdate;
 
   const _MilestoneTimelineItem({
@@ -260,6 +355,8 @@ class _MilestoneTimelineItem extends StatefulWidget {
     required this.index,
     required this.isLast,
     required this.onUpdate,
+    required this.api,
+    this.readOnly = false,
   });
 
   @override
@@ -267,7 +364,7 @@ class _MilestoneTimelineItem extends StatefulWidget {
 }
 
 class _MilestoneTimelineItemState extends State<_MilestoneTimelineItem> {
-  final _api = StudentApiService();
+  StudentApiService get _api => widget.api;
   bool _isUpdating = false;
   double _sliderValue = 0;
   bool _showSlider = false;
@@ -286,17 +383,35 @@ class _MilestoneTimelineItemState extends State<_MilestoneTimelineItem> {
   int get _progress =>
       (widget.milestone['progressPercentage'] as num?)?.toInt() ?? 0;
 
-  bool get _canUpdate =>
-      _status != 'completed';
+  /// As on web: progress is set only while the milestone is in progress.
+  bool get _canUpdate => !widget.readOnly && _status == 'in_progress';
+
+  /// "Mulai" starts a milestone that is not started or needs revision
+  /// (the transitions the backend accepts).
+  bool get _canStart =>
+      !widget.readOnly &&
+      (_status == 'not_started' || _status == 'revision_needed');
+
+  bool _isStarting = false;
 
   String get _deadline {
-    final raw = widget.milestone['deadline'] ?? widget.milestone['dueDate'];
+    final raw = widget.milestone['targetDate'];
     if (raw == null) return '';
     try {
       final dt = DateTime.parse(raw.toString());
       const months = [
-        'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
-        'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des',
+        'Jan',
+        'Feb',
+        'Mar',
+        'Apr',
+        'Mei',
+        'Jun',
+        'Jul',
+        'Agu',
+        'Sep',
+        'Okt',
+        'Nov',
+        'Des',
       ];
       return '${dt.day} ${months[dt.month - 1]} ${dt.year}';
     } catch (_) {
@@ -348,20 +463,50 @@ class _MilestoneTimelineItemState extends State<_MilestoneTimelineItem> {
     }
   }
 
-  String get _statusLabel {
-    switch (_status) {
-      case 'completed':
-        return 'Selesai';
-      case 'in_progress':
-        return 'Dikerjakan';
-      case 'pending_review':
-        return 'Menunggu Review';
-      case 'revision_needed':
-        return 'Perlu Revisi';
-      case 'not_started':
-        return 'Belum Dimulai';
-      default:
-        return _status;
+  String get _statusLabel => milestoneStatusLabel(_status);
+
+  /// Starts the milestone like the web "Mulai" button: a milestone without a
+  /// target date asks for one first, then the status becomes in_progress.
+  Future<void> _start() async {
+    DateTime? targetDate;
+    if (widget.milestone['targetDate'] == null) {
+      final now = DateTime.now();
+      targetDate = await showDatePicker(
+        context: context,
+        helpText: 'Target selesai milestone',
+        initialDate: now.add(const Duration(days: 14)),
+        firstDate: now,
+        lastDate: now.add(const Duration(days: 730)),
+      );
+      if (targetDate == null || !mounted) return;
+    }
+    setState(() => _isStarting = true);
+    try {
+      if (targetDate != null) {
+        await _api.updateMilestoneTargetDate(_milestoneId, targetDate);
+      }
+      await _api.updateMilestoneStatus(_milestoneId, status: 'in_progress');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Milestone berhasil dimulai'),
+          backgroundColor: AppColors.success,
+          duration: Duration(seconds: 2),
+        ),
+      );
+      widget.onUpdate();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            errorMessageOf(e, fallback: 'Gagal memulai milestone.'),
+          ),
+          backgroundColor: AppColors.destructive,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isStarting = false);
     }
   }
 
@@ -374,18 +519,15 @@ class _MilestoneTimelineItemState extends State<_MilestoneTimelineItem> {
 
     setState(() => _isUpdating = true);
     try {
-      await _api.updateMilestoneProgress(
+      // The backend moves the status with the progress: 100% submits the
+      // milestone to the supervisor for validation (pending_review).
+      final res = await _api.updateMilestoneProgress(
         _milestoneId,
         progressPercentage: newProgress,
       );
-
-      // If status is not_started and progress > 0, also update status
-      if (_status == 'not_started' && newProgress > 0) {
-        await _api.updateMilestoneStatus(
-          _milestoneId,
-          status: 'in_progress',
-        );
-      }
+      final data = res['data'];
+      final submitted =
+          data is Map && data['statusUpdated'] == 'pending_review';
 
       if (!mounted) return;
       setState(() {
@@ -395,27 +537,24 @@ class _MilestoneTimelineItemState extends State<_MilestoneTimelineItem> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Progress diperbarui ke $newProgress%'),
+          content: Text(
+            submitted
+                ? 'Progress 100%. Milestone diajukan ke pembimbing untuk divalidasi.'
+                : 'Progress diperbarui ke $newProgress%',
+          ),
           backgroundColor: AppColors.success,
-          duration: const Duration(seconds: 2),
+          duration: const Duration(seconds: 3),
         ),
       );
       widget.onUpdate();
-    } on ApiException catch (e) {
-      if (!mounted) return;
-      setState(() => _isUpdating = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(e.message),
-          backgroundColor: AppColors.destructive,
-        ),
-      );
     } catch (e) {
       if (!mounted) return;
       setState(() => _isUpdating = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Gagal memperbarui progress: $e'),
+          content: Text(
+            errorMessageOf(e, fallback: 'Gagal memperbarui progress.'),
+          ),
           backgroundColor: AppColors.destructive,
         ),
       );
@@ -446,7 +585,11 @@ class _MilestoneTimelineItemState extends State<_MilestoneTimelineItem> {
                   ),
                   child: Center(
                     child: _status == 'completed'
-                        ? const Icon(Icons.check, size: 14, color: AppColors.white)
+                        ? const Icon(
+                            Icons.check,
+                            size: 14,
+                            color: AppColors.white,
+                          )
                         : Text(
                             '${widget.index}',
                             style: AppTextStyles.labelSmall.copyWith(
@@ -485,19 +628,25 @@ class _MilestoneTimelineItemState extends State<_MilestoneTimelineItem> {
                   // Name + Badge row
                   Row(
                     children: [
-                      Expanded(
-                        child: Text(_name, style: AppTextStyles.label),
-                      ),
+                      Expanded(child: Text(_name, style: AppTextStyles.label)),
                       const SizedBox(width: 8),
-                      AppBadge(label: _statusLabel, variant: _statusBadgeVariant),
+                      AppBadge(
+                        label: _statusLabel,
+                        variant: _statusBadgeVariant,
+                      ),
                     ],
                   ),
+                  const SizedBox(height: 4),
+                  PhaseBadge(phase: widget.milestone['phase']),
                   if (_deadline.isNotEmpty) ...[
                     const SizedBox(height: 4),
                     Row(
                       children: [
-                        const Icon(Icons.access_time,
-                            size: 12, color: AppColors.textTertiary),
+                        const Icon(
+                          Icons.access_time,
+                          size: 12,
+                          color: AppColors.textTertiary,
+                        ),
                         const SizedBox(width: 4),
                         Text(_deadline, style: AppTextStyles.caption),
                       ],
@@ -522,6 +671,39 @@ class _MilestoneTimelineItemState extends State<_MilestoneTimelineItem> {
                   ),
 
                   // Update progress section (expandable)
+                  if (_canStart) ...[
+                    const SizedBox(height: AppSpacing.sm),
+                    SizedBox(
+                      height: 30,
+                      child: OutlinedButton.icon(
+                        key: ValueKey('milestone-start-$_milestoneId'),
+                        onPressed: _isStarting ? null : _start,
+                        icon: _isStarting
+                            ? const SizedBox(
+                                width: 12,
+                                height: 12,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.play_arrow_rounded, size: 15),
+                        label: const Text(
+                          'Mulai',
+                          style: TextStyle(fontSize: 11),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.primary,
+                          side: const BorderSide(color: AppColors.border),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(
+                              AppSpacing.buttonRadius,
+                            ),
+                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                        ),
+                      ),
+                    ),
+                  ],
                   if (_canUpdate) ...[
                     const SizedBox(height: AppSpacing.sm),
                     if (_showSlider) ...[
@@ -540,11 +722,12 @@ class _MilestoneTimelineItemState extends State<_MilestoneTimelineItem> {
                             child: SliderTheme(
                               data: SliderThemeData(
                                 activeTrackColor: AppColors.primary,
-                                inactiveTrackColor:
-                                    AppColors.primary.withValues(alpha: 0.15),
+                                inactiveTrackColor: AppColors.primary
+                                    .withValues(alpha: 0.15),
                                 thumbColor: AppColors.primary,
-                                overlayColor:
-                                    AppColors.primary.withValues(alpha: 0.12),
+                                overlayColor: AppColors.primary.withValues(
+                                  alpha: 0.12,
+                                ),
                                 trackHeight: 4,
                                 thumbShape: const RoundSliderThumbShape(
                                   enabledThumbRadius: 8,
@@ -575,13 +758,20 @@ class _MilestoneTimelineItemState extends State<_MilestoneTimelineItem> {
                                 }),
                                 style: OutlinedButton.styleFrom(
                                   foregroundColor: AppColors.textSecondary,
-                                  side: const BorderSide(color: AppColors.border),
+                                  side: const BorderSide(
+                                    color: AppColors.border,
+                                  ),
                                   shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(AppSpacing.buttonRadius),
+                                    borderRadius: BorderRadius.circular(
+                                      AppSpacing.buttonRadius,
+                                    ),
                                   ),
                                   padding: EdgeInsets.zero,
                                 ),
-                                child: const Text('Batal', style: TextStyle(fontSize: 12)),
+                                child: const Text(
+                                  'Batal',
+                                  style: TextStyle(fontSize: 12),
+                                ),
                               ),
                             ),
                           ),
@@ -601,12 +791,17 @@ class _MilestoneTimelineItemState extends State<_MilestoneTimelineItem> {
                                         ),
                                       )
                                     : const Icon(Icons.save_rounded, size: 14),
-                                label: const Text('Simpan', style: TextStyle(fontSize: 12)),
+                                label: const Text(
+                                  'Simpan',
+                                  style: TextStyle(fontSize: 12),
+                                ),
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: AppColors.primary,
                                   foregroundColor: AppColors.white,
                                   shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(AppSpacing.buttonRadius),
+                                    borderRadius: BorderRadius.circular(
+                                      AppSpacing.buttonRadius,
+                                    ),
                                   ),
                                   padding: EdgeInsets.zero,
                                 ),
@@ -621,13 +816,17 @@ class _MilestoneTimelineItemState extends State<_MilestoneTimelineItem> {
                         child: OutlinedButton.icon(
                           onPressed: () => setState(() => _showSlider = true),
                           icon: const Icon(Icons.edit_outlined, size: 13),
-                          label: const Text('Update', style: TextStyle(fontSize: 11)),
+                          label: const Text(
+                            'Update',
+                            style: TextStyle(fontSize: 11),
+                          ),
                           style: OutlinedButton.styleFrom(
                             foregroundColor: AppColors.primary,
                             side: const BorderSide(color: AppColors.border),
                             shape: RoundedRectangleBorder(
-                              borderRadius:
-                                  BorderRadius.circular(AppSpacing.buttonRadius),
+                              borderRadius: BorderRadius.circular(
+                                AppSpacing.buttonRadius,
+                              ),
                             ),
                             padding: const EdgeInsets.symmetric(horizontal: 10),
                           ),
@@ -637,7 +836,7 @@ class _MilestoneTimelineItemState extends State<_MilestoneTimelineItem> {
 
                   // Revision notes
                   if (_status == 'revision_needed' &&
-                      widget.milestone['revisionNotes'] != null) ...[
+                      widget.milestone['supervisorNotes'] != null) ...[
                     const SizedBox(height: AppSpacing.sm),
                     Container(
                       padding: const EdgeInsets.all(10),
@@ -648,8 +847,11 @@ class _MilestoneTimelineItemState extends State<_MilestoneTimelineItem> {
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Icon(Icons.info_outline,
-                              size: 14, color: AppColors.destructiveDark),
+                          const Icon(
+                            Icons.info_outline,
+                            size: 14,
+                            color: AppColors.destructiveDark,
+                          ),
                           const SizedBox(width: 6),
                           Expanded(
                             child: Column(
@@ -664,7 +866,8 @@ class _MilestoneTimelineItemState extends State<_MilestoneTimelineItem> {
                                 ),
                                 const SizedBox(height: 2),
                                 Text(
-                                  widget.milestone['revisionNotes'].toString(),
+                                  widget.milestone['supervisorNotes']
+                                      .toString(),
                                   style: AppTextStyles.bodySmall.copyWith(
                                     color: AppColors.destructiveDark,
                                     fontSize: 12,

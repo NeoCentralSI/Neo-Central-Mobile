@@ -1,19 +1,24 @@
+import 'dart:async';
 import 'dart:convert';
-import 'package:aad_oauth/aad_oauth.dart';
-import 'package:aad_oauth/model/config.dart';
+
+import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import '../../main.dart' show navigatorKey;
+import 'package:webview_flutter/webview_flutter.dart';
+
+import '../../features/auth/presentation/microsoft_login_page.dart';
+import '../../features/shell/notification_router.dart';
 import '../constants/app_config.dart';
 import '../models/auth_models.dart';
+import '../navigation/navigator_key.dart';
+import 'api_client.dart';
 import 'secure_storage_service.dart';
 
-/// Handles Microsoft OAuth login via aad_oauth (Azure AD purpose-built package).
+/// Sign-in, session restore and logout.
 ///
-/// Flow:
-/// 1. [AadOAuth.login] opens Microsoft login → handles MSAL quirks internally
-/// 2. Get MS access token via [AadOAuth.getAccessToken]
-/// 3. POST /auth/microsoft/mobile → receive our JWT
-/// 4. Persist JWT to secure storage
+/// Microsoft sign-in uses the backend's web OAuth flow, the same one the web
+/// app uses: `GET /auth/microsoft/login` opens in an in-app web page, the
+/// backend redirects back with a one-time code, and
+/// `POST /auth/microsoft/exchange` turns that code into our tokens.
 class AuthService {
   static final AuthService _instance = AuthService._internal();
   factory AuthService() => _instance;
@@ -21,152 +26,143 @@ class AuthService {
 
   final SecureStorageService _storage = SecureStorageService();
 
-  late final AadOAuth _aadOAuth = AadOAuth(_buildConfig());
+  static const _timeout = Duration(seconds: 20);
 
-  static Config _buildConfig() => Config(
-    tenant: AppConfig.msTenantId,
-    clientId: AppConfig.msClientId,
-    scope: AppConfig.msScopes.join(' '),
-    redirectUri: AppConfig.msRedirectUri,
-    navigatorKey: navigatorKey,
-  );
-
-  // ─────────────────────────────────────────────────────────────
-  // PUBLIC API
-  // ─────────────────────────────────────────────────────────────
-
-  /// Opens Microsoft login in a system Custom Tab via Azure AD.
-  /// Returns [AuthResult] containing our backend JWT and user profile.
+  /// Opens Microsoft sign-in. Throws when cancelled or rejected.
   Future<AuthResult> login() async {
-    await _aadOAuth.login();
-
-    final msAccessToken = await _aadOAuth.getAccessToken();
-    if (msAccessToken == null) {
-      throw Exception('Login Microsoft gagal atau dibatalkan.');
+    final navigator = navigatorKey.currentState;
+    if (navigator == null) {
+      throw const ApiException(0, 'Halaman login belum siap. Coba lagi.');
     }
+    final outcome = await navigator.push<MicrosoftLoginOutcome>(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => MicrosoftLoginPage(
+          startUrl: AppConfig.microsoftLoginUrl,
+          apiBaseUrl: AppConfig.baseUrl,
+        ),
+      ),
+    );
+    if (outcome == null) throw Exception('Login cancelled');
+    if (outcome.error != null) throw ApiException(0, outcome.error!);
 
-    try {
-      // 2. Send MS access token to our backend → receive our JWT
-      final response = await http
-          .post(
-            Uri.parse('${AppConfig.baseUrl}/auth/microsoft/mobile'),
-            headers: {'Content-Type': 'application/json'},
-            body: jsonEncode({'accessToken': msAccessToken}),
-          )
-          .timeout(const Duration(seconds: 15));
-
-      if (response.statusCode != 200) {
-        final body = jsonDecode(response.body) as Map<String, dynamic>;
-        final message = body['message'] ?? 'Authentication gagal.';
-        throw Exception(message);
-      }
-
-      final tokenData = jsonDecode(response.body) as Map<String, dynamic>;
-      final result = AuthResult.fromJson(tokenData);
-
-      // 3. Persist tokens
-      await _storage.saveAuthResult(result);
-
-      return result;
-    } on http.ClientException catch (_) {
-      throw Exception(
-        'Tidak dapat terhubung ke server. Periksa koneksi internet atau IP server.',
-      );
-    } catch (_) {
-      rethrow;
+    final body = await _postJson('/auth/microsoft/exchange', {
+      'code': outcome.code,
+    });
+    // Response: { success, data: { accessToken, refreshToken, user } }
+    final data = body['data'];
+    if (data is! Map) {
+      throw const ApiContractException('Respons login tidak valid.');
     }
+    final result = AuthResult.fromJson(Map<String, dynamic>.from(data));
+    await _storage.saveAuthResult(result);
+    return result;
   }
 
-  /// Standard Email & Password Login
+  /// Email and password sign-in (`POST /auth/login`).
+  /// Response: `{ success, user, accessToken, refreshToken }`.
   Future<AuthResult> loginWithEmail(String email, String password) async {
-    try {
-      final response = await http.post(
-        Uri.parse('${AppConfig.baseUrl}/auth/login'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'email': email,
-          'password': password,
-        }),
-      ).timeout(const Duration(seconds: 15));
-
-      if (response.statusCode != 200) {
-        final body = jsonDecode(response.body) as Map<String, dynamic>;
-        final message = body['message'] ?? 'Authentication gagal.';
-        throw Exception(message);
-      }
-
-      final tokenData = jsonDecode(response.body) as Map<String, dynamic>;
-      final result = AuthResult.fromJson(tokenData);
-
-      // Persist tokens
-      await _storage.saveAuthResult(result);
-
-      return result;
-    } on http.ClientException catch (_) {
-      throw Exception(
-        'Tidak dapat terhubung ke server. Periksa koneksi internet atau IP server.',
-      );
-    } catch (_) {
-      rethrow;
-    }
+    final body = await _postJson('/auth/login', {
+      'email': email,
+      'password': password,
+    });
+    final result = AuthResult.fromJson(body);
+    await _storage.saveAuthResult(result);
+    return result;
   }
 
-
-  /// Returns a persisted [AuthResult] if the user is already logged in.
+  /// Restores the saved session, or returns null when the user must sign in.
   ///
-  /// Checks two layers:
-  /// 1. Our own JWT in flutter_secure_storage (fast path)
-  /// 2. aad_oauth's cached MS token → silently re-auth with backend (fallback)
+  /// The saved profile is refreshed from `GET /auth/me` when the server is
+  /// reachable, so role changes (for example a new Kadep) apply on start.
   Future<AuthResult?> tryAutoLogin() async {
-    // ── Fast path: check our own persisted JWT ──
-    final isLoggedIn = await _storage.isLoggedIn();
-    if (isLoggedIn) {
-      final token = await _storage.getAccessToken();
-      final refreshToken = await _storage.getRefreshToken();
-      final user = await _storage.getUser();
+    if (!await _storage.isLoggedIn()) return null;
+    final token = await _storage.getAccessToken();
+    final refreshToken = await _storage.getRefreshToken();
+    final saved = await _storage.getUser();
+    if (token == null || refreshToken == null || saved == null) return null;
 
-      if (token != null && refreshToken != null && user != null) {
-        return AuthResult(
-          accessToken: token,
-          refreshToken: refreshToken,
-          user: user,
-        );
-      }
-    }
-
-    // ── Fallback: try silent re-auth via aad_oauth cached MS token ──
-    // This covers the case where the app was killed (recent apps cleared)
-    // and flutter_secure_storage lost its data, but aad_oauth still has
-    // a valid cached Microsoft token.
+    var user = saved;
     try {
-      final msAccessToken = await _aadOAuth.getAccessToken();
-      if (msAccessToken == null) return null;
-
-      // Exchange cached MS token for our backend JWT
-      final response = await http.post(
-        Uri.parse('${AppConfig.baseUrl}/auth/microsoft/mobile'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'accessToken': msAccessToken}),
-      );
-
-      if (response.statusCode != 200) return null;
-
-      final tokenData = jsonDecode(response.body) as Map<String, dynamic>;
-      final result = AuthResult.fromJson(tokenData);
-
-      // Re-persist so next cold start uses the fast path
-      await _storage.saveAuthResult(result);
-
-      return result;
-    } catch (_) {
-      // aad_oauth has no cached token or it's expired → user needs to login
+      final res = await ApiClient().get('/auth/me');
+      final fresh = res is Map ? res['user'] : null;
+      if (fresh is Map) {
+        user = UserModel.fromJson(Map<String, dynamic>.from(fresh));
+      }
+    } on UnauthorizedApiException {
+      // The refresh token is no longer valid either.
+      await _storage.clearAll();
       return null;
+    } catch (_) {
+      // Offline or server error: keep the saved profile.
     }
+
+    final result = AuthResult(
+      accessToken: await _storage.getAccessToken() ?? token,
+      refreshToken: await _storage.getRefreshToken() ?? refreshToken,
+      user: user,
+    );
+    await _storage.saveAuthResult(result);
+    return result;
   }
 
-  /// Clears all stored tokens (both ours and aad_oauth cache).
+  /// Signs out on the backend (best effort) and clears the session, including
+  /// the Microsoft cookies of the sign-in page.
   Future<void> logout() async {
-    await _aadOAuth.logout();
+    NotificationRouter.instance.detach();
+    try {
+      await ApiClient()
+          .post('/auth/logout')
+          .timeout(const Duration(seconds: 5));
+    } catch (_) {}
+    try {
+      await WebViewCookieManager().clearCookies();
+    } catch (_) {}
     await _storage.clearAll();
+  }
+
+  Future<Map<String, dynamic>> _postJson(
+    String path,
+    Map<String, dynamic> payload,
+  ) async {
+    final http.Response response;
+    try {
+      response = await http
+          .post(
+            Uri.parse('${AppConfig.baseUrl}$path'),
+            headers: const {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+            body: jsonEncode(payload),
+          )
+          .timeout(_timeout);
+    } on TimeoutException {
+      throw const NetworkApiException(
+        'Permintaan ke server melewati batas waktu.',
+      );
+    } on http.ClientException {
+      throw const NetworkApiException(
+        'Tidak dapat terhubung ke server. Periksa koneksi internet.',
+      );
+    }
+
+    Object? decoded;
+    try {
+      decoded = jsonDecode(utf8.decode(response.bodyBytes));
+    } catch (_) {
+      decoded = null;
+    }
+    final body = decoded is Map
+        ? Map<String, dynamic>.from(decoded)
+        : <String, dynamic>{};
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      final message = body['message']?.toString();
+      throw ApiException(
+        response.statusCode,
+        message == null || message.isEmpty ? 'Authentication gagal.' : message,
+      );
+    }
+    return body;
   }
 }

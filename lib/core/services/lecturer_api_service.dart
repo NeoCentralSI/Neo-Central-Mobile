@@ -4,11 +4,14 @@ import 'api_client.dart';
 ///
 /// Base path: /thesisGuidance/lecturer
 class LecturerApiService {
-  static final LecturerApiService _instance = LecturerApiService._internal();
+  static final LecturerApiService _instance = LecturerApiService._(ApiClient());
   factory LecturerApiService() => _instance;
-  LecturerApiService._internal();
+  LecturerApiService._(this._api);
 
-  final ApiClient _api = ApiClient();
+  /// For tests.
+  LecturerApiService.withClient(ApiClient api) : _api = api;
+
+  final ApiClient _api;
   static const _base = '/thesisGuidance/lecturer';
 
   // ── My Students ─────────────────────────────────────────────
@@ -49,24 +52,11 @@ class LecturerApiService {
 
   // ── Guidance Requests ───────────────────────────────────────
 
-  /// GET /thesisGuidance/lecturer/requests
-  /// Returns pending guidance requests from students.
-  Future<List<dynamic>> getRequests() async {
-    final res = await _api.get('$_base/requests');
-    if (res is List) return res;
-    if (res is Map) {
-      if (res.containsKey('requests') && res['requests'] is List) {
-        return res['requests'] as List;
-      }
-      if (res.containsKey('data') && res['data'] is List) {
-        return res['data'] as List;
-      }
-      if (res.containsKey('items') && res['items'] is List) {
-        return res['items'] as List;
-      }
-    }
-    return [];
-  }
+  /// GET /thesisGuidance/lecturer/requests?page=&pageSize=
+  /// Pending guidance requests. The backend pages the list (at most 50 per
+  /// page), so every page is read. Response: `{ total, totalPages, requests }`.
+  Future<List<dynamic>> getRequests() =>
+      _readAllPages('$_base/requests', 'requests');
 
   /// PATCH /thesisGuidance/lecturer/requests/:guidanceId/approve
   /// Approves a guidance request.
@@ -78,7 +68,10 @@ class LecturerApiService {
     if (feedback != null && feedback.trim().isNotEmpty) {
       body['feedback'] = feedback;
     }
-    final res = await _api.patch('$_base/requests/$guidanceId/approve', body: body);
+    final res = await _api.patch(
+      '$_base/requests/$guidanceId/approve',
+      body: body,
+    );
     if (res is Map<String, dynamic>) return res;
     return {'success': true};
   }
@@ -93,90 +86,52 @@ class LecturerApiService {
     if (feedback != null && feedback.trim().isNotEmpty) {
       body['feedback'] = feedback;
     }
-    final res = await _api.patch('$_base/requests/$guidanceId/reject', body: body);
+    final res = await _api.patch(
+      '$_base/requests/$guidanceId/reject',
+      body: body,
+    );
     if (res is Map<String, dynamic>) return res;
     return {'success': true};
   }
 
-  /// GET /thesisGuidance/lecturer/scheduled
-  /// Returns scheduled (approved) guidance sessions.
-  Future<List<dynamic>> getScheduledGuidances() async {
-    final res = await _api.get('$_base/scheduled');
-    if (res is List) return res;
-    if (res is Map) {
-      if (res.containsKey('guidances') && res['guidances'] is List) {
-        return res['guidances'] as List;
-      }
-      if (res.containsKey('data') && res['data'] is List) {
-        return res['data'] as List;
-      }
-      if (res.containsKey('items') && res['items'] is List) {
-        return res['items'] as List;
-      }
-    }
-    return [];
-  }
+  /// GET /thesisGuidance/lecturer/scheduled?page=&pageSize=
+  /// Response: `{ total, totalPages, guidances }`.
+  Future<List<dynamic>> getScheduledGuidances() =>
+      _readAllPages('$_base/scheduled', 'guidances');
 
   // ── Session Summary Approval ────────────────────────────────
 
-  /// GET /thesisGuidance/lecturer/pending-approval
-  /// Returns guidance sessions with summaries pending lecturer approval.
-  Future<List<dynamic>> getPendingApproval() async {
-    final res = await _api.get('$_base/pending-approval');
-    if (res is List) return res;
-    if (res is Map) {
-      if (res.containsKey('guidances') && res['guidances'] is List) {
-        return res['guidances'] as List;
-      }
-      if (res.containsKey('data') && res['data'] is List) {
-        return res['data'] as List;
-      }
-      if (res.containsKey('items') && res['items'] is List) {
-        return res['items'] as List;
-      }
-    }
-    return [];
-  }
+  /// GET /thesisGuidance/lecturer/pending-approval?page=&pageSize=
+  /// Session summaries waiting for approval.
+  /// Response: `{ total, page, pageSize, guidances }`.
+  Future<List<dynamic>> getPendingApproval() =>
+      _readAllPages('$_base/pending-approval', 'guidances');
 
   // ── Guidance History for a Student ──────────────────────────
 
   /// GET /thesisGuidance/lecturer/guidance-history/:studentId
-  /// Returns guidance sessions for a specific student.
+  /// Response: `{ count, items }`.
   Future<List<dynamic>> getGuidanceHistory(String studentId) async {
     final res = await _api.get('$_base/guidance-history/$studentId');
-    if (res is List) {
-      return res;
-    }
-    if (res is Map && res.containsKey('guidances')) {
-      return res['guidances'] as List;
-    }
-    if (res is Map && res.containsKey('data')) {
-      return res['data'] as List;
-    }
+    if (res is Map && res['items'] is List) return res['items'] as List;
     return [];
   }
 
   // ── Progress ────────────────────────────────────────────────
 
   /// GET /thesisGuidance/lecturer/progress
-  /// Returns milestone progress for all students.
+  /// Response: `{ totalComponents, items: [{ thesisId, validated, total }] }`.
   Future<List<dynamic>> getProgress() async {
     final res = await _api.get('$_base/progress');
-    if (res is List) {
-      return res;
-    }
-    if (res is Map && res.containsKey('students')) {
-      return res['students'] as List;
-    }
-    if (res is Map && res.containsKey('data')) {
-      return res['data'] as List;
-    }
+    if (res is Map && res['items'] is List) return res['items'] as List;
     return [];
   }
 
   /// GET /thesisGuidance/lecturer/progress/:studentId
   /// Returns detailed milestone progress for a specific student.
-  Future<Map<String, dynamic>> getStudentProgressDetail(String studentId) async {
+  Future<Map<String, dynamic>> getStudentProgressDetail(
+    String studentId,
+  ) async {
     final res = await _api.get('$_base/progress/$studentId');
     return res as Map<String, dynamic>;
   }
@@ -185,77 +140,6 @@ class LecturerApiService {
   /// Approves the student's 100% completion for seminar readiness.
   Future<void> finalApproval(String studentId) async {
     await _api.patch('$_base/progress/$studentId/final-approval', body: {});
-  }
-
-  // ── Transfers ───────────────────────────────────────────────
-
-  /// GET /thesisGuidance/lecturer/transfer/incoming
-  /// Returns list of incoming student transfer requests.
-  Future<List<dynamic>> getIncomingTransfers() async {
-    final res = await _api.get('$_base/transfer/incoming');
-    if (res is List) return res;
-    if (res is Map) {
-      if (res.containsKey('data') && res['data'] is List) {
-        return res['data'] as List;
-      }
-      if (res.containsKey('items') && res['items'] is List) {
-        return res['items'] as List;
-      }
-      if (res.containsKey('requests') && res['requests'] is List) {
-        return res['requests'] as List;
-      }
-    }
-    return [];
-  }
-
-  /// PATCH /thesisGuidance/lecturer/transfer/:notificationId/approve
-  Future<void> approveTransfer(String notificationId) async {
-    await _api.patch('$_base/transfer/$notificationId/approve', body: {});
-  }
-
-  /// PATCH /thesisGuidance/lecturer/transfer/:notificationId/reject
-  Future<void> rejectTransfer(String notificationId, String reason) async {
-    await _api.patch(
-      '$_base/transfer/$notificationId/reject',
-      body: {'reviewNotes': reason},
-    );
-  }
-
-  // ── Topic Changes ───────────────────────────────────────────
-
-  /// GET /thesis-change-requests/lecturer/pending
-  /// Returns all topic change requests pending for this lecturer.
-  Future<List<dynamic>> getPendingTopicChanges() async {
-    final res = await _api.get('/thesis-change-requests/lecturer/pending');
-    if (res is List) return res;
-    if (res is Map) {
-      if (res.containsKey('data') && res['data'] is List) {
-        return res['data'] as List;
-      }
-      if (res.containsKey('items') && res['items'] is List) {
-        return res['items'] as List;
-      }
-      if (res.containsKey('requests') && res['requests'] is List) {
-        return res['requests'] as List;
-      }
-    }
-    return [];
-  }
-
-  /// POST /thesis-change-requests/:requestId/review
-  Future<void> approveTopicChange(String requestId, String notes) async {
-    await _api.post(
-      '/thesis-change-requests/$requestId/review',
-      body: {'status': 'approved', 'notes': notes},
-    );
-  }
-
-  /// POST /thesis-change-requests/:requestId/review
-  Future<void> rejectTopicChange(String requestId, String notes) async {
-    await _api.post(
-      '/thesis-change-requests/$requestId/review',
-      body: {'status': 'rejected', 'notes': notes},
-    );
   }
 
   // ── Session Summary Actions ─────────────────────────────────
@@ -331,7 +215,10 @@ class LecturerApiService {
     if (notes != null && notes.trim().isNotEmpty) {
       body['supervisorNotes'] = notes;
     }
-    final res = await _api.post('/milestones/$milestoneId/validate', body: body);
+    final res = await _api.post(
+      '/milestones/$milestoneId/validate',
+      body: body,
+    );
     if (res is Map<String, dynamic>) return res;
     return {'success': true};
   }
@@ -354,5 +241,29 @@ class LecturerApiService {
   /// Sends a warning notification to the student.
   Future<void> sendWarningNotification(String thesisId) async {
     await _api.post('$_base/my-students/$thesisId/send-warning', body: {});
+  }
+
+  /// Reads every page of a paged list endpoint (page size 50, the backend
+  /// maximum), stopping at `totalPages` or at a short page.
+  Future<List<dynamic>> _readAllPages(String path, String key) async {
+    const pageSize = 50;
+    const maxPages = 20;
+    final all = <dynamic>[];
+    for (var page = 1; page <= maxPages; page++) {
+      final res = await _api.get(
+        path,
+        queryParams: {'page': '$page', 'pageSize': '$pageSize'},
+      );
+      if (res is! Map) break;
+      final items = res[key];
+      if (items is! List) break;
+      all.addAll(items);
+      final totalPages = res['totalPages'];
+      final total = res['total'];
+      if (totalPages is num && page >= totalPages) break;
+      if (total is num && all.length >= total) break;
+      if (items.length < pageSize) break;
+    }
+    return all;
   }
 }

@@ -1,144 +1,127 @@
 import 'dart:convert';
-import 'package:flutter_test/flutter_test.dart';
 
-/// Tests for the response handling patterns in NotificationApiService.
-///
-/// NotificationApiService uses raw `http` package (not ApiClient),
-/// so we test the response parsing logic independently.
+import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+import 'package:neocentral/core/services/api_client.dart';
+import 'package:neocentral/core/services/notification_api_service.dart';
+import 'package:neocentral/core/services/secure_storage_service.dart';
+import 'package:neocentral/core/services/token_store.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+class _MemoryTokenStore implements TokenStore {
+  final values = <String, String>{};
+
+  @override
+  Future<void> delete(String key) async => values.remove(key);
+
+  @override
+  Future<String?> read(String key) async => values[key];
+
+  @override
+  Future<void> write(String key, String value) async => values[key] = value;
+}
+
 void main() {
-  // Helper: simulates getNotifications response parsing
-  Map<String, dynamic> parseNotificationsResponse(String body) {
-    final bodyMap = jsonDecode(body) as Map<String, dynamic>;
-    return {
-      'notifications': (bodyMap['notifications'] as List<dynamic>?) ?? [],
-      'unreadCount': (bodyMap['unreadCount'] as int?) ?? 0,
-      'total': (bodyMap['total'] as int?) ?? 0,
-    };
+  late List<http.Request> requests;
+
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+    requests = [];
+  });
+
+  NotificationApiService serviceWith(
+    http.Response Function(http.Request request) handler,
+  ) {
+    final client = MockClient((request) async {
+      requests.add(request);
+      return handler(request);
+    });
+    return NotificationApiService.withClient(
+      ApiClient.withDependencies(
+        httpClient: client,
+        storage: SecureStorageService(tokenStore: _MemoryTokenStore()),
+        baseUrl: 'https://example.test',
+        timeout: const Duration(seconds: 2),
+      ),
+    );
   }
 
-  // ─── getNotifications parsing ─────────────────────────────
+  test('getNotifications sends paging and parses the list', () async {
+    final service = serviceWith(
+      (_) => http.Response(
+        jsonEncode({
+          'success': true,
+          'notifications': [
+            {'id': 'n1', 'title': 'A', 'isRead': false, 'type': null},
+          ],
+          'unreadCount': 1,
+          'total': 1,
+        }),
+        200,
+      ),
+    );
 
-  group('getNotifications response parsing', () {
-    test('parses complete response', () {
-      final body = jsonEncode({
-        'success': true,
-        'notifications': [
-          {'id': 'n1', 'title': 'Test', 'isRead': false},
-          {'id': 'n2', 'title': 'Test2', 'isRead': true},
-        ],
-        'unreadCount': 1,
-        'total': 2,
-      });
+    final result = await service.getNotifications(limit: 20, offset: 40);
 
-      final result = parseNotificationsResponse(body);
-      expect((result['notifications'] as List).length, 2);
-      expect(result['unreadCount'], 1);
-      expect(result['total'], 2);
+    expect(requests.single.url.path, '/notification');
+    expect(requests.single.url.queryParameters, {
+      'limit': '20',
+      'offset': '40',
     });
-
-    test('handles missing notifications key', () {
-      final body = jsonEncode({'success': true});
-      final result = parseNotificationsResponse(body);
-      expect(result['notifications'], isEmpty);
-      expect(result['unreadCount'], 0);
-      expect(result['total'], 0);
-    });
-
-    test('handles null unreadCount', () {
-      final body = jsonEncode({
-        'notifications': [],
-        'unreadCount': null,
-        'total': null,
-      });
-      final result = parseNotificationsResponse(body);
-      expect(result['unreadCount'], 0);
-      expect(result['total'], 0);
-    });
+    expect((result['notifications'] as List).length, 1);
+    expect(result['unreadCount'], 1);
   });
 
-  // ─── getUnreadCount parsing ───────────────────────────────
+  test('getNotifications tolerates missing fields', () async {
+    final service = serviceWith(
+      (_) => http.Response(jsonEncode({'success': true}), 200),
+    );
 
-  group('getUnreadCount response parsing', () {
-    test('extracts unreadCount from response', () {
-      final body = jsonDecode(jsonEncode({
-        'success': true,
-        'unreadCount': 5,
-      })) as Map<String, dynamic>;
+    final result = await service.getNotifications();
 
-      final count = (body['unreadCount'] as int?) ?? 0;
-      expect(count, 5);
-    });
-
-    test('defaults to 0 when unreadCount missing', () {
-      final body = jsonDecode(jsonEncode({
-        'success': true,
-      })) as Map<String, dynamic>;
-
-      final count = (body['unreadCount'] as int?) ?? 0;
-      expect(count, 0);
-    });
+    expect(result['notifications'], isEmpty);
+    expect(result['unreadCount'], 0);
   });
 
-  // ─── Error handling patterns ──────────────────────────────
+  test('getUnreadCount returns 0 on failure', () async {
+    final service = serviceWith(
+      (_) => http.Response(jsonEncode({'message': 'down'}), 500),
+    );
 
-  group('error handling', () {
-    test('getNotifications throws on non-200', () {
-      // Simulates what the service does on non-200 response
-      void checkStatus(int statusCode) {
-        if (statusCode != 200) {
-          throw Exception('Gagal mengambil notifikasi');
-        }
-      }
+    expect(await service.getUnreadCount(), 0);
+  });
 
-      expect(() => checkStatus(500), throwsException);
-      expect(() => checkStatus(401), throwsException);
-      expect(() => checkStatus(200), returnsNormally);
-    });
+  test('a rejection keeps the backend message', () async {
+    final service = serviceWith(
+      (_) => http.Response(
+        jsonEncode({'success': false, 'message': 'Notification not found'}),
+        404,
+      ),
+    );
 
-    test('markAsRead throws on non-200', () {
-      void checkStatus(int statusCode) {
-        if (statusCode != 200) {
-          throw Exception(
-              'Gagal menandai notifikasi sebagai sudah dibaca');
-        }
-      }
+    await expectLater(
+      service.markAsRead('x'),
+      throwsA(
+        isA<ApiException>().having(
+          (e) => e.message,
+          'message',
+          'Notification not found',
+        ),
+      ),
+    );
+    expect(requests.single.method, 'PATCH');
+    expect(requests.single.url.path, '/notification/x/read');
+  });
 
-      expect(() => checkStatus(404), throwsException);
-      expect(() => checkStatus(200), returnsNormally);
-    });
+  test('deleteAllNotifications calls DELETE /notification/all', () async {
+    final service = serviceWith(
+      (_) => http.Response(jsonEncode({'success': true}), 200),
+    );
 
-    test('markAllAsRead throws on non-200', () {
-      void checkStatus(int statusCode) {
-        if (statusCode != 200) {
-          throw Exception(
-              'Gagal menandai semua notifikasi sebagai sudah dibaca');
-        }
-      }
+    await service.deleteAllNotifications();
 
-      expect(() => checkStatus(500), throwsException);
-      expect(() => checkStatus(200), returnsNormally);
-    });
-
-    test('deleteNotification throws on non-200', () {
-      void checkStatus(int statusCode) {
-        if (statusCode != 200) {
-          throw Exception('Gagal menghapus notifikasi');
-        }
-      }
-
-      expect(() => checkStatus(403), throwsException);
-      expect(() => checkStatus(200), returnsNormally);
-    });
-
-    test('deleteAllNotifications throws on non-200', () {
-      void checkStatus(int statusCode) {
-        if (statusCode != 200) {
-          throw Exception('Gagal menghapus semua notifikasi');
-        }
-      }
-
-      expect(() => checkStatus(500), throwsException);
-      expect(() => checkStatus(200), returnsNormally);
-    });
+    expect(requests.single.method, 'DELETE');
+    expect(requests.single.url.path, '/notification/all');
   });
 }

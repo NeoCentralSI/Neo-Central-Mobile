@@ -2,16 +2,7 @@ import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/enums/user_role.dart';
 import '../../core/models/auth_models.dart';
-import '../../core/services/fcm_service.dart';
-import '../../core/utils/notification_helpers.dart';
-import '../announcement/presentation/announcement_screen.dart';
-import '../defence/presentation/defence_detail_screen.dart';
-import '../defence/presentation/lecturer_defence_screen.dart';
-import '../hod/presentation/assign_examiner_screen.dart';
 import '../profile/presentation/profile_screen.dart';
-import '../seminar/presentation/lecturer_seminar_screen.dart';
-import '../seminar/presentation/seminar_detail_screen.dart';
-import '../yudisium/presentation/yudisium_overview_screen.dart';
 
 // Import screens - lecturer
 import '../guidance/presentation/lecturer/guidance_requests_screen.dart';
@@ -22,107 +13,41 @@ import '../guidance/presentation/lecturer/lecturer_dashboard_screen.dart';
 import '../guidance/presentation/student/student_dashboard_screen.dart';
 import '../guidance/presentation/student/guidance_schedule_screen.dart';
 import '../guidance/presentation/student/guidance_history_screen.dart';
+import '../guidance/presentation/student/milestone_progress_screen.dart';
+import 'student_nav_bar.dart';
 
-/// Main app shell providing bottom navigation for each role.
+/// Tugas Akhir shell (Bimbingan and Milestone) with bottom navigation.
+///
+/// Lecturers, including those who are also Ketua or Sekretaris Departemen,
+/// get the lecturer tabs; students get the student tabs. Notification taps
+/// are routed app-wide by `NotificationRouter`.
 class MainShell extends StatefulWidget {
   final UserRole userRole;
   final UserModel? user;
-  const MainShell({super.key, required this.userRole, this.user});
+
+  /// Bottom tab to open first.
+  final int initialIndex;
+
+  /// Lecturer only: tab of Approval Bimbingan to open first
+  /// (0 Permintaan, 1 Catatan, 2 Milestone).
+  final int initialSubTab;
+
+  const MainShell({
+    super.key,
+    required this.userRole,
+    this.user,
+    this.initialIndex = 0,
+    this.initialSubTab = 0,
+  });
 
   @override
   State<MainShell> createState() => _MainShellState();
 }
 
 class _MainShellState extends State<MainShell> {
-  int _currentIndex = 0;
-  int _initialSubTab = 0;
+  late int _currentIndex = widget.initialIndex;
+  late int _initialSubTab = widget.initialSubTab;
   int _approvalReloadKey = 0;
-  final _fcm = FcmService();
-
-  @override
-  void initState() {
-    super.initState();
-    _fcm.addOpenListener(_onNotificationOpened);
-  }
-
-  @override
-  void dispose() {
-    _fcm.removeOpenListener(_onNotificationOpened);
-    super.dispose();
-  }
-
-  /// Deep-link from FCM tap into the relevant lecturer/HoD screen + tab.
-  ///
-  /// Notification `type` values (see services/src/services/thesis-{seminar,
-  /// defence}/{doc,examiner}.service.js):
-  ///   • seminar_examiner_assigned    — any lecturer assigned as examiner
-  ///                                    → Seminar Hasil ▸ Menguji Mahasiswa
-  ///   • defence_examiner_assigned    — any lecturer assigned as examiner
-  ///                                    → Sidang TA ▸ Menguji Mahasiswa
-  ///   • seminar_need_examiner        — HoD only: doc verified, first assign
-  ///   • seminar_examiner_unavailable — HoD only: an examiner rejected
-  ///   • defence_need_examiner        — HoD only: defence variant
-  ///   • defence_examiner_unavailable — HoD only: defence variant
-  void _onNotificationOpened(Map<String, dynamic> data) {
-    final type = data['type']?.toString();
-    if (type == null) return;
-
-    // Defer navigation so it never races with an in-progress route transition
-    // (e.g. the pushReplacement from AuthGate is still animating on cold start,
-    // and Flutter will silently drop a push issued mid-transition).
-    Future.delayed(const Duration(milliseconds: 400), () {
-      if (!mounted) return;
-
-      final seminarId = data['seminarId']?.toString();
-      final defenceId = data['defenceId']?.toString();
-      final destination = resolveNotificationDestination(
-        type: type,
-        userRole: widget.userRole,
-        seminarId: seminarId,
-        defenceId: defenceId,
-      );
-      final route = switch (destination) {
-        NotificationDestination.seminarAnnouncement => MaterialPageRoute(
-          builder: (_) => AnnouncementScreen(user: widget.user),
-        ),
-        NotificationDestination.seminarDetail => MaterialPageRoute(
-          builder: (_) =>
-              SeminarDetailScreen(seminarId: seminarId!, user: widget.user),
-        ),
-        NotificationDestination.defenceDetail => MaterialPageRoute(
-          builder: (_) =>
-              DefenceDetailScreen(defenceId: defenceId!, user: widget.user),
-        ),
-        NotificationDestination.yudisiumOverview => MaterialPageRoute(
-          builder: (_) => YudisiumOverviewScreen(user: widget.user),
-        ),
-        NotificationDestination.lecturerSeminar => MaterialPageRoute(
-          builder: (_) => LecturerSeminarScreen(
-            user: widget.user,
-            initialTab: 'menguji_mahasiswa',
-          ),
-        ),
-        NotificationDestination.lecturerDefence => MaterialPageRoute(
-          builder: (_) => LecturerDefenceScreen(
-            user: widget.user,
-            initialTab: 'menguji_mahasiswa',
-          ),
-        ),
-        NotificationDestination.assignSeminarExaminer => MaterialPageRoute(
-          builder: (_) => AssignExaminerScreen(
-            user: widget.user,
-            initialTab: 'seminar_hasil',
-          ),
-        ),
-        NotificationDestination.assignDefenceExaminer => MaterialPageRoute(
-          builder: (_) =>
-              AssignExaminerScreen(user: widget.user, initialTab: 'sidang_ta'),
-        ),
-        NotificationDestination.none => null,
-      };
-      if (route != null) Navigator.of(context).push(route);
-    });
-  }
 
   void _switchTab(int index, {int initialTab = 0}) {
     setState(() {
@@ -143,20 +68,37 @@ class _MainShellState extends State<MainShell> {
     ProfileScreen(user: widget.user),
   ];
 
+  /// Student tabs: Beranda, Bimbingan, Milestone, Profil. Ajukan Bimbingan
+  /// is the round button in the middle of the bar, not a tab.
   List<Widget> get _studentPages => [
     StudentDashboardScreen(user: widget.user, onSwitchTab: _switchTab),
-    GuidanceScheduleScreen(isTab: true, user: widget.user),
-    GuidanceHistoryScreen(isTab: true, user: widget.user),
+    GuidanceHistoryScreen(
+      key: ValueKey('history_$_historyReloadKey'),
+      isTab: true,
+      user: widget.user,
+    ),
+    MilestoneProgressScreen(isTab: true, user: widget.user),
     ProfileScreen(user: widget.user),
   ];
 
-  /// Head of Department is "Lecturer+" on mobile (see docs/neocentral-mobile.md
-  /// §2) — render the lecturer page set, not student. Without this, HoD users
-  /// landing on MainShell from AuthGate/login (which passes the real
-  /// appRole) would hit StudentDashboardScreen → 403 from student-only APIs.
-  bool get _isLecturerLike =>
-      widget.userRole == UserRole.lecturer ||
-      widget.userRole == UserRole.headOfDepartment;
+  int _historyReloadKey = 0;
+
+  /// Opens Ajukan Bimbingan; after a request is sent, shows it in Bimbingan.
+  Future<void> _openGuidanceRequest() async {
+    final sent = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => GuidanceScheduleScreen(user: widget.user),
+      ),
+    );
+    if (sent == true && mounted) {
+      setState(() {
+        _historyReloadKey++;
+        _currentIndex = 1;
+      });
+    }
+  }
+
+  bool get _isLecturerLike => widget.userRole == UserRole.lecturer;
 
   List<Widget> get _pages => _isLecturerLike ? _lecturerPages : _studentPages;
 
@@ -169,7 +111,7 @@ class _MainShellState extends State<MainShell> {
     NavigationDestination(
       icon: Icon(Icons.check_circle_outline),
       selectedIcon: Icon(Icons.check_circle),
-      label: 'Approval',
+      label: 'Persetujuan',
     ),
     NavigationDestination(
       icon: Icon(Icons.group_outlined),
@@ -183,34 +125,42 @@ class _MainShellState extends State<MainShell> {
     ),
   ];
 
-  List<NavigationDestination> get _studentDestinations => const [
-    NavigationDestination(
-      icon: Icon(Icons.home_outlined),
-      selectedIcon: Icon(Icons.home),
+  static const _studentItems = [
+    StudentNavItem(
+      icon: Icons.home_outlined,
+      selectedIcon: Icons.home,
       label: 'Beranda',
     ),
-    NavigationDestination(
-      icon: Icon(Icons.calendar_today_outlined),
-      selectedIcon: Icon(Icons.calendar_today),
-      label: 'Jadwalkan',
+    StudentNavItem(
+      icon: Icons.forum_outlined,
+      selectedIcon: Icons.forum,
+      label: 'Bimbingan',
     ),
-    NavigationDestination(
-      icon: Icon(Icons.history_outlined),
-      selectedIcon: Icon(Icons.history),
-      label: 'Riwayat',
+    StudentNavItem(
+      icon: Icons.flag_outlined,
+      selectedIcon: Icons.flag,
+      label: 'Milestone',
     ),
-    NavigationDestination(
-      icon: Icon(Icons.person_outline),
-      selectedIcon: Icon(Icons.person),
+    StudentNavItem(
+      icon: Icons.person_outline,
+      selectedIcon: Icons.person,
       label: 'Profil',
     ),
   ];
 
   @override
   Widget build(BuildContext context) {
-    final destinations = _isLecturerLike
-        ? _lecturerDestinations
-        : _studentDestinations;
+    if (!_isLecturerLike) {
+      return Scaffold(
+        body: IndexedStack(index: _currentIndex, children: _pages),
+        bottomNavigationBar: StudentNavBar(
+          items: _studentItems,
+          selectedIndex: _currentIndex,
+          onSelected: (i) => setState(() => _currentIndex = i),
+          onCenterPressed: _openGuidanceRequest,
+        ),
+      );
+    }
 
     return Scaffold(
       body: IndexedStack(index: _currentIndex, children: _pages),
@@ -239,7 +189,7 @@ class _MainShellState extends State<MainShell> {
             elevation: 0,
             indicatorColor: AppColors.primary.withValues(alpha: 0.12),
             labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-            destinations: destinations,
+            destinations: _lecturerDestinations,
           ),
         ),
       ),

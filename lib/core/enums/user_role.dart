@@ -1,9 +1,10 @@
-/// User role enum for the NeoCentral app
+/// Role the mobile app is built around.
+///
+/// Department roles (Ketua Departemen, Sekretaris Departemen, and so on) are
+/// lecturers on mobile: they get the lecturer menu and nothing extra.
 enum UserRole {
   student,
   lecturer,
-  staff,
-  headOfDepartment,
   admin;
 
   String get displayName {
@@ -12,10 +13,6 @@ enum UserRole {
         return 'Mahasiswa';
       case UserRole.lecturer:
         return 'Dosen';
-      case UserRole.staff:
-        return 'Staff';
-      case UserRole.headOfDepartment:
-        return 'Ketua Departemen';
       case UserRole.admin:
         return 'Admin';
     }

@@ -9,6 +9,7 @@ import '../../../../core/utils/formatters.dart' as fmt;
 import '../../../../shared/widgets/shared_widgets.dart';
 import '../../../../core/widgets/app_drawer.dart';
 import '../../../../core/models/auth_models.dart';
+import '../../../../core/utils/error_message.dart';
 
 /// Student screen to request a new guidance session (bimbingan).
 ///
@@ -125,7 +126,7 @@ class _GuidanceScheduleScreenState extends State<GuidanceScheduleScreen> {
       if (!mounted) return;
       setState(() {
         _isLoading = false;
-        _error = e is ApiException ? e.message : e.toString();
+        _error = errorMessageOf(e, fallback: 'Data tidak dapat dimuat.');
       });
     }
   }
@@ -309,7 +310,7 @@ class _GuidanceScheduleScreenState extends State<GuidanceScheduleScreen> {
       _showSnackBar(e.message, false);
     } catch (e) {
       if (!mounted) return;
-      _showSnackBar('Gagal mengirim permintaan: $e', false);
+      _showSnackBar(errorMessageOf(e, fallback: 'Gagal mengirim permintaan.'), false);
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }
@@ -370,7 +371,7 @@ class _GuidanceScheduleScreenState extends State<GuidanceScheduleScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.surfaceSecondary,
-      drawer: AppDrawer(user: widget.user, activeRoute: 'metopel'), // Metopel is often the 'Schedule' context here
+      drawer: AppDrawer(user: widget.user, activeRoute: 'tugas_akhir'),
       body: Column(
         children: [
           _buildHeader(),
@@ -1182,7 +1183,7 @@ class _GuidanceScheduleScreenState extends State<GuidanceScheduleScreen> {
       }
     } catch (e) {
       if (mounted) {
-        _showSnackBar('Gagal memilih file: $e', false);
+        _showSnackBar(errorMessageOf(e, fallback: 'Gagal memilih file.'), false);
       }
     }
   }

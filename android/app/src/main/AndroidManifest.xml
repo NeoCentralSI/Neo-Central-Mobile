@@ -1,7 +1,13 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
+    <!-- open_filex declares media permissions; attachments are opened from the
+         app cache through its FileProvider, so they are not needed. -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" tools:node="remove" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" tools:node="remove" />
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" tools:node="remove" />
     <application
         android:label="NeoCentral"
         android:name="${applicationName}"
@@ -30,7 +36,7 @@
         </activity>
 
 
-        <!-- aad_oauth menggunakan WebView internal untuk OAuth flow.
+        <!-- Login Microsoft memakai WebView di dalam aplikasi (alur OAuth backend).
              Tidak perlu mendaftarkan activity callback di sini. -->
 
         <!-- Don't delete the meta-data below.
@@ -57,6 +63,11 @@
         <intent>
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="http" />
+        </intent>
+        <!-- Email link on Tentang Aplikasi -->
+        <intent>
+            <action android:name="android.intent.action.SENDTO" />
+            <data android:scheme="mailto" />
         </intent>
         <!-- Required to query activities that can process text -->
         <intent>

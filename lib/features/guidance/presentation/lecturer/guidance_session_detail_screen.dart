@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/constants/app_colors.dart';
-import '../../../../core/constants/app_config.dart';
 import '../../../../core/constants/app_spacing.dart';
 import '../../../../core/constants/app_text_styles.dart';
 import '../../../../core/services/api_client.dart';
 import '../../../../core/services/lecturer_api_service.dart';
-import '../../../../core/services/secure_storage_service.dart';
+import '../../../../core/services/attachment_service.dart';
 import '../../../../shared/widgets/shared_widgets.dart';
+import '../../../../core/utils/error_message.dart';
 
 /// Guidance session detail screen for lecturer to approve or reject a request.
 /// Loads full detail from backend and supports file/document download.
@@ -86,7 +85,7 @@ class _GuidanceSessionDetailScreenState
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Gagal menyetujui: $e'),
+            content: Text(errorMessageOf(e, fallback: 'Gagal menyetujui.')),
             backgroundColor: AppColors.destructive,
           ),
         );
@@ -167,7 +166,7 @@ class _GuidanceSessionDetailScreenState
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Gagal menolak: $e'),
+              content: Text(errorMessageOf(e, fallback: 'Gagal menolak.')),
               backgroundColor: AppColors.destructive,
             ),
           );
@@ -178,50 +177,31 @@ class _GuidanceSessionDetailScreenState
     }
   }
 
-  Future<void> _openDocument(String? url) async {
-    if (url == null || url.isEmpty) return;
-    // Build full URL if relative — ensure slash between base URL and path
-    final String fullUrl;
-    if (url.startsWith('http')) {
-      fullUrl = url;
-    } else {
-      final path = url.startsWith('/') ? url : '/$url';
-      fullUrl = '${AppConfig.baseUrl}$path';
-    }
-    try {
-      var uri = Uri.parse(fullUrl);
-      // Thesis uploads require authentication — append token as query param
-      // so the external browser can access the protected route.
-      if (uri.path.contains('/uploads/thesis')) {
-        final token = await SecureStorageService().getAccessToken();
-        if (token != null && token.isNotEmpty) {
-          uri = uri.replace(queryParameters: {
-            ...uri.queryParameters,
-            'token': token,
-          });
-        }
-      }
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-      } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Tidak dapat membuka dokumen'),
-              backgroundColor: AppColors.destructive,
-            ),
-          );
-        }
-      }
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Gagal membuka dokumen'),
-            backgroundColor: AppColors.destructive,
-          ),
-        );
-      }
+  bool _isOpeningDocument = false;
+
+  /// Opens the session attachment or link. Protected uploads are downloaded
+  /// with the session token (see [AttachmentService]).
+  Future<void> _openDocument(String? url, {String? fileName}) async {
+    if (_isOpeningDocument) return;
+    setState(() => _isOpeningDocument = true);
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(
+      const SnackBar(
+        content: Text('Membuka dokumen...'),
+        duration: Duration(seconds: 2),
+      ),
+    );
+    final result = await AttachmentService().open(url, fileName: fileName);
+    if (!mounted) return;
+    setState(() => _isOpeningDocument = false);
+    messenger.hideCurrentSnackBar();
+    if (!result.opened) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(result.message ?? 'Dokumen tidak dapat dibuka.'),
+          backgroundColor: AppColors.destructive,
+        ),
+      );
     }
   }
 
@@ -400,7 +380,8 @@ class _GuidanceSessionDetailScreenState
                     AppCard(
                       child: InkWell(
                         onTap: () => _openDocument(
-                          document['filePath']?.toString(),
+                          (document['url'] ?? document['filePath'])?.toString(),
+                          fileName: document['fileName']?.toString(),
                         ),
                         borderRadius: BorderRadius.circular(12),
                         child: Row(

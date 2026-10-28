@@ -5,14 +5,14 @@ import '../../../core/constants/app_assets.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_spacing.dart';
 import '../../../core/constants/app_text_styles.dart';
-import '../../../core/enums/user_role.dart';
+import '../../../core/models/api_exception.dart';
+import '../../../core/models/auth_models.dart';
 import '../../../core/services/auth_service.dart';
-import '../../../core/services/fcm_service.dart';
 import '../../../core/utils/error_mapper.dart';
-import '../../admin/presentation/admin_shell.dart';
-import '../../shell/main_shell.dart';
+import '../../shell/session_start.dart';
 
-/// Login screen – Microsoft SSO only. Role is determined by the backend.
+/// Login screen: Microsoft sign-in, or email and password. The backend
+/// decides the role.
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -77,35 +77,12 @@ class _LoginScreenState extends State<LoginScreen>
       final result = await _authService.login();
       if (!mounted) return;
 
-      // Register FCM token after successful login
-      try {
-        final fcm = FcmService();
-        await fcm.init();
-        await fcm.registerAfterLogin();
-      } catch (_) {
-        // Don't block login if FCM fails
-      }
-
-      if (!mounted) return;
-
-      // Navigate to the correct shell based on role returned from backend.
-      // Admin role lands on a dedicated minimal shell (notifications + profile).
-      final role = result.user.appRole;
-      Navigator.of(context).pushReplacement(
-        PageRouteBuilder(
-          pageBuilder: (_, __, ___) => role == UserRole.admin
-              ? AdminShell(user: result.user)
-              : MainShell(userRole: role, user: result.user),
-          transitionsBuilder: (_, animation, __, child) =>
-              FadeTransition(opacity: animation, child: child),
-          transitionDuration: const Duration(milliseconds: 400),
-        ),
-      );
+      await _enterApp(result.user);
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _isLoading = false;
-        _errorMessage = _friendlyError(e.toString());
+        _errorMessage = _friendlyError(e);
       });
     }
   }
@@ -124,36 +101,39 @@ class _LoginScreenState extends State<LoginScreen>
         _passwordController.text,
       );
       if (!mounted) return;
-
-      try {
-        final fcm = FcmService();
-        await fcm.init();
-        await fcm.registerAfterLogin();
-      } catch (_) {}
-
-      if (!mounted) return;
-
-      final role = result.user.appRole;
-      Navigator.of(context).pushReplacement(
-        PageRouteBuilder(
-          pageBuilder: (_, __, ___) => role == UserRole.admin
-              ? AdminShell(user: result.user)
-              : MainShell(userRole: role, user: result.user),
-          transitionsBuilder: (_, animation, __, child) =>
-              FadeTransition(opacity: animation, child: child),
-          transitionDuration: const Duration(milliseconds: 400),
-        ),
-      );
+      await _enterApp(result.user);
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _isLoading = false;
-        _errorMessage = _friendlyError(e.toString());
+        _errorMessage = _friendlyError(e);
       });
     }
   }
 
-  String _friendlyError(String raw) => friendlyAuthError(raw);
+  /// Starts the session and replaces the login screen with the home screen.
+  Future<void> _enterApp(UserModel user) async {
+    await startSession(user);
+    final home = await homeFor(user);
+    if (!mounted) return;
+    Navigator.of(context).pushReplacement(
+      PageRouteBuilder(
+        pageBuilder: (_, _, _) => home,
+        transitionsBuilder: (_, animation, _, child) =>
+            FadeTransition(opacity: animation, child: child),
+        transitionDuration: const Duration(milliseconds: 400),
+      ),
+    );
+  }
+
+  /// Backend messages are shown as written; other failures get a short
+  /// Indonesian message.
+  String _friendlyError(Object error) {
+    if (error is ApiException && error.message.trim().isNotEmpty) {
+      return friendlyAuthError(error.message, passThrough: true);
+    }
+    return friendlyAuthError(error.toString());
+  }
 
   @override
   Widget build(BuildContext context) {

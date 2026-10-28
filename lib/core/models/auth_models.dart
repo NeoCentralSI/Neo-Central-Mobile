@@ -60,40 +60,56 @@ class UserModel {
     'lecturer': lecturer?.toJson(),
   };
 
-  /// Resolve the primary app role from the roles array.
+  /// Lecturer role names from the backend (`LECTURER_ROLES`). Department
+  /// roles such as Ketua Departemen are lecturers on mobile.
+  static const _lecturerRoleNames = {
+    'pembimbing 1',
+    'pembimbing 2',
+    'penguji',
+    'ketua departemen',
+    'sekretaris departemen',
+    'gkm',
+    'koordinator matkul metopen',
+    'koordinator yudisium',
+    'dosen',
+    'lecturer',
+  };
+
+  /// Word parts that mark a lecturer role name ("Dosen Pembimbing", ...).
+  static const _lecturerRoleHints = [
+    'dosen',
+    'lecturer',
+    'pembimbing',
+    'penguji',
+    'ketua',
+    'sekretaris',
+    'koordinator',
+  ];
+
+  /// Resolve the app role from the roles array.
   ///
-  /// Priority: admin > headOfDepartment > lecturer > student. Admin is checked
-  /// first because the backend may attach the Admin role to a user that also
-  /// carries a student row (legacy seed data); the mobile app must route those
-  /// users to the Admin shell, not the student shell.
+  /// Priority: admin > lecturer > student. Admin is checked first because the
+  /// backend may attach the Admin role to a user that also carries a student
+  /// row (legacy seed data); those users get the Admin menu.
   UserRole get appRole {
-    bool hasAdmin = false;
-    bool hasHod = false;
-    bool hasLecturer = false;
-    bool hasStudent = false;
+    var hasLecturer = false;
+    var hasStudent = false;
 
     for (final r in roles) {
-      final name = r.name.toLowerCase();
-      if (name == 'admin') {
-        hasAdmin = true;
-      } else if (name.contains('ketua') ||
-          name.contains('head_of_department') ||
-          name.contains('head of department') ||
-          name == 'hod') {
-        hasHod = true;
-      } else if (name.contains('dosen') || name.contains('lecturer')) {
+      final name = r.name.trim().toLowerCase();
+      if (name == 'admin') return UserRole.admin;
+      if (_lecturerRoleNames.contains(name) ||
+          _lecturerRoleHints.any(name.contains)) {
         hasLecturer = true;
       } else if (name == 'mahasiswa' || name == 'student') {
         hasStudent = true;
       }
     }
 
-    if (hasAdmin) return UserRole.admin;
-    if (hasHod) return UserRole.headOfDepartment;
     if (hasLecturer) return UserRole.lecturer;
     if (hasStudent) return UserRole.student;
 
-    // Fallback: if student data present → student, else lecturer
+    // Fallback: the profile rows tell students and lecturers apart.
     if (student != null) return UserRole.student;
     if (lecturer != null) return UserRole.lecturer;
     return UserRole.student;

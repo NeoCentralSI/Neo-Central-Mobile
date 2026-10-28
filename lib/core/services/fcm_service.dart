@@ -5,55 +5,9 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:http/http.dart' as http;
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../firebase_options.dart';
 import '../constants/app_config.dart';
 import 'secure_storage_service.dart';
-
-@pragma('vm:entry-point')
-void localNotificationTapBackground(NotificationResponse notificationResponse) {
-  _handleNotificationAction(notificationResponse);
-}
-
-Future<void> _handleNotificationAction(NotificationResponse response) async {
-  if (response.actionId == 'approve_guidance' && response.payload != null) {
-    try {
-      final data = jsonDecode(response.payload!);
-      final guidanceId = data['guidanceId'];
-      final role = data['role'];
-      if (guidanceId != null && role == 'supervisor') {
-        final storage = const FlutterSecureStorage();
-        final token = await storage.read(key: 'neocentral_access_token');
-        if (token != null) {
-          final uri = Uri.parse(
-            '${AppConfig.baseUrl}/thesisGuidance/lecturer/requests/$guidanceId/approve',
-          );
-          final httpRes = await http.patch(
-            uri,
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': 'Bearer $token',
-            },
-            body: jsonEncode({
-              'approvedDate': data['scheduledAt'],
-              'duration': 60,
-              'feedback': 'Bimbingan disetujui (via Notifikasi)',
-            }),
-          );
-          if (httpRes.statusCode >= 200 && httpRes.statusCode < 300) {
-            debugPrint('[LocalNotif] Guidance approved in background!');
-          } else {
-            debugPrint(
-              '[LocalNotif] Failed to approve guidance: ${httpRes.body}',
-            );
-          }
-        }
-      }
-    } catch (e) {
-      debugPrint('[LocalNotif] Error handling action: $e');
-    }
-  }
-}
 
 /// Notification channel for Android (required for Android 8+).
 const _androidChannel = AndroidNotificationChannel(
@@ -165,6 +119,16 @@ class FcmService {
       _handleMessageOpen(initialMessage);
     }
 
+    // A tap on a local notification that launched the app from closed.
+    try {
+      final launch = await _localNotif.getNotificationAppLaunchDetails();
+      if (launch?.didNotificationLaunchApp == true) {
+        _dispatchOpen(_decodePayload(launch!.notificationResponse?.payload));
+      }
+    } catch (e) {
+      debugPrint('[LocalNotif] Launch details error (ignored): $e');
+    }
+
     debugPrint('[FCM] Initialization complete');
   }
 
@@ -192,17 +156,10 @@ class FcmService {
       initSettings,
       onDidReceiveNotificationResponse: (response) {
         debugPrint('[LocalNotif] Notification tapped');
-        _handleNotificationAction(response);
-        // Fire open-listeners so the UI switches to the relevant screen
-        final data = response.payload != null
-            ? Map<String, dynamic>.from((jsonDecode(response.payload!) as Map))
-            : <String, dynamic>{};
-        for (final listener in List.of(_openListeners)) {
-          listener(data);
-        }
+        // A tap only opens the matching screen; actions (approve, reject)
+        // happen there, so a backend rejection is always shown.
+        _dispatchOpen(_decodePayload(response.payload));
       },
-      onDidReceiveBackgroundNotificationResponse:
-          localNotificationTapBackground,
     );
 
     // Create Android notification channel
@@ -230,18 +187,6 @@ class FcmService {
       priority: Priority.high,
       playSound: true,
       icon: '@drawable/ic_notification',
-      actions:
-          (data != null &&
-              data['type'] == 'thesis-guidance:requested' &&
-              data['role'] == 'supervisor')
-          ? [
-              const AndroidNotificationAction(
-                'approve_guidance',
-                'Setujui (Approve)',
-                showsUserInterface: true,
-              ),
-            ]
-          : null,
     );
 
     const iosDetails = DarwinNotificationDetails(
@@ -357,19 +302,36 @@ class FcmService {
     debugPrint('[FCM] Message opened');
 
     final data = message.data;
-    // If no listener is registered yet (cold-start: AuthGate has called
-    // getInitialMessage before any shell mounted), stash for replay.
-    if (_openListeners.isEmpty) {
-      _pendingOpenData = data;
-    } else {
-      for (final listener in List.of(_openListeners)) {
-        listener(data);
-      }
-    }
+    _dispatchOpen(data);
     // Data-refresh listeners always fire (no replay — they just refresh data).
     for (final listener in List.of(_listeners)) {
       listener(data);
     }
+  }
+
+  /// Hands a tap to the open listeners. With none registered yet (cold start,
+  /// before login finished), the tap is kept and replayed to the first one.
+  void _dispatchOpen(Map<String, dynamic> data) {
+    if (_openListeners.isEmpty) {
+      _pendingOpenData = data;
+      return;
+    }
+    for (final listener in List.of(_openListeners)) {
+      try {
+        listener(data);
+      } catch (e) {
+        debugPrint('[FCM] Open listener error (ignored): $e');
+      }
+    }
+  }
+
+  static Map<String, dynamic> _decodePayload(String? payload) {
+    if (payload == null || payload.isEmpty) return <String, dynamic>{};
+    try {
+      final decoded = jsonDecode(payload);
+      if (decoded is Map) return Map<String, dynamic>.from(decoded);
+    } catch (_) {}
+    return <String, dynamic>{};
   }
 }
 
@@ -410,17 +372,6 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
       priority: Priority.high,
       playSound: true,
       icon: '@drawable/ic_notification',
-      actions:
-          (data['type'] == 'thesis-guidance:requested' &&
-              data['role'] == 'supervisor')
-          ? [
-              const AndroidNotificationAction(
-                'approve_guidance',
-                'Setujui (Approve)',
-                showsUserInterface: true,
-              ),
-            ]
-          : null,
     );
 
     await plugin.show(
