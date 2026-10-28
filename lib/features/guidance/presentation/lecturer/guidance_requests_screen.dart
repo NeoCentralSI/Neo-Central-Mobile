@@ -96,25 +96,10 @@ class _GuidanceRequestsScreenState extends State<GuidanceRequestsScreen>
                       ],
                     ),
                     const SizedBox(height: AppSpacing.sm),
-                    TabBar(
+                    // Equal-width tabs, centred like Detail Seminar.
+                    HeaderTabBar(
                       controller: _tabController,
-                      isScrollable: true,
-                      tabAlignment: TabAlignment.start,
-                      labelColor: AppColors.white,
-                      unselectedLabelColor: AppColors.white.withValues(
-                        alpha: 0.6,
-                      ),
-                      indicatorColor: AppColors.white,
-                      indicatorWeight: 3,
-                      labelStyle: AppTextStyles.label.copyWith(fontSize: 13),
-                      unselectedLabelStyle: AppTextStyles.body.copyWith(
-                        fontSize: 13,
-                      ),
-                      tabs: const [
-                        Tab(text: 'Permintaan'),
-                        Tab(text: 'Catatan'),
-                        Tab(text: 'Milestone'),
-                      ],
+                      labels: const ['Permintaan', 'Catatan', 'Milestone'],
                     ),
                   ],
                 ),
@@ -179,35 +164,50 @@ class _GuidanceRequestsTabState extends State<_GuidanceRequestsTab> {
   Widget build(BuildContext context) {
     if (_isLoading) return const Center(child: CircularProgressIndicator());
     if (_error != null) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('Gagal memuat data', style: AppTextStyles.h4),
-            const SizedBox(height: 12),
-            AppButton(
-              label: 'Coba Lagi',
-              icon: Icons.refresh,
-              onPressed: _loadData,
-            ),
-          ],
+      return _refreshable(
+        _loadData,
+        Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Gagal memuat data', style: AppTextStyles.h4),
+              const SizedBox(height: 4),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 32),
+                child: Text(
+                  _error!,
+                  style: AppTextStyles.bodySmall,
+                  textAlign: TextAlign.center,
+                ),
+              ),
+              const SizedBox(height: 12),
+              AppButton(
+                label: 'Coba Lagi',
+                icon: Icons.refresh,
+                onPressed: _loadData,
+              ),
+            ],
+          ),
         ),
       );
     }
 
     if (_requests.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(
-              Icons.check_circle_outline,
-              size: 64,
-              color: AppColors.textTertiary,
-            ),
-            const SizedBox(height: 16),
-            Text('Tidak ada permintaan baru', style: AppTextStyles.body),
-          ],
+      return _refreshable(
+        _loadData,
+        Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.check_circle_outline,
+                size: 64,
+                color: AppColors.textTertiary,
+              ),
+              const SizedBox(height: 16),
+              Text('Tidak ada permintaan baru', style: AppTextStyles.body),
+            ],
+          ),
         ),
       );
     }
@@ -215,6 +215,7 @@ class _GuidanceRequestsTabState extends State<_GuidanceRequestsTab> {
     return RefreshIndicator(
       onRefresh: _loadData,
       child: ListView.separated(
+        physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(AppSpacing.pagePadding),
         itemCount: _requests.length,
         separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.sm),
@@ -395,37 +396,52 @@ class _SessionSummaryTabState extends State<_SessionSummaryTab> {
   Widget build(BuildContext context) {
     if (_isLoading) return const Center(child: CircularProgressIndicator());
     if (_error != null) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('Gagal memuat data', style: AppTextStyles.h4),
-            const SizedBox(height: 12),
-            AppButton(
-              label: 'Coba Lagi',
-              icon: Icons.refresh,
-              onPressed: _loadData,
-            ),
-          ],
+      return _refreshable(
+        _loadData,
+        Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Gagal memuat data', style: AppTextStyles.h4),
+              const SizedBox(height: 4),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 32),
+                child: Text(
+                  _error!,
+                  style: AppTextStyles.bodySmall,
+                  textAlign: TextAlign.center,
+                ),
+              ),
+              const SizedBox(height: 12),
+              AppButton(
+                label: 'Coba Lagi',
+                icon: Icons.refresh,
+                onPressed: _loadData,
+              ),
+            ],
+          ),
         ),
       );
     }
     if (_summaries.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(
-              Icons.note_alt_outlined,
-              size: 64,
-              color: AppColors.textTertiary,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Tidak ada catatan menunggu approval',
-              style: AppTextStyles.body,
-            ),
-          ],
+      return _refreshable(
+        _loadData,
+        Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.note_alt_outlined,
+                size: 64,
+                color: AppColors.textTertiary,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Tidak ada catatan menunggu approval',
+                style: AppTextStyles.body,
+              ),
+            ],
+          ),
         ),
       );
     }
@@ -433,6 +449,7 @@ class _SessionSummaryTabState extends State<_SessionSummaryTab> {
     return RefreshIndicator(
       onRefresh: _loadData,
       child: ListView.separated(
+        physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(AppSpacing.pagePadding),
         itemCount: _summaries.length,
         separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.sm),
@@ -731,37 +748,52 @@ class _MilestoneApprovalTabState extends State<_MilestoneApprovalTab> {
   Widget build(BuildContext context) {
     if (_isLoading) return const Center(child: CircularProgressIndicator());
     if (_error != null) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('Gagal memuat data', style: AppTextStyles.h4),
-            const SizedBox(height: 12),
-            AppButton(
-              label: 'Coba Lagi',
-              icon: Icons.refresh,
-              onPressed: _loadData,
-            ),
-          ],
+      return _refreshable(
+        _loadData,
+        Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Gagal memuat data', style: AppTextStyles.h4),
+              const SizedBox(height: 4),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 32),
+                child: Text(
+                  _error!,
+                  style: AppTextStyles.bodySmall,
+                  textAlign: TextAlign.center,
+                ),
+              ),
+              const SizedBox(height: 12),
+              AppButton(
+                label: 'Coba Lagi',
+                icon: Icons.refresh,
+                onPressed: _loadData,
+              ),
+            ],
+          ),
         ),
       );
     }
     if (_milestones.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(
-              Icons.flag_outlined,
-              size: 64,
-              color: AppColors.textTertiary,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Tidak ada milestone menunggu review',
-              style: AppTextStyles.body,
-            ),
-          ],
+      return _refreshable(
+        _loadData,
+        Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.flag_outlined,
+                size: 64,
+                color: AppColors.textTertiary,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Tidak ada milestone menunggu review',
+                style: AppTextStyles.body,
+              ),
+            ],
+          ),
         ),
       );
     }
@@ -769,6 +801,7 @@ class _MilestoneApprovalTabState extends State<_MilestoneApprovalTab> {
     return RefreshIndicator(
       onRefresh: _loadData,
       child: ListView.separated(
+        physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(AppSpacing.pagePadding),
         itemCount: _milestones.length,
         separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.sm),
@@ -904,3 +937,11 @@ class _MilestoneApprovalTabState extends State<_MilestoneApprovalTab> {
     );
   }
 }
+
+/// Pull-to-refresh for empty and error states, which are not lists.
+Widget _refreshable(Future<void> Function() onRefresh, Widget child) =>
+    RefreshIndicator(
+      onRefresh: onRefresh,
+      color: AppColors.primary,
+      child: ScrollableCenter(child: child),
+    );
