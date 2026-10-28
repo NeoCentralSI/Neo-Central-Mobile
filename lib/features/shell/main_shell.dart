@@ -13,6 +13,8 @@ import '../guidance/presentation/lecturer/lecturer_dashboard_screen.dart';
 import '../guidance/presentation/student/student_dashboard_screen.dart';
 import '../guidance/presentation/student/guidance_schedule_screen.dart';
 import '../guidance/presentation/student/guidance_history_screen.dart';
+import '../guidance/presentation/student/milestone_progress_screen.dart';
+import 'student_nav_bar.dart';
 
 /// Tugas Akhir shell (Bimbingan and Milestone) with bottom navigation.
 ///
@@ -66,12 +68,35 @@ class _MainShellState extends State<MainShell> {
     ProfileScreen(user: widget.user),
   ];
 
+  /// Student tabs: Beranda, Bimbingan, Milestone, Profil. Ajukan Bimbingan
+  /// is the round button in the middle of the bar, not a tab.
   List<Widget> get _studentPages => [
     StudentDashboardScreen(user: widget.user, onSwitchTab: _switchTab),
-    GuidanceScheduleScreen(isTab: true, user: widget.user),
-    GuidanceHistoryScreen(isTab: true, user: widget.user),
+    GuidanceHistoryScreen(
+      key: ValueKey('history_$_historyReloadKey'),
+      isTab: true,
+      user: widget.user,
+    ),
+    MilestoneProgressScreen(isTab: true, user: widget.user),
     ProfileScreen(user: widget.user),
   ];
+
+  int _historyReloadKey = 0;
+
+  /// Opens Ajukan Bimbingan; after a request is sent, shows it in Bimbingan.
+  Future<void> _openGuidanceRequest() async {
+    final sent = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => GuidanceScheduleScreen(user: widget.user),
+      ),
+    );
+    if (sent == true && mounted) {
+      setState(() {
+        _historyReloadKey++;
+        _currentIndex = 1;
+      });
+    }
+  }
 
   bool get _isLecturerLike => widget.userRole == UserRole.lecturer;
 
@@ -100,34 +125,42 @@ class _MainShellState extends State<MainShell> {
     ),
   ];
 
-  List<NavigationDestination> get _studentDestinations => const [
-    NavigationDestination(
-      icon: Icon(Icons.home_outlined),
-      selectedIcon: Icon(Icons.home),
+  static const _studentItems = [
+    StudentNavItem(
+      icon: Icons.home_outlined,
+      selectedIcon: Icons.home,
       label: 'Beranda',
     ),
-    NavigationDestination(
-      icon: Icon(Icons.calendar_today_outlined),
-      selectedIcon: Icon(Icons.calendar_today),
-      label: 'Jadwalkan',
+    StudentNavItem(
+      icon: Icons.forum_outlined,
+      selectedIcon: Icons.forum,
+      label: 'Bimbingan',
     ),
-    NavigationDestination(
-      icon: Icon(Icons.history_outlined),
-      selectedIcon: Icon(Icons.history),
-      label: 'Riwayat',
+    StudentNavItem(
+      icon: Icons.flag_outlined,
+      selectedIcon: Icons.flag,
+      label: 'Milestone',
     ),
-    NavigationDestination(
-      icon: Icon(Icons.person_outline),
-      selectedIcon: Icon(Icons.person),
+    StudentNavItem(
+      icon: Icons.person_outline,
+      selectedIcon: Icons.person,
       label: 'Profil',
     ),
   ];
 
   @override
   Widget build(BuildContext context) {
-    final destinations = _isLecturerLike
-        ? _lecturerDestinations
-        : _studentDestinations;
+    if (!_isLecturerLike) {
+      return Scaffold(
+        body: IndexedStack(index: _currentIndex, children: _pages),
+        bottomNavigationBar: StudentNavBar(
+          items: _studentItems,
+          selectedIndex: _currentIndex,
+          onSelected: (i) => setState(() => _currentIndex = i),
+          onCenterPressed: _openGuidanceRequest,
+        ),
+      );
+    }
 
     return Scaffold(
       body: IndexedStack(index: _currentIndex, children: _pages),
@@ -156,7 +189,7 @@ class _MainShellState extends State<MainShell> {
             elevation: 0,
             indicatorColor: AppColors.primary.withValues(alpha: 0.12),
             labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-            destinations: destinations,
+            destinations: _lecturerDestinations,
           ),
         ),
       ),

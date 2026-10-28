@@ -3,7 +3,9 @@ import 'package:flutter/services.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_spacing.dart';
 import '../../../../core/constants/app_text_styles.dart';
+import '../../../../core/models/auth_models.dart';
 import '../../../../core/utils/error_message.dart';
+import '../../../../core/widgets/app_drawer.dart';
 import '../../../../core/utils/thesis_labels.dart';
 import '../../../../core/services/student_api_service.dart';
 import '../../../../shared/widgets/shared_widgets.dart';
@@ -15,7 +17,17 @@ import '../../../../shared/widgets/shared_widgets.dart';
 /// web. Without [thesisId] the screen looks up the student's thesis.
 class MilestoneProgressScreen extends StatefulWidget {
   final String? thesisId;
-  const MilestoneProgressScreen({super.key, this.thesisId});
+
+  /// Shown as a bottom tab: menu button and drawer instead of a back arrow.
+  final bool isTab;
+  final UserModel? user;
+
+  const MilestoneProgressScreen({
+    super.key,
+    this.thesisId,
+    this.isTab = false,
+    this.user,
+  });
 
   @override
   State<MilestoneProgressScreen> createState() =>
@@ -98,6 +110,9 @@ class _MilestoneProgressScreenState extends State<MilestoneProgressScreen> {
       value: SystemUiOverlayStyle.light,
       child: Scaffold(
         backgroundColor: AppColors.surfaceSecondary,
+        drawer: widget.isTab
+            ? AppDrawer(user: widget.user, activeRoute: 'tugas_akhir')
+            : null,
         body: Column(
           children: [
             _buildHeader(),
@@ -190,14 +205,26 @@ class _MilestoneProgressScreenState extends State<MilestoneProgressScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              GestureDetector(
-                onTap: () => Navigator.pop(context),
-                child: const Icon(
-                  Icons.arrow_back_ios_new,
-                  color: AppColors.white,
-                  size: 20,
+              if (widget.isTab)
+                Builder(
+                  builder: (context) => GestureDetector(
+                    onTap: () => Scaffold.of(context).openDrawer(),
+                    child: const Icon(
+                      Icons.menu,
+                      color: AppColors.white,
+                      size: 24,
+                    ),
+                  ),
+                )
+              else
+                GestureDetector(
+                  onTap: () => Navigator.pop(context),
+                  child: const Icon(
+                    Icons.arrow_back_ios_new,
+                    color: AppColors.white,
+                    size: 20,
+                  ),
                 ),
-              ),
               const SizedBox(height: AppSpacing.md),
               Row(
                 children: [

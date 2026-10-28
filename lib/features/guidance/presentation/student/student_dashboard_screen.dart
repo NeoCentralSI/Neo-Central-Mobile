@@ -200,7 +200,7 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
                         top: 280,
                         left: AppSpacing.pagePadding,
                         right: AppSpacing.pagePadding,
-                        bottom: 100, // padding for FAB
+                        bottom: 40,
                       ),
                       child: _buildMainContent(),
                     ),
@@ -208,17 +208,6 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
                 ),
               ),
       ),
-      floatingActionButton: _error == null && _thesis != null
-          ? FloatingActionButton(
-              onPressed: () {
-                widget.onSwitchTab?.call(1);
-              },
-              backgroundColor: AppColors.primaryLight,
-              foregroundColor: AppColors.white,
-              elevation: 4,
-              child: const Icon(Icons.add, size: 28),
-            )
-          : null,
     );
   }
 
