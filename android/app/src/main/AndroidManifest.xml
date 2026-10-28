@@ -58,14 +58,10 @@
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="http" />
         </intent>
-        <!-- Email and phone links on Tentang Aplikasi -->
+        <!-- Email link on Tentang Aplikasi -->
         <intent>
             <action android:name="android.intent.action.SENDTO" />
             <data android:scheme="mailto" />
-        </intent>
-        <intent>
-            <action android:name="android.intent.action.DIAL" />
-            <data android:scheme="tel" />
         </intent>
         <!-- Required to query activities that can process text -->
         <intent>

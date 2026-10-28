@@ -20,7 +20,6 @@ abstract class AboutContent {
   static const campus = 'Fakultas Teknologi Informasi, Universitas Andalas';
   static const address = 'Limau Manis, Padang, Sumatera Barat 25163';
   static const email = 'si@it.unand.ac.id';
-  static const phone = '+62 751 123 456';
 
   static const websiteUrl = 'https://si.fti.unand.ac.id/';
   static const instagramUrl = 'https://www.instagram.com/official.siunand/';
@@ -128,12 +127,6 @@ class AboutScreen extends StatelessWidget {
                         value: AboutContent.email,
                         onTap: () =>
                             _open(context, 'mailto:${AboutContent.email}'),
-                      ),
-                      _LinkRow(
-                        icon: Icons.phone_outlined,
-                        label: 'Telepon',
-                        value: AboutContent.phone,
-                        onTap: () => _open(context, 'tel:+62751123456'),
                       ),
                       const SizedBox(height: AppSpacing.md),
                       Row(
