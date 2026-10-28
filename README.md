@@ -23,7 +23,9 @@ Notifikasi mahasiswa dan dosen dibuka dari Profil (dan ikon lonceng di Beranda).
 - **Pengumuman** Seminar Hasil dan Yudisium. Mahasiswa dapat mendaftar dan
   membatalkan pendaftaran sebagai peserta seminar. Detail Seminar Hasil
   (tab Identitas dan Peserta) hanya dibuka dari Pengumuman; dosen pembimbing
-  seminar itu dapat mengonfirmasi kehadiran peserta.
+  seminar itu dapat mengonfirmasi kehadiran peserta. Dokumen seminar dapat
+  dilihat (tanpa unggah atau verifikasi) bila backend mengizinkan
+  (`canViewDocuments`): penyaji, audiens terdaftar, dosen, dan Admin.
 - **Notifikasi** push (FCM) dan di aplikasi. Notifikasi untuk modul yang
   tidak ada di mobile membuka daftar Notifikasi.
 - **Login Microsoft** (alur OAuth backend) atau email dan kata sandi.

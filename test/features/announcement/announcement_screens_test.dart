@@ -181,7 +181,7 @@ void main() {
     expect(find.text('Daftar'), findsNothing);
   });
 
-  testWidgets('detail has two centred tabs and no document actions', (
+  testWidgets('detail has two centred tabs; no documents without access', (
     tester,
   ) async {
     final backend = FakeBackend((request) {
@@ -203,7 +203,7 @@ void main() {
     expect(find.text('Informasi Seminar'), findsOneWidget);
     expect(find.text('Informasi Tugas Akhir'), findsOneWidget);
     expect(
-      find.text('Dokumen seminar tersedia di NeoCentral versi web'),
+      find.text('Dokumen seminar hanya dapat diakses peserta seminar'),
       findsOneWidget,
     );
     expect(find.textContaining('Unduh'), findsNothing);

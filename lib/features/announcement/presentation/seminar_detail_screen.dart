@@ -4,6 +4,7 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_spacing.dart';
 import '../../../core/constants/app_text_styles.dart';
 import '../../../core/models/auth_models.dart';
+import '../../../core/services/attachment_service.dart';
 import '../../../core/utils/error_message.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../shared/widgets/shared_widgets.dart';
@@ -17,17 +18,26 @@ import 'seminar_announcement_tab.dart' show seminarStatusVariant;
 ///   • Identitas — Informasi Seminar and Informasi Tugas Akhir.
 ///   • Peserta   — the audience list. The seminar's own supervisors confirm or
 ///                 undo attendance, with the same endpoint as the web app.
-/// Seminar documents stay on the web app.
+/// Seminar documents are listed (view only) when the backend's
+/// `canViewDocuments` allows it: presenter, registered audience, lecturers
+/// and Admin. Others see one small note instead.
+///
+/// The detail is loaded each time the screen opens, so registering or
+/// cancelling on Pengumuman shows up on the next visit.
 class SeminarDetailScreen extends StatefulWidget {
   final String seminarId;
   final UserModel? user;
   final AnnouncementApiService? api;
+
+  /// Opens a document; for tests.
+  final AttachmentService? attachments;
 
   const SeminarDetailScreen({
     super.key,
     required this.seminarId,
     this.user,
     this.api,
+    this.attachments,
   });
 
   @override
@@ -41,6 +51,31 @@ class _SeminarDetailScreenState extends State<SeminarDetailScreen>
   SeminarDetail? _detail;
   bool _isLoading = true;
   String? _error;
+
+  String? _openingRequirementId;
+
+  /// "Lihat": download with the session and open with the device app.
+  Future<void> _openDocument(SeminarDocument document) async {
+    if (_openingRequirementId != null) return;
+    setState(() => _openingRequirementId = document.requirementId);
+    final result = await (widget.attachments ?? AttachmentService()).open(
+      document.filePath,
+      fileName: document.fileName,
+    );
+    if (!mounted) return;
+    setState(() => _openingRequirementId = null);
+    if (!result.opened) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(result.message ?? 'Dokumen tidak dapat dibuka.'),
+            backgroundColor: AppColors.destructive,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+    }
+  }
 
   @override
   void initState() {
@@ -118,7 +153,7 @@ class _SeminarDetailScreenState extends State<SeminarDetailScreen>
         RefreshIndicator(
           onRefresh: _load,
           color: AppColors.primary,
-          child: _IdentityTab(detail: _detail!),
+          child: _IdentityTab(detail: _detail!, onOpenDocument: _openDocument),
         ),
         _AudienceTab(
           api: _api,
@@ -134,8 +169,9 @@ class _SeminarDetailScreenState extends State<SeminarDetailScreen>
 
 class _IdentityTab extends StatelessWidget {
   final SeminarDetail detail;
+  final void Function(SeminarDocument document) onOpenDocument;
 
-  const _IdentityTab({required this.detail});
+  const _IdentityTab({required this.detail, required this.onOpenDocument});
 
   @override
   Widget build(BuildContext context) {
@@ -215,8 +251,121 @@ class _IdentityTab extends StatelessWidget {
               ),
           ],
         ),
-        const FootnoteText('Dokumen seminar tersedia di NeoCentral versi web'),
+        if (detail.canViewDocuments) ...[
+          const SizedBox(height: AppSpacing.base),
+          _DocumentsCard(documents: detail.documents, onOpen: onOpenDocument),
+          const SizedBox(height: AppSpacing.base),
+        ] else
+          const FootnoteText(
+            'Dokumen seminar hanya dapat diakses peserta seminar',
+          ),
       ],
+    );
+  }
+}
+
+class _DocumentsCard extends StatelessWidget {
+  final List<SeminarDocument> documents;
+  final void Function(SeminarDocument document) onOpen;
+
+  const _DocumentsCard({required this.documents, required this.onOpen});
+
+  @override
+  Widget build(BuildContext context) {
+    return AppCard(
+      key: const ValueKey('seminar-documents-card'),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Dokumen Seminar', style: AppTextStyles.h4),
+          const AppDivider(verticalPadding: AppSpacing.md),
+          if (documents.isEmpty)
+            const EmptyStateView(
+              icon: Icons.description_outlined,
+              title: 'Belum Ada Dokumen',
+              message: 'Dokumen seminar belum diunggah',
+            )
+          else
+            for (var i = 0; i < documents.length; i++) ...[
+              if (i > 0) const Divider(height: 1, color: AppColors.divider),
+              _DocumentRow(document: documents[i], onOpen: onOpen),
+            ],
+        ],
+      ),
+    );
+  }
+}
+
+class _DocumentRow extends StatelessWidget {
+  final SeminarDocument document;
+  final void Function(SeminarDocument document) onOpen;
+
+  const _DocumentRow({required this.document, required this.onOpen});
+
+  @override
+  Widget build(BuildContext context) {
+    final (BadgeVariant? variant, String? label) = switch (document.status) {
+      'approved' => (BadgeVariant.success, 'Disetujui'),
+      'declined' => (BadgeVariant.destructive, 'Ditolak'),
+      'submitted' => (BadgeVariant.warning, 'Menunggu'),
+      _ => (null, null),
+    };
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: AppColors.primary.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(
+              Icons.description_outlined,
+              color: AppColors.primary,
+              size: 20,
+            ),
+          ),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(document.name, style: AppTextStyles.label),
+                const SizedBox(height: 2),
+                Text(
+                  document.fileName ??
+                      (document.isUploaded ? 'Berkas' : 'Belum diunggah'),
+                  style: AppTextStyles.caption,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                if (variant != null && label != null) ...[
+                  const SizedBox(height: 4),
+                  AppBadge(label: label, variant: variant, fontSize: 11),
+                ],
+              ],
+            ),
+          ),
+          if (document.isUploaded) ...[
+            const SizedBox(width: AppSpacing.sm),
+            OutlinedButton.icon(
+              key: ValueKey('seminar-document-${document.requirementId}'),
+              onPressed: () => onOpen(document),
+              icon: const Icon(Icons.visibility_outlined, size: 16),
+              label: const Text('Lihat', style: TextStyle(fontSize: 12)),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.primary,
+                side: const BorderSide(color: AppColors.border),
+                visualDensity: VisualDensity.compact,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppSpacing.buttonRadius),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }

@@ -235,6 +235,13 @@ class SeminarDetail {
   final List<SeminarSupervisor> supervisors;
   final List<SeminarPerson> examiners;
 
+  /// Set by the backend: true for the presenter, a registered audience
+  /// member, lecturers and Admin. Read as false when missing.
+  final bool canViewDocuments;
+
+  /// One row per seminar requirement, with its uploaded file if any.
+  final List<SeminarDocument> documents;
+
   const SeminarDetail({
     required this.id,
     required this.status,
@@ -248,6 +255,8 @@ class SeminarDetail {
     required this.studentNim,
     required this.supervisors,
     required this.examiners,
+    this.canViewDocuments = false,
+    this.documents = const [],
   });
 
   /// Reads both shapes of `GET /thesis-seminars/:id`: the student shape keeps
@@ -291,6 +300,10 @@ class SeminarDetail {
             role: 'Penguji ${_int(item['order']) ?? ''}'.trim(),
           ),
       ],
+      canViewDocuments: json['canViewDocuments'] == true,
+      documents: json['canViewDocuments'] == true
+          ? SeminarDocument.listFrom(json)
+          : const [],
     );
   }
 
@@ -417,5 +430,70 @@ class YudisiumAnnouncement {
       notes: _optStr(json['notes']),
       participants: participants,
     );
+  }
+}
+
+// ─── Seminar documents ──────────────────────────────────────
+
+/// A seminar requirement and its uploaded file (view only).
+class SeminarDocument {
+  final String requirementId;
+  final String name;
+  final String? fileName;
+  final String? filePath;
+
+  /// `submitted`, `approved` or `declined`; null when nothing is uploaded.
+  final String? status;
+
+  const SeminarDocument({
+    required this.requirementId,
+    required this.name,
+    this.fileName,
+    this.filePath,
+    this.status,
+  });
+
+  bool get isUploaded => filePath != null;
+
+  /// Rows as on the web detail page: the requirement list comes from
+  /// `documentTypes` (lecturers and Admin) or from the documents themselves
+  /// (`requirementName`, students); each row takes its uploaded file.
+  static List<SeminarDocument> listFrom(Map<String, dynamic> detail) {
+    final docs = _list(detail['documents']).map(_map).toList();
+    String? idOf(Map<String, dynamic> d) =>
+        _optStr(d['requirementId'] ?? d['documentTypeId']);
+
+    final requirements = <String, String>{};
+    for (final type in _list(detail['documentTypes']).map(_map)) {
+      final id = _optStr(type['id']);
+      if (id != null) requirements[id] = _str(type['name'], 'Dokumen');
+    }
+    if (requirements.isEmpty) {
+      for (final d in docs) {
+        final id = idOf(d);
+        if (id == null) continue;
+        requirements[id] = _str(
+          d['requirementName'] ?? d['documentTypeName'],
+          'Dokumen',
+        );
+      }
+    }
+
+    return [
+      for (final entry in requirements.entries)
+        () {
+          final doc = docs.firstWhere(
+            (d) => idOf(d) == entry.key,
+            orElse: () => const {},
+          );
+          return SeminarDocument(
+            requirementId: entry.key,
+            name: entry.value,
+            fileName: _optStr(doc['fileName']),
+            filePath: _optStr(doc['filePath']),
+            status: _optStr(doc['status']),
+          );
+        }(),
+    ];
   }
 }
