@@ -22,11 +22,15 @@ class MilestoneProgressScreen extends StatefulWidget {
   final bool isTab;
   final UserModel? user;
 
+  /// For tests; defaults to the app service.
+  final StudentApiService? api;
+
   const MilestoneProgressScreen({
     super.key,
     this.thesisId,
     this.isTab = false,
     this.user,
+    this.api,
   });
 
   @override
@@ -35,7 +39,7 @@ class MilestoneProgressScreen extends StatefulWidget {
 }
 
 class _MilestoneProgressScreenState extends State<MilestoneProgressScreen> {
-  final _api = StudentApiService();
+  late final StudentApiService _api = widget.api ?? StudentApiService();
 
   bool _isLoading = true;
   String? _error;
@@ -100,6 +104,7 @@ class _MilestoneProgressScreenState extends State<MilestoneProgressScreen> {
         index: i + 1,
         isLast: i == items.length - 1,
         readOnly: readOnly,
+        api: _api,
         onUpdate: _loadData,
       ),
   ];
@@ -337,6 +342,7 @@ class _MilestoneTimelineItem extends StatefulWidget {
 
   /// Milestone of the phase that is not running: shown, not editable.
   final bool readOnly;
+  final StudentApiService api;
   final VoidCallback onUpdate;
 
   const _MilestoneTimelineItem({
@@ -344,6 +350,7 @@ class _MilestoneTimelineItem extends StatefulWidget {
     required this.index,
     required this.isLast,
     required this.onUpdate,
+    required this.api,
     this.readOnly = false,
   });
 
@@ -352,7 +359,7 @@ class _MilestoneTimelineItem extends StatefulWidget {
 }
 
 class _MilestoneTimelineItemState extends State<_MilestoneTimelineItem> {
-  final _api = StudentApiService();
+  StudentApiService get _api => widget.api;
   bool _isUpdating = false;
   double _sliderValue = 0;
   bool _showSlider = false;
@@ -371,8 +378,16 @@ class _MilestoneTimelineItemState extends State<_MilestoneTimelineItem> {
   int get _progress =>
       (widget.milestone['progressPercentage'] as num?)?.toInt() ?? 0;
 
-  bool get _canUpdate =>
-      !widget.readOnly && _status != 'completed' && _status != 'pending_review';
+  /// As on web: progress is set only while the milestone is in progress.
+  bool get _canUpdate => !widget.readOnly && _status == 'in_progress';
+
+  /// "Mulai" starts a milestone that is not started or needs revision
+  /// (the transitions the backend accepts).
+  bool get _canStart =>
+      !widget.readOnly &&
+      (_status == 'not_started' || _status == 'revision_needed');
+
+  bool _isStarting = false;
 
   String get _deadline {
     final raw = widget.milestone['targetDate'];
@@ -445,6 +460,51 @@ class _MilestoneTimelineItemState extends State<_MilestoneTimelineItem> {
 
   String get _statusLabel => milestoneStatusLabel(_status);
 
+  /// Starts the milestone like the web "Mulai" button: a milestone without a
+  /// target date asks for one first, then the status becomes in_progress.
+  Future<void> _start() async {
+    DateTime? targetDate;
+    if (widget.milestone['targetDate'] == null) {
+      final now = DateTime.now();
+      targetDate = await showDatePicker(
+        context: context,
+        helpText: 'Target selesai milestone',
+        initialDate: now.add(const Duration(days: 14)),
+        firstDate: now,
+        lastDate: now.add(const Duration(days: 730)),
+      );
+      if (targetDate == null || !mounted) return;
+    }
+    setState(() => _isStarting = true);
+    try {
+      if (targetDate != null) {
+        await _api.updateMilestoneTargetDate(_milestoneId, targetDate);
+      }
+      await _api.updateMilestoneStatus(_milestoneId, status: 'in_progress');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Milestone berhasil dimulai'),
+          backgroundColor: AppColors.success,
+          duration: Duration(seconds: 2),
+        ),
+      );
+      widget.onUpdate();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            errorMessageOf(e, fallback: 'Gagal memulai milestone.'),
+          ),
+          backgroundColor: AppColors.destructive,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isStarting = false);
+    }
+  }
+
   Future<void> _updateProgress() async {
     final newProgress = _sliderValue.round();
     if (newProgress == _progress) {
@@ -454,15 +514,15 @@ class _MilestoneTimelineItemState extends State<_MilestoneTimelineItem> {
 
     setState(() => _isUpdating = true);
     try {
-      await _api.updateMilestoneProgress(
+      // The backend moves the status with the progress: 100% submits the
+      // milestone to the supervisor for validation (pending_review).
+      final res = await _api.updateMilestoneProgress(
         _milestoneId,
         progressPercentage: newProgress,
       );
-
-      // If status is not_started and progress > 0, also update status
-      if (_status == 'not_started' && newProgress > 0) {
-        await _api.updateMilestoneStatus(_milestoneId, status: 'in_progress');
-      }
+      final data = res['data'];
+      final submitted =
+          data is Map && data['statusUpdated'] == 'pending_review';
 
       if (!mounted) return;
       setState(() {
@@ -472,9 +532,13 @@ class _MilestoneTimelineItemState extends State<_MilestoneTimelineItem> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Progress diperbarui ke $newProgress%'),
+          content: Text(
+            submitted
+                ? 'Progress 100%. Milestone diajukan ke pembimbing untuk divalidasi.'
+                : 'Progress diperbarui ke $newProgress%',
+          ),
           backgroundColor: AppColors.success,
-          duration: const Duration(seconds: 2),
+          duration: const Duration(seconds: 3),
         ),
       );
       widget.onUpdate();
@@ -602,6 +666,39 @@ class _MilestoneTimelineItemState extends State<_MilestoneTimelineItem> {
                   ),
 
                   // Update progress section (expandable)
+                  if (_canStart) ...[
+                    const SizedBox(height: AppSpacing.sm),
+                    SizedBox(
+                      height: 30,
+                      child: OutlinedButton.icon(
+                        key: ValueKey('milestone-start-$_milestoneId'),
+                        onPressed: _isStarting ? null : _start,
+                        icon: _isStarting
+                            ? const SizedBox(
+                                width: 12,
+                                height: 12,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.play_arrow_rounded, size: 15),
+                        label: const Text(
+                          'Mulai',
+                          style: TextStyle(fontSize: 11),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.primary,
+                          side: const BorderSide(color: AppColors.border),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(
+                              AppSpacing.buttonRadius,
+                            ),
+                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                        ),
+                      ),
+                    ),
+                  ],
                   if (_canUpdate) ...[
                     const SizedBox(height: AppSpacing.sm),
                     if (_showSlider) ...[

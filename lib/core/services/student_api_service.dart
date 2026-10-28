@@ -271,8 +271,27 @@ class StudentApiService {
     return {'success': true};
   }
 
+  /// PATCH /milestones/:milestoneId with `{ targetDate }` (student only).
+  Future<void> updateMilestoneTargetDate(
+    String milestoneId,
+    DateTime targetDate,
+  ) async {
+    await _api.patch(
+      '/milestones/$milestoneId',
+      body: {
+        'targetDate': DateTime(
+          targetDate.year,
+          targetDate.month,
+          targetDate.day,
+        ).toUtc().toIso8601String(),
+      },
+    );
+  }
+
   /// PATCH /milestones/:milestoneId/status
-  /// Updates milestone status (not_started, in_progress, pending_review, revision_needed).
+  /// Updates the milestone status. A student may start a milestone
+  /// (`not_started`/`revision_needed` → `in_progress`) or move it back to
+  /// `not_started`; anything else is refused with the backend's reason.
   Future<Map<String, dynamic>> updateMilestoneStatus(
     String milestoneId, {
     required String status,
