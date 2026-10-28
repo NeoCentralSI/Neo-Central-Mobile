@@ -22,10 +22,13 @@ class MemoryTokenStore implements TokenStore {
 /// ApiClient over a fake backend. [handler] returns the JSON body (or a full
 /// [http.Response]) for each request; every request is kept in [requests].
 class FakeBackend {
-  FakeBackend(this.handler);
+  FakeBackend(this.handler, {this.accessToken});
 
   final Object? Function(http.Request request) handler;
   final requests = <http.Request>[];
+
+  /// Signed-in session for the client, or none.
+  final String? accessToken;
 
   ApiClient get client => ApiClient.withDependencies(
     httpClient: MockClient((request) async {
@@ -38,7 +41,13 @@ class FakeBackend {
         headers: {'content-type': 'application/json; charset=utf-8'},
       );
     }),
-    storage: SecureStorageService(tokenStore: MemoryTokenStore()),
+    storage: SecureStorageService(
+      tokenStore: MemoryTokenStore()
+        ..values.addAll({
+          if (accessToken != null)
+            SecureStorageService.accessTokenKey: accessToken!,
+        }),
+    ),
     baseUrl: 'https://example.test',
     timeout: const Duration(seconds: 2),
   );
