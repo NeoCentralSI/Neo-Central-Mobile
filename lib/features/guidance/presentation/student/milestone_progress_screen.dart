@@ -38,6 +38,8 @@ class MilestoneProgressScreen extends StatefulWidget {
       _MilestoneProgressScreenState();
 }
 
+const _addOnWebNote = 'Tambah milestone melalui NeoCentral versi web';
+
 class _MilestoneProgressScreenState extends State<MilestoneProgressScreen> {
   late final StudentApiService _api = widget.api ?? StudentApiService();
 
@@ -141,6 +143,7 @@ class _MilestoneProgressScreenState extends State<MilestoneProgressScreen> {
                                     ),
                                   ),
                                 ),
+                                const FootnoteText(_addOnWebNote),
                               ],
                             )
                           : ListView(
@@ -175,6 +178,8 @@ class _MilestoneProgressScreenState extends State<MilestoneProgressScreen> {
                                     ),
                                   ),
                                 ],
+                                // Milestones are added on the web only.
+                                const FootnoteText(_addOnWebNote),
                               ],
                             ),
                     ),

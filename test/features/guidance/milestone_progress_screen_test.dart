@@ -71,6 +71,10 @@ void main() {
     expect(find.byKey(const ValueKey('milestone-start-m2')), findsNothing);
     // Only the in-progress milestone offers "Update".
     expect(find.text('Update'), findsOneWidget);
+    expect(
+      find.text('Tambah milestone melalui NeoCentral versi web'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('Mulai asks for a target date, then starts the milestone', (
@@ -136,6 +140,16 @@ void main() {
       find.text(
         'Progress 100%. Milestone diajukan ke pembimbing untuk divalidasi.',
       ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('an empty list still shows the web note', (tester) async {
+    await pump(tester, backendWith(const []));
+
+    expect(find.text('Belum ada milestone'), findsOneWidget);
+    expect(
+      find.text('Tambah milestone melalui NeoCentral versi web'),
       findsOneWidget,
     );
   });
