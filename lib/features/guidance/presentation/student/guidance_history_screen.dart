@@ -417,6 +417,12 @@ class _GuidanceSessionItemState extends State<_GuidanceSessionItem> {
     // Check if session summary already exists
     final summary = widget.session['sessionSummary'];
     if (summary != null && summary.toString().trim().isNotEmpty) return false;
+    // Notes are written after the session: hide until its scheduled time, as on web.
+    final scheduled = DateTime.tryParse(
+      (widget.session['approvedDate'] ?? widget.session['requestedDate'] ?? '')
+          .toString(),
+    );
+    if (scheduled == null || scheduled.isAfter(DateTime.now())) return false;
     return true;
   }
 
